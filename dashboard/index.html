@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar — pre-token protocols ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<a class="skip" href="#board">Skip to the board</a>
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand">
+      <span class="sweep" aria-hidden="true"></span>
+      <span class="brand-name">TOKEN RADAR</span>
+      <span class="brand-tag">pre-token protocols, ranked</span>
+    </div>
+    <dl class="bar-meta" id="bar-meta"></dl>
+  </div>
+</header>
+<main id="board" tabindex="-1">
+  <section class="hero" id="hero"></section>
+  <nav class="tabs" id="tabs" aria-label="Views"></nav>
+  <section class="view" id="view-board">
+    <div class="controls" id="controls"></div>
+    <div class="plot-wrap" id="plot-wrap"></div>
+    <div class="table-wrap" id="table-wrap"></div>
+  </section>
+  <section class="view" id="view-live" hidden></section>
+  <section class="view" id="view-model" hidden></section>
+</main>
+<div class="drawer" id="drawer" hidden aria-label="Protocol detail"></div>
+<script src="../data.js"></script>
+<script src="model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

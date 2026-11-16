@@ -1,6 +1,11 @@
 // Re-encodes a PNG with a per-scanline filter chosen by the minimum-sum-of-absolute-differences
 // heuristic, and deflate level 9. This is the standard lossless PNG optimiser and it makes the
 // file smaller without changing a single pixel.
+//
+// The filter candidates are computed against the RECONSTRUCTED pixels of the row above, not
+// against the filtered bytes on disk: the decoder reconstructs first and filters second, so the
+// encoder must reconstruct first too. Doing it the other way round silently writes a PNG that
+// decodes to different pixels -- the image looks corrupted, not merely re-compressed.
 const fs = require('node:fs');
 const zlib = require('node:zlib');
 
@@ -16,14 +21,9 @@ function readChunks(b) {
   }
   return chunks;
 }
+// The PNG chunk CRC: the CRC-32 of zlib, over the chunk's type and data.
 function crc32(buf) {
-  let c, crc = 0xffffffff;
-  for (let n = 0; n < buf.length; n++) {
-    c = (crc ^ buf[n]) & 0xff;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    crc = c ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+  return zlib.crc32(buf) >>> 0;
 }
 function chunk(type, data) {
   const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
@@ -43,16 +43,34 @@ const ihdr = chunks.find(c => c.type === 'IHDR').data;
 const w = ihdr.readUInt32BE(0), h = ihdr.readUInt32BE(4);
 const bd = ihdr[8], ct = ihdr[9];
 if (bd !== 8) throw new Error('only 8-bit supported');
-const channels = ct === 2 ? 3 : ct === 6 ? 4 : ct === 0 ? 1 : 4;
+if (ct !== 2 && ct !== 6) throw new Error('only RGB/RGBA supported');
+const channels = ct === 6 ? 4 : 3;
 const idat = Buffer.concat(chunks.filter(c => c.type === 'IDAT').map(c => c.data));
 const raw = zlib.inflateSync(idat);
 const stride = w * channels;
 const out = Buffer.alloc((stride + 1) * h);
+// The reconstructed row: what the decoder will see once the filter is undone.
 const prev = Buffer.alloc(stride);
 const cur = Buffer.alloc(stride);
+const cand = [0, 1, 2, 3, 4].map(() => Buffer.alloc(stride));
 for (let y = 0; y < h; y++) {
-  raw.copy(cur, 0, y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
-  const cand = [Buffer.alloc(stride), Buffer.alloc(stride), Buffer.alloc(stride), Buffer.alloc(stride), Buffer.alloc(stride)];
+  // Undo the source's filter to recover the true pixels of this row.
+  const ft = raw[y * (stride + 1)];
+  const src = raw.slice(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
+  for (let x = 0; x < stride; x++) {
+    const a = x >= channels ? cur[x - channels] : 0;
+    const bb = prev[x];
+    const c = x >= channels ? prev[x - channels] : 0;
+    let v;
+    if (ft === 0) v = src[x];
+    else if (ft === 1) v = src[x] + a;
+    else if (ft === 2) v = src[x] + bb;
+    else if (ft === 3) v = src[x] + ((a + bb) >> 1);
+    else if (ft === 4) v = src[x] + paeth(a, bb, c);
+    else throw new Error('bad filter ' + ft);
+    cur[x] = v & 0xff;
+  }
+  // Now encode that row with each filter, against the reconstructed row above.
   for (let x = 0; x < stride; x++) {
     const a = x >= channels ? cur[x - channels] : 0;
     const bb = prev[x];
@@ -71,7 +89,7 @@ for (let y = 0; y < h; y++) {
   }
   out[y * (stride + 1)] = best;
   cand[best].copy(out, y * (stride + 1) + 1);
-  cur.copy(prev);
+  prev.set(cur);
 }
 const newIdat = zlib.deflateSync(out, { level: 9, memLevel: 9 });
 const parts = [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])];

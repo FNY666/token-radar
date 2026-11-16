@@ -2,7 +2,7 @@
 // refits it from the figures it carries and shows the arithmetic, not a number to trust.
 //
 //   value model   log10(mcap/tvl) ~ log10(tvl) + growth, Huber-weighted, with a shrunk category
-//                 correction. Fitted on the eligible protocols whose tokens already trade.
+//                 correction. Fitted on the protocols whose tokens already trade.
 //   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
 //                 product rows: rows that carry a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
@@ -153,10 +153,8 @@
     return out;
   }
 
-  /**
-   * Fit the whole model from the snapshot figures, in the page, every time it loads.
-   * `data` is the dataset main.ts wrote: the cohort, the universe and the board's rows.
-   */
+  // Fit the whole model from the snapshot figures, in the page, every time it loads.
+  // `data` is the dataset main.ts wrote: the cohort, the universe and the board's rows.
 
   function valueRow(tvl, growth) {
     return [1, Math.log10(Math.max(tvl, 1)), clampGrowth(growth) / 10];
@@ -177,8 +175,8 @@
     return p.mcap_usd !== null || p.gecko_id !== null;
   }
 
-  // Whether a protocol is a product of one that issued: it carries a ticker, but no market cap or
-  // CoinGecko id of its own. Its family issued the token; this row did not.
+  // Whether a protocol is a product of one that issued: a ticker, but no market cap or CoinGecko
+  // id of its own. Its family issued the token; this row did not.
   function isTokenProduct(p) {
     return p.symbol !== null && !issuedOwn(p);
   }

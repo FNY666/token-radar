@@ -181,7 +181,10 @@ record and never from a hand-written list of names:
   $50M floor, $50 below it);
 * **the gas** follows from the chain (about $12 on Ethereum, $6 on Bitcoin, $1 on Solana, $3
   elsewhere);
-* **the hold** follows from the age (90 days under 180, 60 under 365, 45 under 730, then 30).
+* **the hold** follows from the age (90 days under 180, 60 under 365, 45 under 730, then 30). A
+  protocol with no first-tracked date — seven of the 195 rows, all of them untracked in the
+  snapshot — gets 60 days, the same as one first seen under a year. The age is unknown, and 60 is
+  the middle of the rule rather than its most generous end.
 
 The plan is generated **once**, by `lib/model.ts`, and travels with the row: the eight steps go into
 `board.json` and into the dataset the page reads. The detail view shows those same eight steps, so

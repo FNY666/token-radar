@@ -13,19 +13,20 @@ html {scroll-padding-block-start:calc(var(--bar-h,63px) + var(--c))}
 a, .kpi .v.cyan {color:var(--odds)}
 .num {font-variant-numeric:tabular-nums}
 .num, .val, .plot .tick, .plot .q, .formula, .bands, .bands td, .cat-table td, .curve-row .v, .deriv .line span:last-child {font-family:var(--mono)}
-.bar {position:sticky;top:0;z-index:40;background:var(--b2);border-bottom:1px solid var(--line)}
+.bar {position:sticky;top:0;z-index:40;background:var(--b2);border-bottom:var(--bl)}
 .bar-in, main {max-width:1400px;margin:0 auto}
 .bar-in {padding:var(--c) var(--e);display:flex;align-items:center;justify-content:space-between;gap:var(--e)}
 .brand {display:flex;align-items:baseline;gap:var(--c);min-width:0}
 .sweep {width:9px;height:9px;border-radius:50%;background:var(--value);align-self:center;flex:none}
 .brand-name, .bar-meta dd, .controls .result, .rk {font-family:var(--mono);font-size:13px}
+.rk {width:52px}
 .brand-name {letter-spacing:0.14em;color:var(--ink)}
 .brand-tag {font-size:13px;color:var(--i3);white-space:nowrap}
 .bar-meta {display:flex;gap:var(--e);margin:0;flex-wrap:wrap;justify-content:flex-end}
 .bar-meta div {display:flex;flex-direction:column;gap:1px}
 .bar-meta dd {margin:0;color:var(--i2)}
 main {padding:0 var(--e) var(--g)}
-.hero {padding:var(--d) 0 var(--c);border-bottom:1px solid var(--line)}
+.hero {padding:var(--d) 0 var(--c);border-bottom:var(--bl)}
 .hero-grid {display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,0.5fr);gap:var(--e)}
 .hero h1 {font-size:28px;line-height:1.12;letter-spacing:-0.025em;color:var(--ink)}
 .hero h1 + .lede::first-line, .kpi .v.gold, .peer .pv, .tag.wl {color:var(--value)}
@@ -33,14 +34,13 @@ main {padding:0 var(--e) var(--g)}
 thead th .arrow {color:var(--value);margin-left:var(--a)}
 .hero p.lede {margin-top:var(--b);color:var(--i2);max-width:74ch;font-size:14px}
 .hero p.lede strong, .callout ol li strong {color:var(--ink);font-weight:600}
-.callout, .card, .table-wrap, .plot-wrap, .controls, .live-note, .kpi, .deriv, .peer {background:var(--panel);border:1px solid var(--line)}
-.callout, .card, .table-wrap, .plot-wrap, .controls, .live-note {color:var(--ink)}
+.callout, .card, .table-wrap, .plot-wrap, .controls, .live-note, .kpi, .deriv, .peer {background:var(--panel);border:var(--bl)}
 .callout, .plot-wrap {border-radius:var(--rm)}
-.card {border-radius:var(--rs)}
 .table-wrap {border-radius:0;border-left:none;border-right:none}
 .callout {border-left:3px solid var(--odds);padding:var(--c) var(--d)}
 .callout h2 {font-size:12px;color:var(--odds)}
 .live-note strong, .prose strong, .sheet .close:hover, thead th button:hover {color:var(--ink)}
+.callout, .card, .table-wrap, .plot-wrap, .controls, .live-note {color:var(--ink)}
 .callout ol {margin:var(--b) 0 0;padding-left:1.1em;color:var(--i2);font-size:12px;line-height:1.4}
 .callout ol li {margin-bottom:var(--a)}
 .tabs {display:flex;gap:var(--a);padding:var(--c) 0 var(--b);flex-wrap:wrap}
@@ -49,50 +49,49 @@ thead th .arrow {color:var(--value);margin-left:var(--a)}
 .tab:hover {color:var(--i2);background:var(--b2)}
 .tab[aria-selected="true"] {color:var(--ink);background:var(--panel);border-color:var(--l2)}
 .tab .count, .cond, .sheet .slug, .steps .meta, .prose code, .pill, .chip-static {font-family:var(--mono);font-size:12px}
-.tab .count {color:var(--i3);margin-left:var(--b)}
+.tab .count {margin-left:var(--b)}
 .controls {display:flex;gap:var(--b);align-items:center;flex-wrap:wrap;padding:var(--b) var(--d);border-radius:var(--rm);margin-bottom:var(--c)}
 .controls label {font-size:12px;color:var(--i3)}
 .controls .q, .controls select, .formula {background:var(--bg)}
-.controls .q, .controls select, .chip, .controls button.ghost, .sheet .close, .skip, .tag {border:1px solid var(--l2)}
-.controls .q, .controls select {border-color:var(--i3)}
-.controls .q, .controls select {color:var(--ink);padding:var(--a) var(--c)}
+.controls .q, .controls select, .chip, .controls button.ghost, .sheet .close, .skip, .tag {border:var(--bv)}
+.controls .q, .controls select {border-color:var(--i3);color:var(--ink);padding:var(--a) var(--c)}
 .controls .q {min-width:200px}
 .controls .q::placeholder, .controls select {min-width:140px}
 .chip, .controls button.ghost {border-radius:var(--rs);font-size:13px}
 .chip {background:var(--bg);color:var(--i2);padding:var(--a) var(--c)}
 .chip[aria-pressed="true"] {border-color:var(--value);color:var(--value);background:var(--v08)}
 .controls .spacer {flex:1 1 auto}
-.controls .result {color:var(--i3)}
 .controls button.ghost {background:transparent;color:var(--i2);padding:var(--b) var(--c)}
 .controls button.ghost:hover {color:var(--ink);border-color:var(--i3)}
 .table-wrap {overflow-x:auto;overflow-y:clip}
 table {width:100%;border-collapse:collapse}
-thead th {position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--c);font-size:12px;color:var(--i2);border-bottom:1px solid var(--l2);white-space:nowrap}
+thead th {position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--c);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
 thead th button {background:none;border:none;padding:0;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit}
 thead th.right, td.right {text-align:right}
-tbody tr {border-bottom:1px solid var(--line)}
+tbody tr {border-bottom:var(--bl)}
+tbody tr:last-child, .steps li:last-child {border-bottom:none}
 tbody tr.row:hover, .tab:active, .chip:active, .controls button.ghost:active {background:var(--p2)}
 tbody tr.row:active {background:var(--panel)}
 tbody tr.row:focus-visible {outline:2px solid var(--value);outline-offset:-2px}
 td {padding:var(--b) var(--c);vertical-align:middle}
-.rk {color:var(--i3);width:52px}
 .pname {font-weight:600}
 .pname .slug {display:block;font-family:var(--mono);font-size:11px;color:var(--i3);font-weight:400}
 .cat, .sheet h4 {font-size:12px;color:var(--i2)}
 .tag {display:inline-block;font-size:11px;padding:1px var(--b);border-radius:3px;color:var(--i3)}
+.tag.wl {color:var(--value)}
 .tag.early {border-color:var(--o40);color:var(--odds)}
 .up {color:var(--up)}
 .down {color:var(--down)}
-.muted {color:var(--i3)}
 .val {font-weight:600;color:var(--value);font-size:14.5px}
-.cond {color:var(--i3)}
 .bar-cell {width:110px}
 .bar-track, .curve-row .track {background:var(--bg);border-radius:3px;overflow:hidden}
+.curve-row .track {flex:1;height:16px}
 .bar-track {height:5px}
 .bar-fill {height:100%;background:var(--value);border-radius:3px}
 .pill, .chip-static {display:inline-block;padding:2px var(--b);border-radius:3px}
 .pill {background:var(--o12);color:var(--odds)}
 .pill.live {background:var(--l13);color:var(--live)}
+.muted, .cond, .controls .result, .rk, .tab .count {color:var(--i3)}
 .empty, .plot-empty {text-align:center;color:var(--i3)}
 .empty {padding:var(--f)}
 .plot-wrap {padding:var(--c) var(--d);margin-bottom:var(--c)}
@@ -114,19 +113,17 @@ td {padding:var(--b) var(--c);vertical-align:middle}
 .plot-legend i {width:var(--b);height:var(--b);border-radius:50%;display:inline-block;margin-right:var(--a);vertical-align:middle}
 .live-note {border-left:3px solid var(--live);border-radius:var(--rm);padding:var(--d);margin-bottom:var(--d);color:var(--i2);font-size:14px;max-width:92ch}
 .model-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:var(--d)}
-.card {padding:var(--d)}
 .card.stack {margin-top:var(--d)}
 .plot-head h3, .card h3 {font-size:13px;color:var(--i2)}
 .card .big {font-family:var(--mono);font-size:26px;color:var(--value);margin:var(--b) 0 var(--a)}
 .card p {font-size:13.5px;color:var(--i2)}
-.formula {font-size:12.5px;color:var(--ink);border:1px solid var(--line);border-radius:var(--rs);padding:var(--c);margin-top:var(--c);overflow-x:auto;white-space:pre;line-height:1.6}
-.bands, .bands td, .cat-table td {padding:var(--b) 0;border-top:1px solid var(--line)}
+.formula {font-size:12.5px;color:var(--ink);border:var(--bl);border-radius:var(--rs);padding:var(--c);margin-top:var(--c);overflow-x:auto;white-space:pre;line-height:1.6}
+.bands, .bands td, .cat-table td {padding:var(--b) 0;border-top:var(--bl)}
 .bands th {text-align:left;color:var(--i2);font-weight:500;font-size:12px;padding-bottom:var(--b)}
 .bands td:first-child {font-family:var(--font)}
 .curve {margin-top:var(--c)}
 .curve-row {display:flex;align-items:center;gap:var(--c);margin-bottom:var(--b);font-size:13px}
 .curve-row .lbl {width:132px;color:var(--i2);flex:none}
-.curve-row .track {flex:1;height:16px}
 .curve-row .fill {height:100%;background:var(--odds)}
 .curve-row .v {color:var(--i2);width:58px;text-align:right;flex:none}
 .cat-table {width:100%;margin-top:var(--c);border-collapse:collapse;font-size:13px}
@@ -143,21 +140,20 @@ td {padding:var(--b) var(--c);vertical-align:middle}
 .sheet .slug {color:var(--i3);margin-top:2px}
 .sheet .close {background:var(--panel);color:var(--i2);width:32px;height:32px;border-radius:var(--rs);font-size:18px;line-height:1;flex:none}
 .kpis {display:grid;grid-template-columns:repeat(2,1fr);gap:var(--b);margin:var(--d) 0}
-.kpi, .deriv, .peer {border-radius:var(--rs)}
 .bar-meta dt, .kpi .k {font-size:11px;color:var(--i3)}
 .kpi .v {font-family:var(--mono);font-size:18px;margin-top:2px}
-.sheet h4 {margin:var(--e) 0 var(--c);padding-bottom:var(--b);border-bottom:1px solid var(--line)}
+.sheet h4 {margin:var(--e) 0 var(--c);padding-bottom:var(--b);border-bottom:var(--bl)}
 .steps {list-style:none;margin:0;padding:0;counter-reset:step}
-.steps li {position:relative;padding:var(--c) 0 var(--c) var(--f);counter-increment:step;border-bottom:1px solid var(--line)}
-tbody tr:last-child, .steps li:last-child {border-bottom:none}
+.steps li {position:relative;padding:var(--c) 0 var(--c) var(--f);counter-increment:step;border-bottom:var(--bl)}
 .steps li::before {content:counter(step);position:absolute;left:0;top:var(--c);font:11px/20px var(--mono);color:var(--value);border:1px solid var(--v40);border-radius:50%;width:22px;height:22px;text-align:center}
 .steps .act {font-size:14px}
 .steps .meta {margin-top:var(--a);color:var(--i3)}
-.steps .meta .cost {color:var(--i2)}
 .kpi, .deriv {padding:var(--c)}
+.card, .kpi, .deriv, .peer {border-radius:var(--rs)}
+.card {padding:var(--d)}
 .deriv .line {display:flex;justify-content:space-between;gap:var(--c);padding:var(--a) 0;font-size:13px}
-.deriv .line span:last-child {color:var(--i2)}
-.deriv .line.total {border-top:1px solid var(--l2);margin-top:var(--b);padding-top:var(--b)}
+.steps .meta .cost, .deriv .line span:last-child {color:var(--i2)}
+.deriv .line.total {border-top:var(--bv);margin-top:var(--b);padding-top:var(--b)}
 .deriv .line.total span:last-child {color:var(--value);font-weight:600}
 .peers {display:flex;flex-direction:column;gap:var(--a)}
 .peer {display:grid;grid-template-columns:1fr auto auto;gap:var(--c);align-items:center;padding:var(--b) var(--c);text-align:left;color:var(--ink)}
@@ -170,7 +166,7 @@ tbody tr:last-child, .steps li:last-child {border-bottom:none}
 .missing {max-width:74ch;margin:var(--f) 0}
 .missing h1 {font-size:26px;margin-bottom:var(--c)}
 .chips {display:flex;flex-wrap:wrap;gap:var(--a);margin-top:var(--b)}
-.chip-static {background:var(--p2);color:var(--i2);border:1px solid var(--line)}
+.chip-static {background:var(--p2);color:var(--i2);border:var(--bl)}
 @media (max-width: 1000px) { .hero-grid {grid-template-columns:1fr}
 .brand-tag {display:none}
 }

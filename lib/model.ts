@@ -602,6 +602,25 @@ export interface Copy {
   clamps: string;
   /** The model page's closing prose: what the board is and is not. */
   is_and_is_not: string;
+  /** The drawer's closing note on a pre-token row: what an implied value is. */
+  drawer_note: string;
+  /** The drawer's note on a protocol whose token already trades. */
+  live_drawer_note: string;
+  /** The drawer's note on a protocol outside the cohort, and why it is outside. */
+  live_gap_note: string;
+  /** The hero's callout: the three steps a row is priced by. */
+  pricing_steps: string[];
+  /** The model page's three cards, each a line of prose under its figure. */
+  value_fit_note: string;
+  launch_odds_note: string;
+  no_name_special: string;
+  /** The model page's formula block, with the fitted coefficients written in. */
+  formula: string;
+  /** The model page's refit note: how the page rebuilds the board from the figures. */
+  refit_lead: string;
+  /** The launch curve's and the category card's notes. */
+  curve_note: string;
+  category_note: string;
 }
 
 /** The counts the page states, computed once from the data so the page cannot get them wrong. */
@@ -1003,6 +1022,46 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       '<p><strong>The separation:</strong> the ' + snapshot.watchlist.length + ' watchlist protocols are all on the board, but so are ' +
       (board.length - snapshot.watchlist.length) + ' more — the watchlist is a floor, never a ceiling. The ' +
       live.length + ' protocols whose tokens already trade are kept in their own table and never mixed into the ranking.</p>',
+    drawer_note:
+      'An implied value is this entry\'s own estimate of what a token may be worth if the protocol\'s record stays as it is. ' +
+      'It is not a price, not a promise, and not a prediction that one will be issued.',
+    live_drawer_note:
+      'This token already trades, so its value is the market\'s own, not a model\'s estimate: there is no implied value and no farm plan for it here. ' +
+      'It is one of the ' + cal.cohort_size + ' protocols whose tokens already trade and that fitted the value model, so the board reads it back.',
+    live_gap_note:
+      'This token already trades, so its value is the market\'s own, not a model\'s estimate: there is no implied value and no farm plan for it here. ' +
+      'It is not among the ' + cal.cohort_size + ' protocols that fitted the value model — it is here as the contrast the board is looking for. ' +
+      'It was left out of the cohort because of its record: ',
+    pricing_steps: [
+      '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size, growth and category.',
+      '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols its age and size have issued.',
+      '<strong>Implied value.</strong> The two multiplied. This is what the board ranks.',
+    ],
+    value_fit_note:
+      'Median error of the value model, in log10 dollars, on the ' + cal.cohort_size +
+      ' protocols whose tokens trade. Half land within a factor of ' + Math.pow(10, cal.mae_log10).toFixed(1) + ' of the model.',
+    launch_odds_note:
+      'How well the launch model separates the protocols that have issued from those that have not, across the whole universe.',
+    no_name_special:
+      'Every row is scored by one function of <code>TVL</code>, <code>change_7d</code>, <code>listed_at</code> and <code>category</code>. ' +
+      'No protocol is named in the model, and the coefficients are fitted at run time on this snapshot — not typed in.',
+    formula:
+      'growth = clamp(change_7d, -60, +120)      the model reads a clamped week, never the raw one\n' +
+      '\n' +
+      'log10(mcap / tvl) = a + b·log10(tvl) + c·(growth / 10) + category_log\n' +
+      '  a = ' + cal.value_beta[0].toFixed(4) + '    b = ' + cal.value_beta[1].toFixed(4) + '    c = ' + cal.value_beta[2].toFixed(4) + '\n' +
+      '\n' +
+      'conditional value = tvl · 10^(that sum)          what it is worth if it issues\n' +
+      'launch odds      = logistic(age band, tvl band, growth), then held to [0.05, 0.95]\n' +
+      'implied value    = conditional value · launch odds  ← the board ranks this',
+    refit_lead:
+      'This page carries the raw snapshot figures for the ' + cal.cohort_size +
+      ' protocols whose tokens already trade and for the whole eligible universe, and it refits the model from them ' +
+      'with the code in <code>model.js</code> — the same procedure <code>main.ts</code> used, not the same numbers pasted in. ' +
+      'It then recomputes every row of the board from those figures. ',
+    curve_note: 'Counted across every eligible protocol in the snapshot. This is where the launch odds come from.',
+    category_note:
+      'How far each category sits from the fitted line, in log10 dollars, shrunk toward the mean so a thin category cannot speak for itself.',
   };
   const radar: RadarData = {
     as_of: snapshot.as_of,

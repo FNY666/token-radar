@@ -146,6 +146,7 @@
     if (state.selected) {
       var row = rowBySlug(state.selected);
       if (row) state.selected = row.slug;
+      else if (liveBySlug(state.selected)) { /* already trading: the drawer shows the market's figures */ }
       else { notes.push(missingProtocol(state.selected)); state.selected = null; }
     }
   }
@@ -181,6 +182,27 @@
   function rowBySlug(slug) {
     for (var i = 0; i < D.rows.length; i++) if (D.rows[i].slug === slug) return D.rows[i];
     return null;
+  }
+
+  function liveBySlug(slug) {
+    for (var i = 0; i < D.live.length; i++) if (D.live[i].slug === slug) return D.live[i];
+    return null;
+  }
+
+  // The cohort the model was fitted on, as a lookup: a protocol in it is one of the rows that
+  // taught the model what a market cap is worth.
+  var COHORT = {};
+  D.cohort.forEach(function (c) { COHORT[c.slug] = true; });
+
+  // The rows of both tables: reachable by keyboard, and they open the drawer.
+  function rowAttrs(r) {
+    return {
+      class: 'row', tabindex: '0',
+      onclick: function () { openDetail(r.slug); },
+      onkeydown: function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.slug); }
+      }
+    };
   }
 
   // the model, refitted in the page
@@ -260,11 +282,7 @@
     ]);
     var steps = h('div','callout', [
       t('h2','How a row is priced'),
-      el('ol', null, [
-        el('li', { html: '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size, growth and category.' }),
-        el('li', { html: '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols its age and size have issued.' }),
-        el('li', { html: '<strong>Implied value.</strong> The two multiplied. This is what the board ranks.' })
-      ])
+      el('ol', null, D.copy.pricing_steps.map(function (s) { return el('li', { html: s }); }))
     ]);
     host.appendChild(h('div','hero-grid', [lede, steps]));
   }
@@ -443,13 +461,7 @@
     var body = el('tbody');
     list.forEach(function (r) {
       var share = top > 0 ? Math.max(0.015, r.implied_value_usd / top) : 0;
-      var tr = el('tr', {
-        class: 'row', tabindex: '0',
-        onclick: function () { openDetail(r.slug); },
-        onkeydown: function (e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.slug); }
-        }
-      }, [
+      var tr = el('tr', rowAttrs(r), [
         el('td', { class: 'rk num', text: String(r.rank) }),
         el('td', { class: 'pname', text: r.name }),
         el('td', null, [
@@ -583,7 +595,7 @@
     ]);
     var body = el('tbody');
     D.live.forEach(function (r) {
-      body.appendChild(el('tr', null, [
+      body.appendChild(el('tr', rowAttrs(r), [
         el('td', null, [
           h('div','pname', [
             document.createTextNode(r.name),
@@ -610,31 +622,22 @@
       h('div','card', [
         t('h3','Value fit'),
         el('div', { class: 'big', text: c.mae_log10.toFixed(3) }),
-        el('p', { text: 'Median error of the value model, in log10 dollars, on the ' + c.cohort_size + ' protocols whose tokens trade. Half land within a factor of ' + Math.pow(10, c.mae_log10).toFixed(1) + ' of the model.' })
+        el('p', { text: D.copy.value_fit_note })
       ]),
       h('div','card', [
         t('h3','Launch odds'),
         el('div', { class: 'big', text: c.launch_auc.toFixed(3) }),
-        t('p','How well the launch model separates the protocols that have issued from those that have not, across the whole universe.'),
+        t('p', D.copy.launch_odds_note),
       ]),
       h('div','card', [
         t('h3','No name is special'),
-        el('p', { html: 'Every row is scored by one function of <code>TVL</code>, <code>change_7d</code>, <code>listed_at</code> and <code>category</code>. ' +
-          'No protocol is named in the model, and the coefficients are fitted at run time on this snapshot — not typed in.' })
+        el('p', { html: D.copy.no_name_special })
       ])
     ]);
     host.appendChild(cards);
 
     host.appendChild(card('The formula', [
-      el('div', { class: 'formula', text:
-        'growth = clamp(change_7d, -60, +120)      the model reads a clamped week, never the raw one\n' +
-        '\n' +
-        'log10(mcap / tvl) = a + b·log10(tvl) + c·(growth / 10) + category_log\n' +
-        '  a = ' + c.value_beta[0].toFixed(4) + '    b = ' + c.value_beta[1].toFixed(4) + '    c = ' + c.value_beta[2].toFixed(4) + '\n' +
-        '\n' +
-        'conditional value = tvl · 10^(that sum)          what it is worth if it issues\n' +
-        'launch odds      = logistic(age band, tvl band, growth), then held to [0.05, 0.95]\n' +
-        'implied value    = conditional value · launch odds  ← the board ranks this' }),
+      el('div', { class: 'formula', text: D.copy.formula }),
       el('p', { html: D.copy.clamps })
     ]));
 
@@ -643,10 +646,7 @@
       host.appendChild(card('Refitted in this page', [
         el('div', { class: 'big', style: ok ? '' : 'color:var(--live)' },
           FIT.exact + ' / ' + FIT.total),
-        el('p', { html: 'This page carries the raw snapshot figures for the ' + D.calibration.cohort_size +
-          ' protocols whose tokens already trade and for the whole eligible universe, and it refits the model from them ' +
-          'with the code in <code>model.js</code> — the same procedure <code>main.ts</code> used, not the same numbers pasted in. ' +
-          'It then recomputes every row of the board from those figures. ' +
+        el('p', { html: D.copy.refit_lead +
           (ok
             ? '<strong>All ' + FIT.total + ' rows reproduce exactly</strong>, so the board and the page are the same model.'
             : '<strong>' + (FIT.total - FIT.exact) + ' rows differ</strong>, the largest by ' + (FIT.worst * 100).toFixed(1) + '%, which means the data on this page is stale.') })
@@ -654,7 +654,7 @@
     }
 
     var curve = card('How often a protocol issues a token, by how long it has run', [
-      t('p','Counted across every eligible protocol in the snapshot. This is where the launch odds come from.'),
+      t('p', D.copy.curve_note),
     ]);
     var curveBox = h('div','curve');
     c.bands.forEach(function (b) {
@@ -684,7 +684,7 @@
     host.appendChild(curve);
 
     var catCard = card('Category corrections', [
-      t('p','How far each category sits from the fitted line, in log10 dollars, shrunk toward the mean so a thin category cannot speak for itself.'),
+      t('p', D.copy.category_note),
     ]);
     var catRows = Object.keys(c.category_log).map(function (k) {
       return { k: k, v: c.category_log[k] };
@@ -711,7 +711,14 @@
 
   function openDetail(slug, push) {
     var row = rowBySlug(slug);
-    if (!row) return;
+    if (!row) {
+      // A protocol whose token already trades is not on the board: it has no implied value and no
+      // farm plan, because its value is the market's own. It opens the same drawer on the market's
+      // figures.
+      var live = liveBySlug(slug);
+      if (live) openLive(live, push);
+      return;
+    }
     state.selected = slug;
     writeHash(push !== false);
     var calc = recompute(row);
@@ -772,21 +779,9 @@
       });
     }
 
-    var sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' }, [
-      h('div','sheet-head', [
-        el('div', null, [
-          el('h2', { text: row.name }),
-          el('div', { class: 'slug', text: row.slug + ' · rank ' + row.rank + ' of ' + D.board_size })
-        ]),
-        el('button', { class: 'close', type: 'button', 'aria-label': 'Close details', text: '×', onclick: closeDetail })
-      ]),
-      h('div','chips', [
-        el('span', { class: 'tag ' + (row.on_watchlist ? 'wl' : 'early'), text: row.on_watchlist ? 'On the house watchlist' : (row.tvl_usd >= D.floor_usd ? 'Not on the house watchlist — above the ' + FLOOR + ' floor' : 'Not on the house watchlist — below the ' + FLOOR + ' floor') }),
-        el('span', { class: 'chip-static', text: row.category || 'Uncategorised' })
-      ]),
-      (row.chains || []).length ? h('div','chips', (row.chains || []).slice(0, 8).map(function (c) {
-        return el('span', { class: 'chip-static', text: c });
-      })) : null,
+    var sheet = sheetFor(row, row.slug + ' · rank ' + row.rank + ' of ' + D.board_size,
+      row.on_watchlist ? 'On the house watchlist' : (row.tvl_usd >= D.floor_usd ? 'Not on the house watchlist — above the ' + FLOOR + ' floor' : 'Not on the house watchlist — below the ' + FLOOR + ' floor'),
+      row.on_watchlist ? 'wl' : 'early', [
       kpis,
       h('h4', null, ['How this row is priced']),
       deriv,
@@ -796,13 +791,89 @@
       steps,
       peerBox ? h('h4', null, ['Others in this category']) : null,
       peerBox,
-      el('div', { class: 'warn', text:
-        'An implied value is this entry\'s own estimate of what a token may be worth if ' + row.name +
-        ' issues one and its record stays as it is. It is not a price, not a promise, and not a prediction that one will be issued.' })
+      el('div', { class: 'warn', text: D.copy.drawer_note })
     ]);
 
     host.appendChild(sheet);
-    host.addEventListener('click', function (e) { if (e.target === host) closeDetail(); });
+    wireDrawer(host, sheet);
+  }
+
+  // The drawer for a protocol whose token already trades. It has no implied value and no farm
+  // plan — its value is the market's own — so the panel shows the market's figures and says
+  // whether the model was fitted on it.
+  // The drawer's shell: its head, its close button, and the chip rows that say what the row is.
+  function sheetFor(row, sub, tagText, tagCls, body) {
+    var head = h('div','sheet-head', [
+      el('div', null, [
+        el('h2', { text: row.name }),
+        el('div', { class: 'slug', text: sub })
+      ]),
+      el('button', { class: 'close', type: 'button', 'aria-label': 'Close details', text: '×', onclick: closeDetail })
+    ]);
+    var chips = h('div','chips', [
+      el('span', { class: 'tag ' + tagCls, text: tagText }),
+      el('span', { class: 'chip-static', text: row.category || 'Uncategorised' })
+    ]);
+    var kids = [head, chips];
+    if ((row.chains || []).length) {
+      kids.push(h('div','chips', (row.chains || []).slice(0, 8).map(function (c) {
+        return el('span', { class: 'chip-static', text: c });
+      })));
+    }
+    var sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' }, kids.concat(body));
+    return sheet;
+  }
+
+  function openLive(row, push) {
+    state.selected = row.slug;
+    writeHash(push !== false);
+    var host = clear(document.getElementById('drawer'));
+    host.hidden = false;
+    var inCohort = COHORT[row.slug] === true;
+    var gap = row.not_in_cohort || null;
+
+    var kpis = h('div','kpis', [
+      kpi('Market cap', moneyExact(row.mcap_usd), 'gold'),
+      kpi('TVL', moneyExact(row.tvl_usd)),
+      kpi('Cap / TVL', row.ratio === null ? '—' : row.ratio.toFixed(2), 'cyan'),
+      kpi('7d change', pct(row.change_7d))
+    ]);
+
+    var record = h('div','deriv', [
+      line('Market cap', moneyExact(row.mcap_usd)),
+      line('TVL', moneyExact(row.tvl_usd)),
+      line('Cap / TVL', row.ratio === null ? 'not recorded' : row.ratio.toFixed(4)),
+      line('Seven-day TVL change', pct(row.change_7d)),
+      line('Category', row.category || 'Uncategorised'),
+      line('Chains', String((row.chains || []).length)),
+      h('div','line total', [el('span', null, ["In the model's calibration cohort"]), el('span', { text: inCohort ? 'yes' : 'no' })])
+    ]);
+    if (gap) {
+      record.appendChild(h('div','line', [el('span', null, ['Not in the cohort because']), el('span', { text: gap })]));
+    }
+
+    var sheet = sheetFor(row, row.slug + ' · already trading', 'Token already trades', 'live', [
+      kpis,
+      h('h4', null, ["The market's figures"]),
+      record,
+      el('div', { class: 'warn', text: inCohort ? D.copy.live_drawer_note : D.copy.live_gap_note + gap + '.' })
+    ]);
+
+    host.appendChild(sheet);
+    wireDrawer(host, sheet);
+  }
+
+  // The drawer's own wiring: the backdrop click and the Escape key.
+  //
+  // The host node and the document both outlive the drawer, so a listener added on every open
+  // piles up: five open/close cycles left five backdrop handlers behind, and each one fired on the
+  // next backdrop click. The backdrop is therefore registered once, on the host, and the keydown
+  // handler is a named function, so one removal matches one add and neither count can drift.
+  function wireDrawer(host, sheet) {
+    if (!host.dataset.wired) {
+      host.dataset.wired = '1';
+      host.addEventListener('click', function (e) { if (e.target === host) closeDetail(); });
+    }
     document.addEventListener('keydown', escClose);
     var closeBtn = sheet.querySelector('.close');
     if (closeBtn) closeBtn.focus();

@@ -292,8 +292,17 @@ export interface Calibration {
   launch_beta: number[];
   /** The per-category correction in log10 space, shrunk toward the global mean. */
   category_log: Record<string, number>;
+  /**
+   * The correction a category with no cohort member gets: the shrinkage target, the global
+   * residual. A category the cohort never saw is not evidence that a category trades at the
+   * global average -- but it is not evidence against it either, so it gets the target and not a
+   * zero that would pretend the fit had spoken.
+   */
+  category_default: number;
   /** The age bands the launch curve was read from, with their counts. */
   bands: AgeBand[];
+  /** How many protocols the curve counted as one year old because no date was recorded. */
+  untracked: number;
   /** How many protocols the value model's cohort holds. */
   cohort_size: number;
   /** The median absolute error of the value fit, in log10 dollars. */
@@ -423,13 +432,15 @@ export function calibrate(snapshot: Snapshot): Calibration {
   const universe = eligible.filter((p) => !isTokenProduct(p));
 
   // The launch curve's cohorts: how many protocols of each age, and how many of them issued a token.
-  // The same universe and the same label as the fit, so the published curve IS the curve the odds
-  // come from.
+  // The same universe, the same label and the same treatment of the untracked as the fit, so the
+  // published curve IS the curve the odds come from. A protocol with no first-tracked date is
+  // counted as one year old, which is what the fit assumes for it.
   const bands: AgeBand[] = AGE_BANDS.map((b) => ({ ...b }));
+  let untracked = 0;
   for (const p of universe) {
     const age = ageDays(asOf, p.listed_at);
-    if (age === null) continue;
-    const i = ageBandOf(age);
+    if (age === null) untracked++;
+    const i = ageBandOf(age ?? 365);
     bands[i]!.n += 1;
     if (issuedOwnToken(p)) bands[i]!.issued += 1;
   }
@@ -471,7 +482,9 @@ export function calibrate(snapshot: Snapshot): Calibration {
     value_beta: value.beta,
     launch_beta: launch.beta,
     category_log: categoryLog,
+    category_default: globalResidual,
     bands,
+    untracked,
     cohort_size: cohort.length,
     mae_log10: value.mae,
     launch_auc: launch.auc,
@@ -506,7 +519,7 @@ export function scoreProtocol(p: SnapshotProtocol, asOf: string, cal: Calibratio
   const x = valueRow(p);
   let baseLog = 0;
   for (let j = 0; j < cal.value_beta.length; j++) baseLog += cal.value_beta[j]! * x[j]!;
-  const categoryLog = cal.category_log[p.category ?? '(none)'] ?? 0;
+  const categoryLog = cal.category_log[p.category ?? '(none)'] ?? cal.category_default;
   const conditional = Math.max(1, Math.round(p.tvl_usd * Math.pow(10, baseLog + categoryLog)));
 
   const lx = launchRow(p, ageForModel);
@@ -619,6 +632,8 @@ export interface RadarData {
     launch_beta: number[];
     category_log: Record<string, number>;
     bands: { lo: number; hi: number | null; n: number; issued: number }[];
+    /** The protocols the curve counted as one year old because no date was recorded. */
+    untracked: number;
     cohort_size: number;
     mae_log10: number;
     launch_auc: number;
@@ -686,6 +701,7 @@ export interface Copy {
 export interface Facts {
   /** The live rows that are in the model's calibration cohort, and those that are not. */
   live_in_cohort: number;
+  live_candidates: number;
   live_out_cohort: number;
   /** Why each live row outside the cohort is outside it, as a phrase. */
   live_out_reasons: string;
@@ -697,6 +713,7 @@ export interface Facts {
   off_total: number;
   /** The off-list rows at or above the house's floor: the house's structural reason, not the floor's. */
   off_list_above_floor: number;
+  off_list_below_floor: number;
 }
 
 /** One protocol the board leaves off, and the rule that left it off. */
@@ -730,6 +747,17 @@ export interface UniverseRow {
 
 /** How many live-token protocols the page's own table carries, by market cap. */
 export const LIVE_ROWS = 30;
+
+/**
+ * Every protocol that records a token of its own and could sit in the live table: a market cap
+ * above zero, and not a central exchange, whose volume is not a protocol's TVL. The table shows
+ * the largest LIVE_ROWS of them; the page says so, and says how many there are.
+ */
+export function liveCandidates(snapshot: Snapshot): SnapshotProtocol[] {
+  return snapshot.protocols
+    .filter((p) => !isPreToken(p) && (p.mcap_usd ?? 0) > 0 && p.category !== 'CEX')
+    .sort((a, b) => (b.mcap_usd ?? 0) - (a.mcap_usd ?? 0) || b.tvl_usd - a.tvl_usd);
+}
 
 /** The protocols the board ranks: every watchlist slug, plus every other rankable protocol. */
 export function chooseRows(snapshot: Snapshot): SnapshotProtocol[] {
@@ -789,9 +817,7 @@ export function buildBoard(snapshot: Snapshot, cal: Calibration): BoardRow[] {
 
 /** The live-token protocols, by market cap, for the page's table of what already trades. */
 export function liveRows(snapshot: Snapshot): LiveRow[] {
-  return snapshot.protocols
-    .filter((p) => !isPreToken(p) && (p.mcap_usd ?? 0) > 0 && p.category !== 'CEX')
-    .sort((a, b) => (b.mcap_usd ?? 0) - (a.mcap_usd ?? 0) || b.tvl_usd - a.tvl_usd)
+  return liveCandidates(snapshot)
     .slice(0, LIVE_ROWS)
     .map((p) => ({
       slug: p.slug,
@@ -1038,6 +1064,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
   }
   const facts: Facts = {
     live_in_cohort: inCohort,
+    live_candidates: liveCandidates(snapshot).length,
     live_out_cohort: live.length - inCohort,
     live_out_reasons: [...gapCount].map(([why, n]) => `${n} ${why}${n > 1 ? 's' : ''}`).join(', '),
     clamped,
@@ -1045,14 +1072,17 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     off_by_reason: offByReason,
     off_total: excluded.length,
     off_list_above_floor: board.filter((r) => !watchlist.has(r.slug) && r.tvl_usd >= snapshot.floor_usd).length,
+    off_list_below_floor: board.filter((r) => !watchlist.has(r.slug) && r.tvl_usd < snapshot.floor_usd).length,
   };
   // The page's prose, written here so the page's source holds each sentence once. Every figure in
   // it is interpolated from the data, so the words cannot drift from the numbers they describe.
   const FLOOR = '$' + (snapshot.floor_usd / 1e6) + 'M';
   const offListAbove = facts.off_list_above_floor;
+  const offListBelow = facts.off_list_below_floor;
   const sep =
-    'Of those ' + facts.off_list_above_floor + ', ' + offListAbove +
-    ' sit above the house\'s ' + FLOOR + ' floor and are off the list for another reason: DefiLlama names a parent protocol for each, and the house\'s rule keeps only protocols with none.';
+    'Of the ' + (snapshot.watchlist.length + offListAbove) + ' rows, ' + offListAbove +
+    ' sit above the house\'s ' + FLOOR + ' floor and are off the list for another reason: DefiLlama names a parent protocol for each, and the house\'s rule keeps only protocols with none. ' +
+    'The other ' + offListBelow + ' are off the list because they sit below that floor: the radar keeps them, because the floor is a house rule and the point of a radar is the protocol that is about to cross it.';
   const reasonNames: Record<string, string> = {
     exchanges: 'exchange venues', bridges: 'bridges', staking: 'staking wrappers',
     versioned: 'versioned pools', wrapped: 'wrapped or staked names',
@@ -1065,9 +1095,9 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     live_headline: 'These protocols already have a token.',
     model_headline: 'The model, fitted here in the page.',
     board_lede:
-      'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol: the ' +
-      snapshot.watchlist.length + ' on the house watchlist and ' + facts.off_list_above_floor +
-      ' more off the list. The watchlist is a floor, never a ceiling. ' + sep + ' ' +
+      'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol: ' +
+      snapshot.watchlist.length + ' on the house watchlist and ' + (board.length - snapshot.watchlist.length) +
+      ' off the list. The watchlist is a floor, never a ceiling. ' + sep + ' ' +
       'A further ' + facts.off_total + ' clear the ' + FLOOR + ' floor with no token and are still left off: ' +
       offText + ' — a venue, a bridge or a wrapper of someone else\'s token, not a protocol of its own. ' +
       'The model is fitted at run time on the snapshot itself — the ' + cal.cohort_size +
@@ -1075,7 +1105,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'the whole universe teaches it how often a protocol of a given age and size issues one at all.',
     live_lede:
       'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol. ' +
-      'This tab holds the other side of the line: the ' + live.length + ' protocols that <strong>do</strong> record a token. ' +
+      'This tab holds the other side of the line: the ' + live.length + ' largest of the ' + facts.live_candidates +
+      ' protocols that <strong>do</strong> record a token, by market cap. ' +
       'Their value is the market\'s own, not a model\'s, so they are never mixed into the ranking — ' +
       'they are what the model was calibrated on. ' +
       facts.live_in_cohort + ' of these ' + live.length + ' are in the cohort that taught it what a market cap is worth against TVL.',
@@ -1087,6 +1118,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'both read the snapshot\'s own fields.',
     live_note:
       '<strong>These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
+      'This table holds the ' + live.length + ' largest of the ' + facts.live_candidates + ' that could sit in it, by market cap; the rest are further down the ranking of the same set. ' +
       '<strong>' + facts.live_in_cohort + ' of these ' + live.length + ' rows are in the model\'s calibration cohort</strong>, the ' +
       cal.cohort_size + ' protocols whose tokens already trade and that taught the model what a market cap is worth relative to TVL. ' +
       'The other ' + facts.live_out_cohort + ' are here only as contrast — ' + facts.live_out_reasons + '. ' +
@@ -1118,7 +1150,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     ],
     value_fit_note:
       'Median error of the value model, in log10 dollars, on the ' + cal.cohort_size +
-      ' protocols whose tokens trade. Half land within a factor of ' + Math.pow(10, cal.mae_log10).toFixed(1) + ' of the model.',
+      ' protocols whose tokens trade, each with a market cap and TVL of a million dollars or more. ' +
+      'Half land within a factor of ' + Math.pow(10, cal.mae_log10).toFixed(1) + ' of the model.',
     launch_odds_note:
       'How well the launch model separates the protocols that have issued a token of their own from those that have not, across the eligible universe less the ' +
       cal.product_rows + ' product rows — rows that carry a ticker but no market cap of their own. ' +
@@ -1140,7 +1173,9 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       ' protocols whose tokens already trade and for the whole eligible universe, and it refits the model from them ' +
       'with the code in <code>model.js</code> — the same procedure <code>main.ts</code> used, not the same numbers pasted in. ' +
       'It then recomputes every row of the board from those figures. ',
-    curve_note: 'Counted across every eligible protocol in the snapshot. This is where the launch odds come from.',
+    curve_note:
+      'Counted across every eligible protocol in the snapshot. This is where the launch odds come from. ' +
+      'The ' + cal.untracked + ' with no first-tracked date are counted as one year old, which is what the fit assumes for them, so the column adds up to the fit\'s own universe.',
     category_note:
       'How far each category sits from the fitted line, in log10 dollars, shrunk toward the mean so a thin category cannot speak for itself.',
   };
@@ -1159,6 +1194,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       launch_beta: cal.launch_beta.map((b) => Math.round(b * 1e6) / 1e6),
       category_log: Object.fromEntries(Object.entries(cal.category_log).map(([k, v]) => [k, Math.round(v * 10000) / 10000])),
       bands: cal.bands.map((b) => ({ lo: b.lo, hi: b.hi === Number.POSITIVE_INFINITY ? null : b.hi, n: b.n, issued: b.issued })),
+      untracked: cal.untracked,
       cohort_size: cal.cohort_size,
       universe_size: cal.universe_size,
       product_rows: cal.product_rows,

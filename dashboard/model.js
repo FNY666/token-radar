@@ -2,7 +2,7 @@
 // refits it from the figures it carries and shows the arithmetic, not a number to trust.
 //
 //   value model   log10(mcap/tvl) ~ log10(tvl) + growth, Huber-weighted, with a shrunk category
-//                 correction. Fitted on the protocols whose tokens already trade.
+//                 correction. Fitted on the protocols whose tokens trade.
 //   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
 //                 product rows: rows that carry a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
@@ -46,7 +46,8 @@
         var x = valueRow(tvl, growth);
         var acc = 0;
         for (var j = 0; j < beta.length; j++) acc += beta[j] * x[j];
-        acc += categories[category || '(none)'] || 0;
+        var cat = categories[category || '(none)'];
+        acc += cat === undefined ? categories.__default : cat;
         return Math.round(tvl * Math.pow(10, acc));
       },
       /** The chance it issues, from the fitted launch model alone. */
@@ -55,7 +56,7 @@
         var z = 0;
         for (var j = 0; j < launch.beta.length; j++) z += launch.beta[j] * x[j];
         var raw = Math.max(0.05, Math.min(0.95, 1 / (1 + Math.exp(-z))));
-        // The same six decimals the board publishes, so the page and the board are one number.
+        // The same six decimals the board publishes, so the two are one number.
         return Math.round(raw * 1e6) / 1e6;
       }
     };
@@ -63,7 +64,7 @@
 
   global.RadarModel = { fit: fit, ageDays: ageDays, clampGrowth: clampGrowth };
 
-  // The value fit: Huber-weighted least squares, so a few hundred-times outliers cannot drag it.
+  // The value fit: Huber-weighted least squares, so outliers cannot drag it.
   function fitValue(rows) {
     var data = rows.map(function (p) {
       return { x: valueRow(p.tvl_usd, p.change_7d), y: Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) };
@@ -94,7 +95,7 @@
   }
 
   function fitLaunch(rows, asOf) {
-    // A product row is neither an issuer nor a non-issuer, so it stays out of the fit altogether.
+    // A product row is neither an issuer nor a non-issuer, so it stays out of the fit.
     var data = rows.filter(function (p) { return !isTokenProduct(p); }).map(function (p) {
       var age = ageDays(asOf, p.listed_at);
       return { x: launchRow(p.tvl_usd, p.change_7d, age === null ? 365 : age), y: issuedOwn(p) ? 1 : 0 };
@@ -127,7 +128,7 @@
   }
 
   // The per-category correction: the category's residual, shrunk toward the global mean and
-  // winsorized, so a category with one live protocol cannot speak for itself.
+  // winsorized, so a thin category cannot speak for itself.
   function fitCategories(cohort, beta) {
     var byCat = {};
     var all = [];
@@ -150,11 +151,13 @@
       var clipped = byCat[key].map(clip);
       out[key] = (clipped.length * median(clipped) + shrinkage * globalResidual) / (clipped.length + shrinkage);
     });
+    // A category the cohort never saw gets the shrinkage target, not a zero.
+    out.__default = globalResidual;
     return out;
   }
 
   // Fit the whole model from the snapshot figures, in the page, every time it loads.
-  // `data` is the dataset main.ts wrote: the cohort, the universe and the board's rows.
+  // `data` is the dataset main.ts wrote: the cohort, the universe and the board.
 
   function valueRow(tvl, growth) {
     return [1, Math.log10(Math.max(tvl, 1)), clampGrowth(growth) / 10];
@@ -170,7 +173,7 @@
     return x;
   }
 
-  // Whether a protocol issued a token of its own: its own market cap, or its own CoinGecko id.
+  // Whether a protocol issued a token of its own: its own market cap, or its own id.
   function issuedOwn(p) {
     return p.mcap_usd !== null || p.gecko_id !== null;
   }

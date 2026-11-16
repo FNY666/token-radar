@@ -273,6 +273,15 @@
     facts.forEach(function (f) {
       host.appendChild(el('div', null, [el('dt', { text: f[0] }), el('dd', { text: f[1] })]));
     });
+    sizeBar();
+  }
+
+  // The bar's height depends on how its facts wrap, so the table header's sticky offset is set
+  // from the bar's MEASURED height rather than a guessed constant. On a phone the bar is four
+  // rows tall; a fixed offset would either leave a gap or push the header under it.
+  function sizeBar() {
+    var bar = document.querySelector('.bar');
+    if (bar) document.documentElement.style.setProperty('--bar-h', Math.round(bar.getBoundingClientRect().height) + 'px');
   }
 
   function renderHero() {
@@ -956,4 +965,5 @@
   writeHash();
   render();
   window.addEventListener('hashchange', onHashChange);
+  window.addEventListener('resize', sizeBar);
 })();

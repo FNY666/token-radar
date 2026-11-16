@@ -95,27 +95,15 @@
 
   var VIEWS = ['board', 'live', 'model'];
   var state = { view: 'board', q: '', category: 'all', chain: 'all', scope: 'all', sort: 'rank', dir: 1, selected: null };
-
-  // The off-list rows at or above the house's TVL floor: the floor excluded none of the watchlist,
-  // so these are off the list for the house's structural reason.
-  var OFF_ABOVE = D.rows.filter(function (r) { return !r.on_watchlist && r.tvl_usd >= D.floor_usd; }).length;
+  // The house's TVL floor, as the page names it.
   var FLOOR = '$' + (D.floor_usd / 1e6) + 'M';
-  // What the board leaves off, counted from the dataset: each pre-token protocol at or above the
-  // floor the board's rule rules out, by the rule that rules it out.
-  var OFF = (function () {
-    var by = {};
-    (D.excluded || []).forEach(function (r) { by[r.reason] = (by[r.reason] || 0) + 1; });
-    var names = { exchanges: 'exchange venues', bridges: 'bridges', staking: 'staking wrappers', versioned: 'versioned pools', wrapped: 'wrapped or staked names' };
-    var parts = Object.keys(by).map(function (k) { return by[k] + ' ' + (names[k] || k); });
-    var total = Object.keys(by).reduce(function (n, k) { return n + by[k]; }, 0);
-    return { by: by, total: total, text: parts.join(', ') };
-  })();
-  // One sentence, carried by the hero and the model page alike, so they cannot disagree.
-  var SEP = 'Of those ' + D.early_size + ', ' + OFF_ABOVE + ' sit above the house\'s ' + FLOOR +
-    ' floor and are off the list for another reason: DefiLlama names a parent protocol for each, and the house\'s rule keeps only protocols with none.';
+
 
   // What a link asked for that the board does not have. The page says so.
   var notes = [];
+
+  // The board changed: write the new state to the URL, then redraw what the state changes.
+  function refresh() { writeHash(); renderTable(); renderPlot(); }
 
   // A hash that will not decode is a broken link, not a name: reported, not guessed at, so a bad
   // escape can neither blank the page nor filter the board to nothing.
@@ -272,21 +260,13 @@
         t('em','no token'),
         '. This is what each may be worth if it issues one.'
       ]),
-      el('p', { class: 'lede', html:
-        'The board ranks ' + D.board_size + ' protocols with no market cap, no CoinGecko id and no symbol: the ' +
-        D.watchlist_size + ' on the house watchlist and ' + D.early_size + ' more off the list. ' +
-        'The watchlist is a floor, never a ceiling. ' + SEP + ' ' +
-        'A further ' + OFF.total + ' clear the ' + FLOOR + ' floor with no token and are still left off: ' +
-        OFF.text + ' — a venue, a bridge or a wrapper of someone else\'s token, not a protocol of its own. ' +
-        'The model is fitted at run time on the snapshot itself — the ' + D.calibration.cohort_size +
-        ' protocols whose tokens <strong>already trade</strong> teach it what a market cap is worth against TVL and seven-day growth; ' +
-        'the whole universe teaches it how often a protocol of a given age and size issues one at all.' })
+      el('p', { class: 'lede', html: D.copy.lede })
     ]);
     var steps = h('div','callout', [
       t('h2','How a row is priced'),
       el('ol', null, [
         el('li', { html: '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size, growth and category.' }),
-        el('li', { html: '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols of its age and size have issued.' }),
+        el('li', { html: '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols its age and size have issued.' }),
         el('li', { html: '<strong>Implied value.</strong> The two multiplied. This is what the board ranks.' })
       ])
     ]);
@@ -372,7 +352,7 @@
     function filter(label, all, list, chosen, set) {
       var box = el('select', {
         'aria-label': 'Filter by ' + label,
-        onchange: function () { set(box.value); writeHash(); renderTable(); renderPlot(); }
+        onchange: function () { set(box.value); refresh(); }
       }, [el('option', { value: 'all', text: all })].concat(list.map(function (v) {
         return el('option', { value: v, text: v, selected: v === chosen ? 'selected' : null });
       })));
@@ -385,7 +365,7 @@
       text: 'Watchlist only',
       onclick: function () {
         state.scope = state.scope === 'watchlist' ? 'all' : 'watchlist';
-        writeHash(); renderControls(); renderTable(); renderPlot();
+        refresh();
       }
     });
     var early = el('button', {
@@ -393,7 +373,7 @@
       text: 'Off list only',
       onclick: function () {
         state.scope = state.scope === 'early' ? 'all' : 'early';
-        writeHash(); renderControls(); renderTable(); renderPlot();
+        refresh();
       }
     });
     var result = el('span', { class: 'result', id: 'result-count' });
@@ -401,7 +381,7 @@
       class: 'ghost', type: 'button', text: 'Clear filters',
       onclick: function () {
         state.q = ''; state.category = 'all'; state.chain = 'all'; state.scope = 'all';
-        writeHash(); renderControls(); renderTable(); renderPlot();
+        refresh();
       }
     });
     host.appendChild(t('label','Search'));
@@ -433,7 +413,7 @@
         onclick: function () {
           if (state.sort === key) state.dir = -state.dir;
           else { state.sort = key; state.dir = key === 'rank' ? 1 : -1; }
-          writeHash(); renderTable(); renderPlot();
+          refresh();
         }
       }, [
         document.createTextNode(label),
@@ -594,10 +574,7 @@
 
   function renderLive() {
     var host = clear(document.getElementById('view-live'));
-    host.appendChild(el('p', { class: 'live-note', html:
-      '<strong>These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
-      'They are here as the calibration set — ' + D.calibration.cohort_size + ' of them taught the model what a market cap is worth relative to TVL — ' +
-      'and as the contrast that shows what the board is looking for. A market cap over TVL below 1 is a token the market prices at less than the deposits behind it.' }));
+    host.appendChild(el('p', { class: 'live-note', html: D.copy.live_note }));
     var head = el('thead', null, [
       el('tr', null, [
         el('th', { scope: 'col', text: 'Protocol' }),
@@ -637,29 +614,32 @@
       h('div','card', [
         t('h3','Value fit'),
         el('div', { class: 'big', text: c.mae_log10.toFixed(3) }),
-        el('p', { text: 'Median error of the value model, in log10 dollars, on the ' + c.cohort_size + ' protocols whose tokens already trade. Half land within a factor of ' + Math.pow(10, c.mae_log10).toFixed(1) + ' of the model.' })
+        el('p', { text: 'Median error of the value model, in log10 dollars, on the ' + c.cohort_size + ' protocols whose tokens trade. Half land within a factor of ' + Math.pow(10, c.mae_log10).toFixed(1) + ' of the model.' })
       ]),
       h('div','card', [
         t('h3','Launch odds'),
         el('div', { class: 'big', text: c.launch_auc.toFixed(3) }),
-        t('p','How well the launch model separates the protocols that have issued a token from those that have not, across the whole eligible universe.'),
+        t('p','How well the launch model separates the protocols that have issued from those that have not, across the whole universe.'),
       ]),
       h('div','card', [
         t('h3','No name is special'),
         el('p', { html: 'Every row is scored by one function of <code>TVL</code>, <code>change_7d</code>, <code>listed_at</code> and <code>category</code>. ' +
-          'No protocol is named anywhere in the model, and the coefficients are fitted at run time on this snapshot — not typed in.' })
+          'No protocol is named in the model, and the coefficients are fitted at run time on this snapshot — not typed in.' })
       ])
     ]);
     host.appendChild(cards);
 
     host.appendChild(card('The formula', [
       el('div', { class: 'formula', text:
-        'log10(mcap / tvl) = a + b·log10(tvl) + c·(change_7d / 10) + category_log\n' +
+        'growth = clamp(change_7d, -60, +120)      the model reads a clamped week, never the raw one\n' +
+        '\n' +
+        'log10(mcap / tvl) = a + b·log10(tvl) + c·(growth / 10) + category_log\n' +
         '  a = ' + c.value_beta[0].toFixed(4) + '    b = ' + c.value_beta[1].toFixed(4) + '    c = ' + c.value_beta[2].toFixed(4) + '\n' +
         '\n' +
         'conditional value = tvl · 10^(that sum)          what it is worth if it issues\n' +
-        'launch odds      = logistic(age band, tvl band, growth)\n' +
-        'implied value    = conditional value · launch odds  ← the board ranks this' })
+        'launch odds      = logistic(age band, tvl band, growth), then held to [0.05, 0.95]\n' +
+        'implied value    = conditional value · launch odds  ← the board ranks this' }),
+      el('p', { html: D.copy.clamps })
     ]));
 
     if (FIT) {
@@ -708,7 +688,7 @@
     host.appendChild(curve);
 
     var catCard = card('Category corrections', [
-      t('p','How far each category sits from the fitted line, in log10 dollars, shrunk toward the global mean so a thin category cannot speak for itself.'),
+      t('p','How far each category sits from the fitted line, in log10 dollars, shrunk toward the mean so a thin category cannot speak for itself.'),
     ]);
     var catRows = Object.keys(c.category_log).map(function (k) {
       return { k: k, v: c.category_log[k] };
@@ -726,8 +706,8 @@
     host.appendChild(card('What this is and is not', [
       el('div', { class: 'prose', html:
         '<p><strong>It is:</strong> what a token may be worth if its protocol\'s record stays as it is, ranked by that number, with a farm plan for each row. Every figure is the snapshot\'s own, fitted at run time.</p>' +
-        '<p><strong>It is not:</strong> a prediction that a token will be issued, or of when, or at what price. The launch odds say how often protocols like this one have issued, not that this one will. A protocol records no token in DefiLlama\'s record; that is not proof that it has none, and the board says so.</p>' +
-        '<p><strong>The separation:</strong> the ' + D.watchlist_size + ' watchlist protocols are all on the board, but so are ' + D.early_size + ' more — the watchlist is a floor, never a ceiling. ' + SEP + ' The ' + D.live_size + ' protocols whose tokens already trade are kept in their own table and never mixed into the ranking.</p>' })
+        '<p><strong>It is not:</strong> a prediction that a token will be issued, or of when, or at what price. The launch odds say how often protocols like this one have issued, not that this one will. A protocol records no token in DefiLlama\'s record; that is not proof it has none, and the board says so.</p>' +
+        '<p><strong>The separation:</strong> the ' + D.watchlist_size + ' watchlist protocols are all on the board, but so are ' + D.early_size + ' more — the watchlist is a floor, never a ceiling. The ' + D.live_size + ' protocols whose tokens already trade are kept in their own table and never mixed into the ranking.</p>' })
     ]));
   }
 
@@ -822,7 +802,7 @@
       peerBox,
       el('div', { class: 'warn', text:
         'An implied value is this entry\'s own estimate of what a token may be worth if ' + row.name +
-        ' issues one and its record stays as it is. It is not a price, not a promise, and not a prediction that a token will be issued at all.' })
+        ' issues one and its record stays as it is. It is not a price, not a promise, and not a prediction that one will be issued.' })
     ]);
 
     host.appendChild(sheet);
@@ -870,7 +850,7 @@
     main.appendChild(h('section','card prose missing', [
       h('h1', null, ['This page has no board yet']),
       t('p','The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.'),
-      el('p', { class: 'muted', text: 'Run the entry (node main.ts) and open the dashboard it writes into its output directory: the board, the protocol details and the farm plans are all in that file.' })
+      el('p', { class: 'muted', text: 'Run the entry (node main.ts) and open the dashboard it writes: the board, the protocol details and the farm plans are all in that file.' })
     ]));
     var bar = document.getElementById('bar-meta');
     if (bar) clear(bar);

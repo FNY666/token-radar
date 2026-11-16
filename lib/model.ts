@@ -586,6 +586,39 @@ export interface RadarData {
   excluded: ExcludedRow[];
   /** The pre-token protocols below the house's TVL floor: too small to rank, not ruled out. */
   below_floor: number;
+  /** The counts the page's own prose is made of, so no claim can drift from the figures. */
+  facts: Facts;
+  /** The page's own prose, written once here so the page can hold it without repeating itself. */
+  copy: Copy;
+}
+
+/** The page's prose, written once so the page's source holds it once. */
+export interface Copy {
+  /** The hero's lede: what the board is, and what it leaves out. */
+  lede: string;
+  /** The live table's note: what the calibration cohort is, and who is outside it. */
+  live_note: string;
+  /** The formula card's note: the model's two clamps, and how many rows sit on each. */
+  clamps: string;
+  /** The model page's closing prose: what the board is and is not. */
+  is_and_is_not: string;
+}
+
+/** The counts the page states, computed once from the data so the page cannot get them wrong. */
+export interface Facts {
+  /** The live rows that are in the model's calibration cohort, and those that are not. */
+  live_in_cohort: number;
+  live_out_cohort: number;
+  /** Why each live row outside the cohort is outside it, as a phrase. */
+  live_out_reasons: string;
+  /** The board rows whose growth sits on the model's clamp, and whose odds sit on its floor. */
+  clamped: number;
+  floored: number;
+  /** The pre-token protocols the board leaves off, and the rule that left each one off. */
+  off_by_reason: Record<string, number>;
+  off_total: number;
+  /** The off-list rows at or above the house's floor: the house's structural reason, not the floor's. */
+  off_list_above_floor: number;
 }
 
 /** One protocol the board leaves off, and the rule that left it off. */
@@ -902,6 +935,75 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     const reason = offBoardReason(p);
     if (reason !== null) excluded.push({ slug: p.slug, reason });
   }
+  // The counts the page states, computed here so the page cannot state them wrongly: which live
+  // rows are in the model's cohort, which rows sit on the model's clamps, and what the board left off.
+  const cohortSlugs = new Set(snapshot.protocols.filter((p) => isEligible(p) && !isPreToken(p) && (p.mcap_usd ?? 0) >= 1_000_000 && p.tvl_usd >= 1_000_000).map((p) => p.slug));
+  const gapCount = new Map<string, number>();
+  let inCohort = 0;
+  for (const r of live) {
+    if (cohortSlugs.has(r.slug)) inCohort++;
+    else {
+      const why = r.not_in_cohort ?? 'out of the cohort';
+      gapCount.set(why, (gapCount.get(why) ?? 0) + 1);
+    }
+  }
+  const offByReason: Record<string, number> = {};
+  for (const e of excluded) offByReason[e.reason] = (offByReason[e.reason] ?? 0) + 1;
+  let clamped = 0;
+  let floored = 0;
+  for (const r of board) {
+    if (r.change_7d !== null && (r.change_7d < -60 || r.change_7d > 120)) clamped++;
+    if (r.launch_probability <= 0.05) floored++;
+  }
+  const facts: Facts = {
+    live_in_cohort: inCohort,
+    live_out_cohort: live.length - inCohort,
+    live_out_reasons: [...gapCount].map(([why, n]) => `${n} ${why}${n > 1 ? 's' : ''}`).join(', '),
+    clamped,
+    floored,
+    off_by_reason: offByReason,
+    off_total: excluded.length,
+    off_list_above_floor: board.filter((r) => !watchlist.has(r.slug) && r.tvl_usd >= snapshot.floor_usd).length,
+  };
+  // The page's prose, written here so the page's source holds each sentence once. Every figure in
+  // it is interpolated from the data, so the words cannot drift from the numbers they describe.
+  const FLOOR = '$' + (snapshot.floor_usd / 1e6) + 'M';
+  const offListAbove = facts.off_list_above_floor;
+  const sep =
+    'Of those ' + facts.off_list_above_floor + ', ' + offListAbove +
+    ' sit above the house\'s ' + FLOOR + ' floor and are off the list for another reason: DefiLlama names a parent protocol for each, and the house\'s rule keeps only protocols with none.';
+  const reasonNames: Record<string, string> = {
+    exchanges: 'exchange venues', bridges: 'bridges', staking: 'staking wrappers',
+    versioned: 'versioned pools', wrapped: 'wrapped or staked names',
+  };
+  const offText = Object.keys(facts.off_by_reason).map((k) => `${facts.off_by_reason[k]} ${reasonNames[k] ?? k}`).join(', ');
+  const copy: Copy = {
+    lede:
+      'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol: the ' +
+      snapshot.watchlist.length + ' on the house watchlist and ' + facts.off_list_above_floor +
+      ' more off the list. The watchlist is a floor, never a ceiling. ' + sep + ' ' +
+      'A further ' + facts.off_total + ' clear the ' + FLOOR + ' floor with no token and are still left off: ' +
+      offText + ' — a venue, a bridge or a wrapper of someone else\'s token, not a protocol of its own. ' +
+      'The model is fitted at run time on the snapshot itself — the ' + cal.cohort_size +
+      ' protocols whose tokens <strong>already trade</strong> teach it what a market cap is worth against TVL and growth; ' +
+      'the whole universe teaches it how often a protocol of a given age and size issues one at all.',
+    live_note:
+      '<strong>These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
+      '<strong>' + facts.live_in_cohort + ' of these ' + live.length + ' rows are in the model\'s calibration cohort</strong>, the ' +
+      cal.cohort_size + ' protocols whose tokens already trade and that taught the model what a market cap is worth relative to TVL. ' +
+      'The other ' + facts.live_out_cohort + ' are here only as contrast — ' + facts.live_out_reasons + '. ' +
+      'A market cap over TVL below 1 is a token the market prices at less than the deposits behind it.',
+    clamps:
+      'Two clamps, and they are the model\'s only floors. <strong>Growth</strong> is held between −60% and +120%: a week beyond either end is one regime, not a bigger number, so ' +
+      facts.clamped + ' of the board\'s ' + board.length + ' rows sit on the clamp and the formula reads the clamped figure. ' +
+      '<strong>Launch odds</strong> are held between 5% and 95%: ' + facts.floored + ' rows sit on the 5% floor, so their odds are the floor rather than the model\'s opinion.',
+    is_and_is_not:
+      '<p><strong>It is:</strong> what a token may be worth if its protocol\'s record stays as it is, ranked by that number, with a farm plan for each row. Every figure is the snapshot\'s own, fitted at run time.</p>' +
+      '<p><strong>It is not:</strong> a prediction that a token will be issued, or of when, or at what price. The launch odds say how often protocols like this one have issued, not that this one will. A protocol records no token in DefiLlama\'s record; that is not proof it has none, and the board says so.</p>' +
+      '<p><strong>The separation:</strong> the ' + snapshot.watchlist.length + ' watchlist protocols are all on the board, but so are ' +
+      (board.length - snapshot.watchlist.length) + ' more — the watchlist is a floor, never a ceiling. The ' +
+      live.length + ' protocols whose tokens already trade are kept in their own table and never mixed into the ranking.</p>',
+  };
   const radar: RadarData = {
     as_of: snapshot.as_of,
     source: snapshot.source,
@@ -952,6 +1054,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       })),
     excluded,
     below_floor: belowFloor,
+    facts,
+    copy,
     universe: snapshot.protocols.filter(isEligible).map((p) => ({
       slug: p.slug,
       tvl_usd: p.tvl_usd,

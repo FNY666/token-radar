@@ -8,330 +8,6 @@
   var D = window.RADAR;
   if (!D) { renderMissingData(); return; }
 
-  // helpers
-
-  function money(n) {
-    if (n === null || n === undefined) return '—';
-    var a = Math.abs(n);
-    if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-    if (a >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
-    if (a >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K';
-    return '$' + Math.round(n);
-  }
-
-  function moneyExact(n) {
-    if (n === null || n === undefined) return '—';
-    return '$' + Math.round(n).toLocaleString('en-US');
-  }
-
-  function chg(r) {
-    return el('td', { class: 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), text: pct(r.change_7d) });
-  }
-
-  function pct(n, digits) {
-    if (n === null || n === undefined) return '—';
-    return (n >= 0 ? '+' : '') + n.toFixed(digits === undefined ? 1 : digits) + '%';
-  }
-
-  function age(days) {
-    if (days === null || days === undefined) return 'unknown';
-    if (days < 60) return days + 'd';
-    if (days < 730) return Math.round(days / 30.44) + 'mo';
-    return (days / 365.25).toFixed(1) + 'y';
-  }
-
-  function h(tag, cls, children) {
-    return el(tag, { class: cls }, children);
-  }
-
-  function t(tag, text) {
-    return el(tag, { text: text });
-  }
-
-  function el(tag, attrs, children) {
-    var node = document.createElement(tag);
-    if (attrs) {
-      Object.keys(attrs).forEach(function (k) {
-        var v = attrs[k];
-        if (v === null || v === undefined || v === false) return;
-        if (k === 'text') node.textContent = v;
-        else if (k === 'html') node.innerHTML = v;
-        else if (k === 'class') node.className = v;
-        else if (k.slice(0, 2) === 'on') node.addEventListener(k.slice(2), v);
-        else node.setAttribute(k, v === true ? '' : String(v));
-      });
-    }
-    var kids = children === null || children === undefined ? [] : (typeof children === 'string' ? [children] : children);
-    kids.forEach(function (c) {
-      if (c === null || c === undefined || c === false) return;
-      node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
-    });
-    return node;
-  }
-
-  function line(label, value) {
-    return h('div','line', [el('span', { text: label }), el('span', { text: value })]);
-  }
-
-  function kpi(label, value, tone) {
-    return h('div','kpi', [
-      el('div', { class: 'k', text: label }),
-      el('div', { class: 'v' + (tone ? ' ' + tone : ''), text: value })
-    ]);
-  }
-
-  function card(title, children) {
-    return h('div','card stack', [
-      el('h3', { text: title })
-    ].concat(children));
-  }
-
-  function clear(node) {
-    while (node.firstChild) node.removeChild(node.firstChild);
-    return node;
-  }
-
-  // state
-
-  var VIEWS = ['board', 'live', 'model'];
-  var state = { view: 'board', q: '', category: 'all', chain: 'all', scope: 'all', sort: 'rank', dir: 1, selected: null };
-  // The house's TVL floor, as the page names it.
-  var FLOOR = '$' + (D.floor_usd / 1e6) + 'M';
-
-
-  // What a link asked for that the board does not have. The page says so.
-  var notes = [];
-
-  // The board changed: write the new state to the URL, then redraw what the state changes.
-  function refresh() { writeHash(); renderTable(); renderPlot(); }
-
-  // A hash that will not decode is a broken link, not a name: reported, not guessed at, so a bad
-  // escape can neither blank the page nor filter the board to nothing.
-  function dec(s) {
-    try { return decodeURIComponent(s); } catch (e) { return null; }
-  }
-
-  // The hash is a wish, not a command: every name in it is checked against the page's own lists,
-  // so an unknown value falls back to the default and says so.
-  var HASH = { p: 'selected', q: 'q', cat: 'category', chain: 'chain', scope: 'scope', view: 'view', sort: 'sort' };
-  var HASH_DEFAULT = { p: '', q: '', cat: 'all', chain: 'all', scope: 'all', view: 'board', sort: 'rank' };
-
-  function readHash() {
-    notes = [];
-    Object.keys(HASH_DEFAULT).forEach(function (k) { state[HASH[k]] = HASH_DEFAULT[k]; });
-    state.dir = 1;
-    var h = (location.hash || '').replace(/^#/, '');
-    h.split('&').forEach(function (p) {
-      var i = p.indexOf('=');
-      var k = dec(i < 0 ? p : p.slice(0, i));
-      var v = dec(i < 0 ? '' : p.slice(i + 1));
-      if (k === null || v === null) { notes.push('That link is broken: its text is not a valid escape sequence.'); return; }
-      if (k === 'dir') state.dir = v === 'asc' ? 1 : -1;
-      else if (HASH[k] && v !== 'null') state[HASH[k]] = v;
-    });
-    if (VIEWS.indexOf(state.view) === -1) {
-      notes.push('No view named "' + state.view + '". Showing the pre-token board.');
-      state.view = 'board';
-    }
-    if (state.category !== 'all' && categories().indexOf(state.category) === -1) {
-      notes.push('No category named "' + state.category + '". Showing every category.');
-      state.category = 'all';
-    }
-    if (state.chain !== 'all' && chains().indexOf(state.chain) === -1) {
-      notes.push('No chain named "' + state.chain + '". Showing every chain.');
-      state.chain = 'all';
-    }
-    if (['all', 'watchlist', 'early'].indexOf(state.scope) === -1) state.scope = 'all';
-    if (!SORTS[state.sort]) state.sort = 'rank';
-    if (state.selected) {
-      var row = rowBySlug(state.selected);
-      if (row) state.selected = row.slug;
-      else if (liveBySlug(state.selected)) { /* already trading: the drawer shows the market's figures */ }
-      else { notes.push(missingProtocol(state.selected)); state.selected = null; }
-    }
-  }
-
-  function missingProtocol(slug) {
-    for (var i = 0; i < D.live.length; i++) {
-      if (D.live[i].slug === slug) {
-        return D.live[i].name + ' already trades: it is on the "Already trading" tab, not on this board.';
-      }
-    }
-    for (var j = 0; j < D.universe.length; j++) {
-      var u = D.universe[j];
-      if (u.slug === slug && (u.mcap_usd !== null || u.gecko_id !== null)) {
-        return 'That protocol already trades a token, so it is not on this board.';
-      }
-    }
-    return 'No protocol with that name is on this board.';
-  }
-
-  function writeHash(push) {
-    var parts = [];
-    Object.keys(HASH_DEFAULT).forEach(function (k) {
-      var v = state[HASH[k]];
-      if (v !== null && v !== HASH_DEFAULT[k]) parts.push(k + '=' + encodeURIComponent(v));
-    });
-    if (state.dir !== 1) parts.push('dir=' + (state.dir === 1 ? 'asc' : 'desc'));
-    var next = parts.length ? '#' + parts.join('&') : '';
-    if (next === location.hash) return;
-    var url = next || location.pathname + location.search;
-    if (push) history.pushState(null, '', url);
-    else history.replaceState(null, '', url);
-  }
-
-  function rowBySlug(slug) {
-    for (var i = 0; i < D.rows.length; i++) if (D.rows[i].slug === slug) return D.rows[i];
-    return null;
-  }
-
-  function liveBySlug(slug) {
-    for (var i = 0; i < D.live.length; i++) if (D.live[i].slug === slug) return D.live[i];
-    return null;
-  }
-
-  // The cohort the model was fitted on, as a lookup: a protocol in it is one of the rows that
-  // taught the model what a market cap is worth.
-  var COHORT = {};
-  D.cohort.forEach(function (c) { COHORT[c.slug] = true; });
-
-  // The rows of both tables: reachable by keyboard, and they open the drawer.
-  function rowAttrs(r) {
-    return {
-      class: 'row', tabindex: '0',
-      onclick: function () { openDetail(r.slug); },
-      onkeydown: function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.slug); }
-      }
-    };
-  }
-
-  // the model, refitted in the page
-
-  // The page refits the model from the figures it carries, with main.ts's procedure, and checks its
-  // numbers against the board. It says so if they disagree.
-  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
-
-  var FIT = (function () {
-    if (!MODEL) return null;
-    var exact = 0;
-    var within1 = 0;
-    var worst = 0;
-    D.rows.forEach(function (r) {
-      var cond = MODEL.conditional(r.tvl_usd, r.change_7d, r.category);
-      var odds = MODEL.launchP(r.tvl_usd, r.change_7d, r.age_days);
-      var ev = Math.round(cond * odds);
-      if (ev === r.implied_value_usd) exact++;
-      if (Math.abs(ev - r.implied_value_usd) <= Math.max(1, r.implied_value_usd * 0.01)) within1++;
-      var gap = r.implied_value_usd > 0 ? Math.abs(ev - r.implied_value_usd) / r.implied_value_usd : 0;
-      if (gap > worst) worst = gap;
-    });
-    return { exact: exact, within1: within1, worst: worst, total: D.rows.length };
-  })();
-
-  function recompute(row) {
-    var cond = MODEL
-      ? MODEL.conditional(row.tvl_usd, row.change_7d, row.category)
-      : row.conditional_value_usd;
-    var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
-    var odds = launchP(row);
-    return {
-      conditional: cond,
-      expected: Math.round(cond * odds),
-      log10: log10,
-      launch: odds
-    };
-  }
-
-  function launchP(row) {
-    if (!MODEL) return row.launch_probability;
-    return MODEL.launchP(row.tvl_usd, row.change_7d, row.age_days);
-  }
-
-  // The odds, to one decimal of a percent: the same figure everywhere.
-  function oddsText(p) { return (p * 100).toFixed(1) + '%'; }
-
-  // the top bar and the hero
-
-  function renderNote() {
-    var host = document.getElementById('note');
-    if (!host) return;
-    clear(host);
-    host.hidden = !notes.length;
-    if (notes.length) host.appendChild(el('div', { class: 'warn note', text: notes.join(' ') }));
-  }
-
-  function renderMeta() {
-    var host = clear(document.getElementById('bar-meta'));
-    var facts = [
-      ['snapshot', D.as_of],
-      ['universe', D.universe_size + ' protocols'],
-      ['watchlist', D.watchlist_size + ' covered'],
-      ['board', D.board_size + ' rows'],
-      ['model', D.model_version]
-    ];
-    facts.forEach(function (f) {
-      host.appendChild(el('div', null, [el('dt', { text: f[0] }), el('dd', { text: f[1] })]));
-    });
-    sizeBar();
-  }
-
-  // The bar's height depends on how its facts wrap, so the table header's sticky offset is set
-  // from the bar's MEASURED height rather than a guessed constant. On a phone the bar is four
-  // rows tall; a fixed offset would either leave a gap or push the header under it.
-  function sizeBar() {
-    var bar = document.querySelector('.bar');
-    if (bar) document.documentElement.style.setProperty('--bar-h', Math.round(bar.getBoundingClientRect().height) + 'px');
-  }
-
-  function renderHero() {
-    var host = clear(document.getElementById('hero'));
-    var lede = el('div', null, [
-      el('h1', null, ['Every protocol here records no token.']),
-      el('p', { class: 'lede', html: D.copy.lede })
-    ]);
-    var steps = h('div','callout', [
-      t('h2','How a row is priced'),
-      el('ol', null, D.copy.pricing_steps.map(function (s) { return el('li', { html: s }); }))
-    ]);
-    host.appendChild(h('div','hero-grid', [lede, steps]));
-  }
-
-  // the tabs
-
-  function renderTabs() {
-    var host = clear(document.getElementById('tabs'));
-    var tabs = [
-      { key: 'board', label: 'Pre-token board', count: D.board_size },
-      { key: 'live', label: 'Already trading', count: D.live_size },
-      { key: 'model', label: 'The model', count: null }
-    ];
-    tabs.forEach(function (t) {
-      host.appendChild(el('button', {
-        class: 'tab', type: 'button', role: 'tab', 'data-view': t.key,
-        'aria-selected': state.view === t.key ? 'true' : 'false',
-        onclick: function () { state.view = t.key; writeHash(); render(); }
-      }, [
-        document.createTextNode(t.label),
-        t.count !== null ? el('span', { class: 'count', text: String(t.count) }) : null
-      ]));
-    });
-  }
-
-  // the board
-
-  function categories() {
-    var seen = {};
-    D.rows.forEach(function (r) { seen[r.category || 'Other'] = true; });
-    return Object.keys(seen).sort();
-  }
-
-  function chains() {
-    var seen = {};
-    D.rows.forEach(function (r) { (r.chains || []).forEach(function (c) { seen[c] = true; }); });
-    return Object.keys(seen).sort();
-  }
-
   function visibleRows() {
     var q = state.q.trim().toLowerCase();
     return D.rows.filter(function (r) {
@@ -341,6 +17,17 @@
       if (state.scope === 'early' && r.on_watchlist) return false;
       if (!q) return true;
       return (r.name + ' ' + r.slug + ' ' + (r.category || '') + ' ' + (r.chains || []).join(' ')).toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  function sortedRows(list) {
+    var key = SORTS[state.sort] || SORTS.rank;
+    return list.slice().sort(function (a, b) {
+      var ka = key(a);
+      var kb = key(b);
+      if (ka < kb) return -state.dir;
+      if (ka > kb) return state.dir;
+      return a.rank - b.rank;
     });
   }
 
@@ -355,21 +42,83 @@
     age: function (r) { return r.age_days === null ? 999999 : r.age_days; }
   };
 
-  function sortedRows(list) {
-    var key = SORTS[state.sort] || SORTS.rank;
-    return list.slice().sort(function (a, b) {
-      var ka = key(a);
-      var kb = key(b);
-      if (ka < kb) return -state.dir;
-      if (ka > kb) return state.dir;
-      return a.rank - b.rank;
+  function renderTable() {
+    var wrap = clear(document.getElementById('table-wrap'));
+    var list = sortedRows(visibleRows());
+    renderControlsResult();
+    if (list.length === 0) {
+      wrap.appendChild(el('div', { class: 'empty', text: 'No protocol matches these filters. Clear them to see the whole board.' }));
+      return;
+    }
+    // The bar's scale is the LARGEST value among the rows on screen, not the first row: the first
+    // row changes with the sort, so scaling by it made 63 of the rows draw a bar six times wider
+    // than the track whenever the board was sorted by anything but value.
+    var top = Math.max.apply(null, list.map(function (r) { return r.implied_value_usd; }));
+    var head = el('thead', null, [
+      el('tr', null, [
+        sortHeader('rank', '#'),
+        sortHeader('name', 'Protocol'),
+        el('th', { scope: 'col', text: 'Scope' }),
+        el('th', { scope: 'col', text: 'Category' }),
+        sortHeader('tvl', 'TVL', true),
+        sortHeader('growth', '7d', true),
+        sortHeader('odds', 'Launch odds', true),
+        sortHeader('conditional', 'If issued', true),
+        sortHeader('value', 'Implied value', true)
+      ])
+    ]);
+    var body = el('tbody');
+    list.forEach(function (r) {
+      var share = top > 0 ? Math.max(0.015, r.implied_value_usd / top) : 0;
+      var tr = el('tr', rowAttrs(r), [
+        el('td', { class: 'rk num', text: String(r.rank) }),
+        el('td', { class: 'pname', text: r.name }),
+        el('td', null, [
+          el('span', { class: 'tag ' + (r.on_watchlist ? 'wl' : 'early'), text: r.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist' })
+        ]),
+        el('td', { class: 'cat', text: r.category || 'Uncategorised' }),
+        el('td', { class: 'right num', text: money(r.tvl_usd) }),
+        chg(r),
+        h('td','right', [el('span', { class: 'pill', text: oddsText(launchP(r)) })]),
+        el('td', { class: 'right cond', text: money(r.conditional_value_usd) }),
+        h('td','right', [
+          el('div', { class: 'val', text: money(r.implied_value_usd) }),
+          h('div','bar-cell', [
+            h('div','bar-track', [el('div', { class: 'bar-fill', style: 'width:' + (share * 100).toFixed(1) + '%' })])
+          ])
+        ])
+      ]);
+      body.appendChild(tr);
     });
+    wrap.appendChild(el('table', null, [head, body]));
+  }
+
+  function sortHeader(key, label, right) {
+    var active = state.sort === key;
+    // The sorted column says so to a screen reader as well as to the eye: the arrow glyph alone
+    // is not an announcement.
+    return el('th', {
+      class: right ? 'right' : null, scope: 'col',
+      'aria-sort': active ? (state.dir === 1 ? 'ascending' : 'descending') : null
+    }, [
+      el('button', {
+        type: 'button',
+        onclick: function () {
+          if (state.sort === key) state.dir = -state.dir;
+          else { state.sort = key; state.dir = key === 'rank' ? 1 : -1; }
+          refresh();
+        }
+      }, [
+        document.createTextNode(label),
+        active ? el('span', { class: 'arrow', text: state.dir === 1 ? '▲' : '▼' }) : null
+      ])
+    ]);
   }
 
   function renderControls() {
     var host = clear(document.getElementById('controls'));
     var search = el('input', {
-      type: 'search', placeholder: 'Search a protocol, a category, a chain…',
+      class: 'q', type: 'search', placeholder: 'Search a protocol, a category, a chain…',
       value: state.q, 'aria-label': 'Search protocols',
       oninput: function () { state.q = search.value; writeHash(); renderControlsResult(); renderTable(); renderPlot(); }
     });
@@ -429,72 +178,230 @@
     node.textContent = n + ' of ' + D.board_size + ' rows';
   }
 
-  function sortHeader(key, label, right) {
-    var active = state.sort === key;
-    return el('th', { class: right ? 'right' : null, scope: 'col' }, [
-      el('button', {
-        type: 'button',
-        onclick: function () {
-          if (state.sort === key) state.dir = -state.dir;
-          else { state.sort = key; state.dir = key === 'rank' ? 1 : -1; }
-          refresh();
-        }
-      }, [
-        document.createTextNode(label),
-        active ? el('span', { class: 'arrow', text: state.dir === 1 ? '▲' : '▼' }) : null
-      ])
-    ]);
+  function categories() {
+    var seen = {};
+    D.rows.forEach(function (r) { seen[r.category || 'Other'] = true; });
+    return Object.keys(seen).sort();
   }
 
-  function renderTable() {
-    var wrap = clear(document.getElementById('table-wrap'));
-    var list = sortedRows(visibleRows());
-    renderControlsResult();
-    if (list.length === 0) {
-      wrap.appendChild(el('div', { class: 'empty', text: 'No protocol matches these filters. Clear them to see the whole board.' }));
+  function chains() {
+    var seen = {};
+    D.rows.forEach(function (r) { (r.chains || []).forEach(function (c) { seen[c] = true; }); });
+    return Object.keys(seen).sort();
+  }
+
+  // The page refits the model from the figures it carries, with main.ts's procedure, and checks its
+  // numbers against the board. It says so if they disagree.
+  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
+
+  var FIT = (function () {
+    if (!MODEL) return null;
+    var exact = 0;
+    var within1 = 0;
+    var worst = 0;
+    D.rows.forEach(function (r) {
+      var cond = MODEL.conditional(r.tvl_usd, r.change_7d, r.category);
+      var odds = MODEL.launchP(r.tvl_usd, r.change_7d, r.age_days);
+      var ev = Math.round(cond * odds);
+      if (ev === r.implied_value_usd) exact++;
+      if (Math.abs(ev - r.implied_value_usd) <= Math.max(1, r.implied_value_usd * 0.01)) within1++;
+      var gap = r.implied_value_usd > 0 ? Math.abs(ev - r.implied_value_usd) / r.implied_value_usd : 0;
+      if (gap > worst) worst = gap;
+    });
+    return { exact: exact, within1: within1, worst: worst, total: D.rows.length };
+  })();
+
+  function recompute(row) {
+    var cond = MODEL
+      ? MODEL.conditional(row.tvl_usd, row.change_7d, row.category)
+      : row.conditional_value_usd;
+    var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
+    var odds = launchP(row);
+    return {
+      conditional: cond,
+      expected: Math.round(cond * odds),
+      log10: log10,
+      launch: odds
+    };
+  }
+
+  function launchP(row) {
+    if (!MODEL) return row.launch_probability;
+    return MODEL.launchP(row.tvl_usd, row.change_7d, row.age_days);
+  }
+
+  // The odds, to one decimal of a percent: the same figure everywhere.
+  function oddsText(p) { return (p * 100).toFixed(1) + '%'; }
+
+  // The plan is generated once, by main.ts, and carried in board.json and in the dataset the page
+  // reads, so the plan a reader reads is the plan the board hands in.
+  function farmSteps(row) {
+    return (row.farm_steps || []).map(function (text) {
+      var cost = '';
+      var time = '';
+      var m = /Cost:\s*(.*?)\.\s*Time:\s*(.*?)\.?\s*$/.exec(text);
+      if (m) { cost = m[1]; time = m[2]; }
+      var act = m ? text.slice(0, m.index).trim() : text;
+      return { text: act, cost: cost, time: time };
+    });
+  }
+
+  function openDetail(slug, push, trigger) {
+    // Whatever opened the drawer is what the reader comes back to when it closes.
+    var opener = trigger || document.activeElement;
+    if (opener && opener !== document.body && opener.focus) lastFocus = opener;
+    var row = rowBySlug(slug);
+    if (!row) {
+      // A protocol whose token already trades is not on the board: it has no implied value and no
+      // farm plan, because its value is the market's own. It opens the same drawer on the market's
+      // figures.
+      var live = liveBySlug(slug);
+      if (live) openLive(live, push);
       return;
     }
-    var top = list[0].implied_value_usd;
-    var head = el('thead', null, [
-      el('tr', null, [
-        sortHeader('rank', '#'),
-        sortHeader('name', 'Protocol'),
-        el('th', { scope: 'col', text: 'Scope' }),
-        el('th', { scope: 'col', text: 'Category' }),
-        sortHeader('tvl', 'TVL', true),
-        sortHeader('growth', '7d', true),
-        sortHeader('odds', 'Launch odds', true),
-        sortHeader('conditional', 'If issued', true),
-        sortHeader('value', 'Implied value', true)
-      ])
+    state.selected = slug;
+    writeHash(push !== false);
+    var calc = recompute(row);
+    var odds = launchP(row);
+    var host = clear(document.getElementById('drawer'));
+    host.hidden = false;
+
+    var kpis = h('div','kpis', [
+      kpi('Implied value', moneyExact(row.implied_value_usd), 'gold'),
+      kpi('If it issues', moneyExact(row.conditional_value_usd)),
+      kpi('Launch odds', oddsText(calc.launch), 'cyan'),
+      kpi('TVL', moneyExact(row.tvl_usd))
     ]);
-    var body = el('tbody');
-    list.forEach(function (r) {
-      var share = top > 0 ? Math.max(0.015, r.implied_value_usd / top) : 0;
-      var tr = el('tr', rowAttrs(r), [
-        el('td', { class: 'rk num', text: String(r.rank) }),
-        el('td', { class: 'pname', text: r.name }),
-        el('td', null, [
-          el('span', { class: 'tag ' + (r.on_watchlist ? 'wl' : 'early'), text: r.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist' })
-        ]),
-        el('td', { class: 'cat', text: r.category || 'Uncategorised' }),
-        el('td', { class: 'right num', text: money(r.tvl_usd) }),
-        chg(r),
-        h('td','right', [el('span', { class: 'pill', text: oddsText(launchP(r)) })]),
-        el('td', { class: 'right cond', text: money(r.conditional_value_usd) }),
-        h('td','right', [
-          el('div', { class: 'val', text: money(r.implied_value_usd) }),
-          h('div','bar-cell', [
-            h('div','bar-track', [el('div', { class: 'bar-fill', style: 'width:' + (share * 100).toFixed(1) + '%' })])
-          ])
+
+    var deriv = h('div','deriv', [
+      line('TVL', moneyExact(row.tvl_usd)),
+      line('Fitted log10(mcap / TVL), before the correction', calc.log10.toFixed(5)),
+      line('Category correction', (row.category_log >= 0 ? '+' : '') + row.category_log.toFixed(4)),
+      line('Value if it issues', moneyExact(calc.conditional)),
+      line('Launch odds (recomputed in the page)', oddsText(odds)),
+      h('div','line total', [el('span', null, ['Implied value']), el('span', { text: moneyExact(calc.expected) })])
+    ]);
+
+    var steps = h('ol','steps');
+    farmSteps(row).forEach(function (s) {
+      steps.appendChild(el('li', null, [
+        el('div', { class: 'act', text: s.text }),
+        h('div','meta', [
+          el('span', { class: 'cost', text: 'Cost: ' + s.cost }),
+          el('span', { text: '  ·  Time: ' + s.time })
         ])
-      ]);
-      body.appendChild(tr);
+      ]));
     });
-    wrap.appendChild(el('table', null, [head, body]));
+
+    var record = h('div','deriv', [
+      line('Seven-day TVL change', pct(row.change_7d)),
+      line('First tracked', row.age_days === null ? 'not recorded' : age(row.age_days) + ' ago'),
+      line('Category', row.category || 'Uncategorised'),
+      line('Chains', String((row.chains || []).length)),
+      line('Token recorded?', 'none: no cap, no id, no symbol')
+    ]);
+
+    var peers = D.rows.filter(function (r) {
+      return r.slug !== row.slug && (r.category || 'Other') === (row.category || 'Other');
+    }).sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).slice(0, 5);
+    var peerBox = null;
+    if (peers.length) {
+      peerBox = h('div','peers');
+      peers.forEach(function (p) {
+        peerBox.appendChild(el('button', {
+          class: 'peer', type: 'button',
+          onclick: function (e) { openDetail(p.slug, undefined, e.currentTarget); }
+        }, [
+          el('span', { class: 'pn', text: p.name }),
+          el('span', { class: 'pv num', text: money(p.implied_value_usd) }),
+          el('span', { class: 'pt num muted', text: money(p.tvl_usd) + ' TVL' })
+        ]));
+      });
+    }
+
+    var sheet = sheetFor(row, row.slug + ' · rank ' + row.rank + ' of ' + D.board_size,
+      row.on_watchlist ? 'On the house watchlist' : (row.tvl_usd >= D.floor_usd ? 'Not on the house watchlist — above the ' + FLOOR + ' floor' : 'Not on the house watchlist — below the ' + FLOOR + ' floor'),
+      row.on_watchlist ? 'wl' : 'early', [
+      kpis,
+      h('h4', null, ['How this row is priced']),
+      deriv,
+      h('h4', null, ['The snapshot record it read']),
+      record,
+      h('h4', null, ['How to farm it']),
+      steps,
+      peerBox ? h('h4', null, ['Others in this category']) : null,
+      peerBox,
+      el('div', { class: 'warn', text: D.copy.drawer_note })
+    ]);
+
+    host.appendChild(sheet);
+    wireDrawer(host, sheet);
   }
 
-  // the plot
+  // The drawer for a protocol whose token already trades: no implied value, no farm plan -- its value is the market's own.
+  function sheetFor(row, sub, tagText, tagCls, body) {
+    var head = h('div','sheet-head', [
+      el('div', null, [
+        el('h2', { id: 'sheet-title', text: row.name }),
+        el('div', { class: 'slug', text: sub })
+      ]),
+      el('button', { class: 'close', type: 'button', 'aria-label': 'Close details', text: '×', onclick: closeDetail })
+    ]);
+    var chips = h('div','chips', [
+      el('span', { class: 'tag ' + tagCls, text: tagText }),
+      el('span', { class: 'chip-static', text: row.category || 'Uncategorised' })
+    ]);
+    var kids = [head, chips];
+    if ((row.chains || []).length) {
+      kids.push(h('div','chips', (row.chains || []).slice(0, 8).map(function (c) {
+        return el('span', { class: 'chip-static', text: c });
+      })));
+    }
+  // The dialog names itself, so a screen reader announces the protocol's name.
+    var sheet = el('div', {
+      class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sheet-title', tabindex: '-1'
+    }, kids.concat(body));
+    return sheet;
+  }
+
+  function openLive(row, push) {
+    state.selected = row.slug;
+    writeHash(push !== false);
+    var host = clear(document.getElementById('drawer'));
+    host.hidden = false;
+    var inCohort = COHORT[row.slug] === true;
+    var gap = row.not_in_cohort || null;
+
+    var kpis = h('div','kpis', [
+      kpi('Market cap', moneyExact(row.mcap_usd), 'gold'),
+      kpi('TVL', moneyExact(row.tvl_usd)),
+      kpi('Cap / TVL', row.ratio === null ? '—' : row.ratio.toFixed(2), 'cyan'),
+      kpi('7d change', pct(row.change_7d))
+    ]);
+
+    var record = h('div','deriv', [
+      line('Market cap', moneyExact(row.mcap_usd)),
+      line('TVL', moneyExact(row.tvl_usd)),
+      line('Cap / TVL', row.ratio === null ? 'not recorded' : row.ratio.toFixed(4)),
+      line('Seven-day TVL change', pct(row.change_7d)),
+      line('Category', row.category || 'Uncategorised'),
+      line('Chains', String((row.chains || []).length)),
+      h('div','line total', [el('span', null, ["In the model's calibration cohort"]), el('span', { text: inCohort ? 'yes' : 'no' })])
+    ]);
+    if (gap) {
+      record.appendChild(h('div','line', [el('span', null, ['Not in the cohort because']), el('span', { text: gap })]));
+    }
+
+    var sheet = sheetFor(row, row.slug + ' · already trading', 'Token already trades', 'live', [
+      kpis,
+      h('h4', null, ["The market's figures"]),
+      record,
+      el('div', { class: 'warn', text: inCohort ? D.copy.live_drawer_note : D.copy.live_gap_note + gap + '.' })
+    ]);
+
+    host.appendChild(sheet);
+    wireDrawer(host, sheet);
+  }
 
   // The visible rows as a scatter: implied value against launch odds, dot size is TVL.
   function renderPlot() {
@@ -504,7 +411,11 @@
       host.appendChild(el('div', { class: 'plot-empty', text: 'No protocol matches these filters.' }));
       return;
     }
-    var W = 1000;
+  // The plot is drawn in PIXELS: one SVG user unit is one CSS pixel, so dots stay round.
+    var box = document.querySelector('.plot-wrap');
+    var cs = box ? getComputedStyle(box) : null;
+    var padX = cs ? parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) : 32;
+    var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
     var H = 150;
     var padL = 54;
     var padR = 16;
@@ -528,7 +439,8 @@
     var ns = 'http://www.w3.org/2000/svg';
     var svg = document.createElementNS(ns, 'svg');
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    svg.setAttribute('preserveAspectRatio', 'none');
+  // The viewBox is scaled UNIFORMLY, so a dot is a circle and an axis label is not stretched.
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     svg.setAttribute('role', 'img');
     svg.setAttribute('aria-label', 'Implied value against launch odds for the filtered rows');
 
@@ -557,9 +469,13 @@
     list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
       var c = add('circle', {
         cx: xOf(launchP(r)), cy: yOf(r.implied_value_usd), r: rOf(r.tvl_usd),
-        class: 'dot' + (r.on_watchlist ? ' wl' : ''), 'data-slug': r.slug
+        class: 'dot' + (r.on_watchlist ? ' wl' : ''), 'data-slug': r.slug,
+        tabindex: '0', role: 'button', 'aria-label': r.name + ': ' + money(r.implied_value_usd) + ' implied'
       });
-      c.addEventListener('click', function () { openDetail(r.slug); });
+      c.addEventListener('click', function () { openDetail(r.slug, undefined, c); });
+      c.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.slug, undefined, c); }
+      });
       var t = document.createElementNS(ns, 'title');
       t.textContent = r.name + ' — ' + money(r.implied_value_usd) + ' implied, ' +
         oddsText(launchP(r)) + ' odds, ' + money(r.tvl_usd) + ' TVL';
@@ -584,11 +500,87 @@
     host.appendChild(plotBox);
     host.appendChild(h('div','plot-legend', [
       el('span', null, [el('i', { style: 'background:var(--value)' }), 'On the house watchlist']),
-      el('span', null, [el('i', { style: 'background:var(--odds)' }), 'Early name, below the floor'])
+      el('span', null, [el('i', { style: 'background:var(--odds)' }), 'Off the house watchlist'])
     ]));
   }
 
-  // the live table
+  // The three views are a tab set, and the pattern is completed: a tablist, named panels, Left/Right between tabs.
+  function renderTabs() {
+    var host = clear(document.getElementById('tabs'));
+    host.setAttribute('role', 'tablist');
+    var tabs = [
+      { key: 'board', label: 'Pre-token board', count: D.board_size },
+      { key: 'live', label: 'Already trading', count: D.live_size },
+      { key: 'model', label: 'The model', count: null }
+    ];
+    tabs.forEach(function (t, i) {
+      var id = 'tab-' + t.key;
+      host.appendChild(el('button', {
+        class: 'tab', type: 'button', role: 'tab', id: id, 'data-view': t.key,
+        'aria-selected': state.view === t.key ? 'true' : 'false',
+        'aria-controls': 'view-' + t.key,
+        tabindex: state.view === t.key ? '0' : '-1',
+        onclick: function () { state.view = t.key; writeHash(); render(); },
+        onkeydown: function (e) {
+          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+          e.preventDefault();
+          var next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+          state.view = next.key; writeHash(); render();
+          var moved = document.getElementById('tab-' + next.key);
+          if (moved) moved.focus();
+        }
+      }, [
+        document.createTextNode(t.label),
+        t.count !== null ? el('span', { class: 'count', text: String(t.count) }) : null
+      ]));
+    });
+  }
+
+  // The hero states what the tab under it shows, so the headline is never the opposite of the table beside it.
+  function renderHero() {
+    var host = clear(document.getElementById('hero'));
+    var view = state.view;
+    var headline = view === 'live' ? D.copy.live_headline : view === 'model' ? D.copy.model_headline : D.copy.board_headline;
+    var ledeText = view === 'live' ? D.copy.live_lede : view === 'model' ? D.copy.model_lede : D.copy.board_lede;
+    var lede = el('div', null, [
+      el('h1', null, [headline]),
+      el('p', { class: 'lede', html: ledeText })
+    ]);
+    var steps = h('div','callout', [
+      t('h2','How a row is priced'),
+      el('ol', null, D.copy.pricing_steps.map(function (s) { return el('li', { html: s }); }))
+    ]);
+    host.appendChild(h('div','hero-grid', [lede, steps]));
+  }
+
+  function renderMeta() {
+    var host = clear(document.getElementById('bar-meta'));
+    var facts = [
+      ['snapshot', D.as_of],
+      ['universe', D.universe_size + ' protocols'],
+      ['watchlist', D.watchlist_size + ' covered'],
+      ['board', D.board_size + ' rows'],
+      ['model', D.model_version]
+    ];
+    facts.forEach(function (f) {
+      host.appendChild(el('div', null, [el('dt', { text: f[0] }), el('dd', { text: f[1] })]));
+    });
+    sizeBar();
+  }
+
+  function renderNote() {
+    var host = document.getElementById('note');
+    if (!host) return;
+    clear(host);
+    host.hidden = !notes.length;
+    if (notes.length) host.appendChild(el('div', { class: 'warn note', text: notes.join(' ') }));
+  }
+
+  // The bar's height depends on how its facts wrap, so the sticky offset is set from its MEASURED height.
+  function sizeBar() {
+    var bar = document.querySelector('.bar');
+    if (bar) document.documentElement.style.setProperty('--bar-h', Math.round(bar.getBoundingClientRect().height) + 'px');
+  }
 
   function renderLive() {
     var host = clear(document.getElementById('view-live'));
@@ -621,8 +613,6 @@
     });
     host.appendChild(h('div','table-wrap', [el('table', null, [head, body])]));
   }
-
-  // the model page
 
   function renderModel() {
     var host = clear(document.getElementById('view-model'));
@@ -709,182 +699,20 @@
     catCard.appendChild(catTable);
     host.appendChild(catCard);
 
+  // The prose lives in the dataset, where the figures it names are interpolated from.
     host.appendChild(card('What this is and is not', [
-      el('div', { class: 'prose', html:
-        '<p><strong>It is:</strong> what a token may be worth if its protocol\'s record stays as it is, ranked by that number, with a farm plan for each row. Every figure is the snapshot\'s own, fitted at run time.</p>' +
-        '<p><strong>It is not:</strong> a prediction that a token will be issued, or of when, or at what price. The launch odds say how often protocols like this one have issued, not that this one will. A protocol records no token in DefiLlama\'s record; that is not proof it has none, and the board says so.</p>' +
-        '<p><strong>The separation:</strong> the ' + D.watchlist_size + ' watchlist protocols are all on the board, but so are ' + D.early_size + ' more — the watchlist is a floor, never a ceiling. The ' + D.live_size + ' protocols whose tokens already trade are kept in their own table and never mixed into the ranking.</p>' })
+      el('div', { class: 'prose', html: D.copy.is_and_is_not })
     ]));
   }
 
-  // the detail drawer
-
-  function openDetail(slug, push) {
-    var row = rowBySlug(slug);
-    if (!row) {
-      // A protocol whose token already trades is not on the board: it has no implied value and no
-      // farm plan, because its value is the market's own. It opens the same drawer on the market's
-      // figures.
-      var live = liveBySlug(slug);
-      if (live) openLive(live, push);
-      return;
-    }
-    state.selected = slug;
-    writeHash(push !== false);
-    var calc = recompute(row);
-    var odds = launchP(row);
-    var host = clear(document.getElementById('drawer'));
-    host.hidden = false;
-
-    var kpis = h('div','kpis', [
-      kpi('Implied value', moneyExact(row.implied_value_usd), 'gold'),
-      kpi('If it issues', moneyExact(row.conditional_value_usd)),
-      kpi('Launch odds', oddsText(calc.launch), 'cyan'),
-      kpi('TVL', moneyExact(row.tvl_usd))
-    ]);
-
-    var deriv = h('div','deriv', [
-      line('TVL', moneyExact(row.tvl_usd)),
-      line('Fitted log10(mcap / TVL), before the correction', calc.log10.toFixed(5)),
-      line('Category correction', (row.category_log >= 0 ? '+' : '') + row.category_log.toFixed(4)),
-      line('Value if it issues', moneyExact(calc.conditional)),
-      line('Launch odds (recomputed in the page)', oddsText(odds)),
-      h('div','line total', [el('span', null, ['Implied value']), el('span', { text: moneyExact(calc.expected) })])
-    ]);
-
-    var steps = h('ol','steps');
-    farmSteps(row).forEach(function (s) {
-      steps.appendChild(el('li', null, [
-        el('div', { class: 'act', text: s.text }),
-        h('div','meta', [
-          el('span', { class: 'cost', text: 'Cost: ' + s.cost }),
-          el('span', { text: '  ·  Time: ' + s.time })
-        ])
-      ]));
-    });
-
-    var record = h('div','deriv', [
-      line('Seven-day TVL change', pct(row.change_7d)),
-      line('First tracked', row.age_days === null ? 'not recorded' : age(row.age_days) + ' ago'),
-      line('Category', row.category || 'Uncategorised'),
-      line('Chains', String((row.chains || []).length)),
-      line('Token recorded?', 'none: no cap, no id, no symbol')
-    ]);
-
-    var peers = D.rows.filter(function (r) {
-      return r.slug !== row.slug && (r.category || 'Other') === (row.category || 'Other');
-    }).sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).slice(0, 5);
-    var peerBox = null;
-    if (peers.length) {
-      peerBox = h('div','peers');
-      peers.forEach(function (p) {
-        peerBox.appendChild(el('button', {
-          class: 'peer', type: 'button',
-          onclick: function () { openDetail(p.slug); }
-        }, [
-          el('span', { class: 'pn', text: p.name }),
-          el('span', { class: 'pv num', text: money(p.implied_value_usd) }),
-          el('span', { class: 'pt num muted', text: money(p.tvl_usd) + ' TVL' })
-        ]));
-      });
-    }
-
-    var sheet = sheetFor(row, row.slug + ' · rank ' + row.rank + ' of ' + D.board_size,
-      row.on_watchlist ? 'On the house watchlist' : (row.tvl_usd >= D.floor_usd ? 'Not on the house watchlist — above the ' + FLOOR + ' floor' : 'Not on the house watchlist — below the ' + FLOOR + ' floor'),
-      row.on_watchlist ? 'wl' : 'early', [
-      kpis,
-      h('h4', null, ['How this row is priced']),
-      deriv,
-      h('h4', null, ['The snapshot record it read']),
-      record,
-      h('h4', null, ['How to farm it']),
-      steps,
-      peerBox ? h('h4', null, ['Others in this category']) : null,
-      peerBox,
-      el('div', { class: 'warn', text: D.copy.drawer_note })
-    ]);
-
-    host.appendChild(sheet);
-    wireDrawer(host, sheet);
-  }
-
-  // The drawer for a protocol whose token already trades. It has no implied value and no farm
-  // plan — its value is the market's own — so the panel shows the market's figures and says
-  // whether the model was fitted on it.
-  // The drawer's shell: its head, its close button, and the chip rows that say what the row is.
-  function sheetFor(row, sub, tagText, tagCls, body) {
-    var head = h('div','sheet-head', [
-      el('div', null, [
-        el('h2', { text: row.name }),
-        el('div', { class: 'slug', text: sub })
-      ]),
-      el('button', { class: 'close', type: 'button', 'aria-label': 'Close details', text: '×', onclick: closeDetail })
-    ]);
-    var chips = h('div','chips', [
-      el('span', { class: 'tag ' + tagCls, text: tagText }),
-      el('span', { class: 'chip-static', text: row.category || 'Uncategorised' })
-    ]);
-    var kids = [head, chips];
-    if ((row.chains || []).length) {
-      kids.push(h('div','chips', (row.chains || []).slice(0, 8).map(function (c) {
-        return el('span', { class: 'chip-static', text: c });
-      })));
-    }
-    var sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' }, kids.concat(body));
-    return sheet;
-  }
-
-  function openLive(row, push) {
-    state.selected = row.slug;
-    writeHash(push !== false);
-    var host = clear(document.getElementById('drawer'));
-    host.hidden = false;
-    var inCohort = COHORT[row.slug] === true;
-    var gap = row.not_in_cohort || null;
-
-    var kpis = h('div','kpis', [
-      kpi('Market cap', moneyExact(row.mcap_usd), 'gold'),
-      kpi('TVL', moneyExact(row.tvl_usd)),
-      kpi('Cap / TVL', row.ratio === null ? '—' : row.ratio.toFixed(2), 'cyan'),
-      kpi('7d change', pct(row.change_7d))
-    ]);
-
-    var record = h('div','deriv', [
-      line('Market cap', moneyExact(row.mcap_usd)),
-      line('TVL', moneyExact(row.tvl_usd)),
-      line('Cap / TVL', row.ratio === null ? 'not recorded' : row.ratio.toFixed(4)),
-      line('Seven-day TVL change', pct(row.change_7d)),
-      line('Category', row.category || 'Uncategorised'),
-      line('Chains', String((row.chains || []).length)),
-      h('div','line total', [el('span', null, ["In the model's calibration cohort"]), el('span', { text: inCohort ? 'yes' : 'no' })])
-    ]);
-    if (gap) {
-      record.appendChild(h('div','line', [el('span', null, ['Not in the cohort because']), el('span', { text: gap })]));
-    }
-
-    var sheet = sheetFor(row, row.slug + ' · already trading', 'Token already trades', 'live', [
-      kpis,
-      h('h4', null, ["The market's figures"]),
-      record,
-      el('div', { class: 'warn', text: inCohort ? D.copy.live_drawer_note : D.copy.live_gap_note + gap + '.' })
-    ]);
-
-    host.appendChild(sheet);
-    wireDrawer(host, sheet);
-  }
-
-  // The drawer's own wiring: the backdrop click and the Escape key.
-  //
-  // The host node and the document both outlive the drawer, so a listener added on every open
-  // piles up: five open/close cycles left five backdrop handlers behind, and each one fired on the
-  // next backdrop click. The backdrop is therefore registered once, on the host, and the keydown
-  // handler is a named function, so one removal matches one add and neither count can drift.
+  // The drawer's wiring: the backdrop click, Escape, and the focus. The backdrop is registered once, the keydown handler is named.
   function wireDrawer(host, sheet) {
     if (!host.dataset.wired) {
       host.dataset.wired = '1';
       host.addEventListener('click', function (e) { if (e.target === host) closeDetail(); });
     }
     document.addEventListener('keydown', escClose);
+    document.addEventListener('keydown', trapFocus);
     var closeBtn = sheet.querySelector('.close');
     if (closeBtn) closeBtn.focus();
   }
@@ -894,33 +722,222 @@
     host.hidden = true;
     clear(host);
     document.removeEventListener('keydown', escClose);
+    document.removeEventListener('keydown', trapFocus);
     state.selected = null;
     writeHash();
+  // The reader goes back to whatever opened the drawer.
+    if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+    lastFocus = null;
   }
 
   function escClose(e) {
     if (e.key === 'Escape') closeDetail();
   }
 
-  // the farm plan, shown as the board carries it
-
-  // The plan is generated once, by main.ts, and carried in board.json and in the dataset the page
-  // reads, so the plan a reader reads is the plan the board hands in.
-  function farmSteps(row) {
-    return (row.farm_steps || []).map(function (text) {
-      var cost = '';
-      var time = '';
-      var m = /Cost:\s*(.*?)\.\s*Time:\s*(.*?)\.?\s*$/.exec(text);
-      if (m) { cost = m[1]; time = m[2]; }
-      var act = m ? text.slice(0, m.index).trim() : text;
-      return { text: act, cost: cost, time: time };
-    });
+  // Focus containment for the modal drawer: Tab and Shift+Tab cycle inside it, not out into the page behind.
+  function trapFocus(e) {
+    if (e.key !== 'Tab') return;
+    var sheet = document.querySelector('.sheet');
+    if (!sheet) return;
+    var items = sheet.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (items.length === 0) return;
+    var first = items[0];
+    var last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    else if (!sheet.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
   }
 
-  // render
+  // The rows of both tables are keyboard-reachable and open the drawer; the trigger is passed so the focus can go back.
+  function rowAttrs(r) {
+    return {
+      class: 'row', tabindex: '0',
+      onclick: function (e) { openDetail(r.slug, undefined, e.currentTarget); },
+      onkeydown: function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.slug, undefined, e.currentTarget); }
+      }
+    };
+  }
 
-  // Without the dataset there is no board to draw, but there is a page to read: say what is missing
-  // and where it comes from, rather than leave a blank screen.
+  // The element that opened the drawer.
+  var lastFocus = null;
+
+  function money(n) {
+    if (n === null || n === undefined) return '—';
+    var a = Math.abs(n);
+    if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (a >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (a >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  function moneyExact(n) {
+    if (n === null || n === undefined) return '—';
+    return '$' + Math.round(n).toLocaleString('en-US');
+  }
+
+  function chg(r) {
+    return el('td', { class: 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), text: pct(r.change_7d) });
+  }
+
+  function pct(n, digits) {
+    if (n === null || n === undefined) return '—';
+    return (n >= 0 ? '+' : '') + n.toFixed(digits === undefined ? 1 : digits) + '%';
+  }
+
+  function age(days) {
+    if (days === null || days === undefined) return 'unknown';
+    if (days < 60) return days + 'd';
+    if (days < 730) return Math.round(days / 30.44) + 'mo';
+    return (days / 365.25).toFixed(1) + 'y';
+  }
+
+  function h(tag, cls, children) {
+    return el(tag, { class: cls }, children);
+  }
+
+  function t(tag, text) {
+    return el(tag, { text: text });
+  }
+
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        var v = attrs[k];
+        if (v === null || v === undefined || v === false) return;
+        if (k === 'text') node.textContent = v;
+        else if (k === 'html') node.innerHTML = v;
+        else if (k === 'class') node.className = v;
+        else if (k.slice(0, 2) === 'on') node.addEventListener(k.slice(2), v);
+        else node.setAttribute(k, v === true ? '' : String(v));
+      });
+    }
+    var kids = children === null || children === undefined ? [] : (typeof children === 'string' ? [children] : children);
+    kids.forEach(function (c) {
+      if (c === null || c === undefined || c === false) return;
+      node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+    return node;
+  }
+
+  function line(label, value) {
+    return h('div','line', [el('span', { text: label }), el('span', { text: value })]);
+  }
+
+  function kpi(label, value, tone) {
+    return h('div','kpi', [
+      el('div', { class: 'k', text: label }),
+      el('div', { class: 'v' + (tone ? ' ' + tone : ''), text: value })
+    ]);
+  }
+
+  function card(title, children) {
+    return h('div','card stack', [
+      el('h3', { text: title })
+    ].concat(children));
+  }
+
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+    return node;
+  }
+
+  var VIEWS = ['board', 'live', 'model'];
+  var state = { view: 'board', q: '', category: 'all', chain: 'all', scope: 'all', sort: 'rank', dir: 1, selected: null };
+  // The house's TVL floor, as the page names it.
+  var FLOOR = '$' + (D.floor_usd / 1e6) + 'M';
+
+
+  // What a link asked for that the board does not have.
+  var notes = [];
+
+  // The board changed: write the state to the URL, then redraw it -- the controls too, so a chip shows its pressed state.
+  function refresh() { writeHash(); renderControls(); renderTable(); renderPlot(); }
+
+  // A hash that will not decode is a broken link, not a name: reported, not guessed at.
+  function dec(s) {
+    try { return decodeURIComponent(s); } catch (e) { return null; }
+  }
+
+  function readHash() {
+    notes = [];
+    Object.keys(HASH_DEFAULT).forEach(function (k) { state[HASH[k]] = HASH_DEFAULT[k]; });
+    state.dir = 1;
+    var h = (location.hash || '').replace(/^#/, '');
+    h.split('&').forEach(function (p) {
+      var i = p.indexOf('=');
+      var k = dec(i < 0 ? p : p.slice(0, i));
+      var v = dec(i < 0 ? '' : p.slice(i + 1));
+      if (k === null || v === null) { notes.push('That link is broken: its text is not a valid escape sequence.'); return; }
+      if (k === 'dir') state.dir = v === 'asc' ? 1 : -1;
+      else if (HASH[k] && v !== 'null') state[HASH[k]] = v;
+    });
+    if (VIEWS.indexOf(state.view) === -1) {
+      notes.push('No view named "' + state.view + '". Showing the pre-token board.');
+      state.view = 'board';
+    }
+    if (state.category !== 'all' && categories().indexOf(state.category) === -1) {
+      notes.push('No category named "' + state.category + '". Showing every category.');
+      state.category = 'all';
+    }
+    if (state.chain !== 'all' && chains().indexOf(state.chain) === -1) {
+      notes.push('No chain named "' + state.chain + '". Showing every chain.');
+      state.chain = 'all';
+    }
+    if (['all', 'watchlist', 'early'].indexOf(state.scope) === -1) state.scope = 'all';
+    if (!SORTS[state.sort]) state.sort = 'rank';
+    if (state.selected) {
+      var row = rowBySlug(state.selected);
+      if (row) state.selected = row.slug;
+      else if (liveBySlug(state.selected)) { /* already trading: the drawer shows the market's figures */ }
+      else { notes.push(missingProtocol(state.selected)); state.selected = null; }
+    }
+  }
+
+  function missingProtocol(slug) {
+    for (var i = 0; i < D.live.length; i++) {
+      if (D.live[i].slug === slug) {
+        return D.live[i].name + ' already trades: it is on the "Already trading" tab, not on this board.';
+      }
+    }
+    for (var j = 0; j < D.universe.length; j++) {
+      var u = D.universe[j];
+      if (u.slug === slug && (u.mcap_usd !== null || u.gecko_id !== null)) {
+        return 'That protocol already trades a token, so it is not on this board.';
+      }
+    }
+    return 'No protocol with that name is on this board.';
+  }
+
+  function writeHash(push) {
+    var parts = [];
+    Object.keys(HASH_DEFAULT).forEach(function (k) {
+      var v = state[HASH[k]];
+      if (v !== null && v !== HASH_DEFAULT[k]) parts.push(k + '=' + encodeURIComponent(v));
+    });
+    if (state.dir !== 1) parts.push('dir=' + (state.dir === 1 ? 'asc' : 'desc'));
+    var next = parts.length ? '#' + parts.join('&') : '';
+    if (next === location.hash) return;
+    var url = next || location.pathname + location.search;
+    if (push) history.pushState(null, '', url);
+    else history.replaceState(null, '', url);
+  }
+
+  function rowBySlug(slug) {
+    for (var i = 0; i < D.rows.length; i++) if (D.rows[i].slug === slug) return D.rows[i];
+    return null;
+  }
+
+  function liveBySlug(slug) {
+    for (var i = 0; i < D.live.length; i++) if (D.live[i].slug === slug) return D.live[i];
+    return null;
+  }
+
+  // The cohort the model was fitted on, as a lookup.
+  var COHORT = {};
+
+  // Without the dataset there is no board, but there is a page to read: say what is missing.
   function renderMissingData() {
     var main = document.getElementById('board');
     if (!main) return;
@@ -949,17 +966,21 @@
       if (host.hidden) openDetail(state.selected, false);
     } else {
       var drawer = document.getElementById('drawer');
-      if (!drawer.hidden) { drawer.hidden = true; clear(drawer); document.removeEventListener('keydown', escClose); }
+      if (!drawer.hidden) { drawer.hidden = true; clear(drawer); document.removeEventListener('keydown', escClose); document.removeEventListener('keydown', trapFocus); }
     }
   }
 
-  // The hash is read again whenever it changes, so a deep link pasted into an open page works and
-  // the Back button closes the drawer.
+  // The hash is read again whenever it changes, so a deep link works and Back closes the drawer.
   function onHashChange() {
     readHash();
     writeHash();
     render();
   }
+
+  // The hash is a wish, not a command: every name in it is checked against the page's own lists.
+  var HASH = { p: 'selected', q: 'q', cat: 'category', chain: 'chain', scope: 'scope', view: 'view', sort: 'sort' };
+  var HASH_DEFAULT = { p: '', q: '', cat: 'all', chain: 'all', scope: 'all', view: 'board', sort: 'rank' };
+  D.cohort.forEach(function (c) { COHORT[c.slug] = true; });
 
   readHash();
   writeHash();

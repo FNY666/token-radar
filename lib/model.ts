@@ -645,8 +645,16 @@ export interface RadarData {
 
 /** The page's prose, written once so the page's source holds it once. */
 export interface Copy {
+  /** The hero's headline, one per view: what the tab under it actually shows. */
+  board_headline: string;
+  live_headline: string;
+  model_headline: string;
   /** The hero's lede: what the board is, and what it leaves out. */
   lede: string;
+  /** The lede on the "already trading" tab, which is the other side of the board's line. */
+  live_lede: string;
+  /** The lede on the model tab: what the two fits are and what they are fitted on. */
+  model_lede: string;
   /** The live table's note: what the calibration cohort is, and who is outside it. */
   live_note: string;
   /** The formula card's note: the model's two clamps, and how many rows sit on each. */
@@ -1051,7 +1059,12 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
   };
   const offText = Object.keys(facts.off_by_reason).map((k) => `${facts.off_by_reason[k]} ${reasonNames[k] ?? k}`).join(', ');
   const copy: Copy = {
-    lede:
+    // The hero states what the tab under it actually shows, so the headline is never the
+    // opposite of the table beside it.
+    board_headline: 'Every protocol here records no token.',
+    live_headline: 'These protocols already have a token.',
+    model_headline: 'The model, fitted here in the page.',
+    board_lede:
       'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol: the ' +
       snapshot.watchlist.length + ' on the house watchlist and ' + facts.off_list_above_floor +
       ' more off the list. The watchlist is a floor, never a ceiling. ' + sep + ' ' +
@@ -1060,6 +1073,18 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'The model is fitted at run time on the snapshot itself — the ' + cal.cohort_size +
       ' protocols whose tokens <strong>already trade</strong> teach it what a market cap is worth against TVL and growth; ' +
       'the whole universe teaches it how often a protocol of a given age and size issues one at all.',
+    live_lede:
+      'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol. ' +
+      'This tab holds the other side of the line: the ' + live.length + ' protocols that <strong>do</strong> record a token. ' +
+      'Their value is the market\'s own, not a model\'s, so they are never mixed into the ranking — ' +
+      'they are what the model was calibrated on. ' +
+      facts.live_in_cohort + ' of these ' + live.length + ' are in the cohort that taught it what a market cap is worth against TVL.',
+    model_lede:
+      'Everything the board ranks comes from two fits, and both are made here in the page from the snapshot\'s own figures. ' +
+      'The <strong>value model</strong> asks what a market cap is worth against TVL and growth, and it is fitted on the ' +
+      cal.cohort_size + ' protocols whose tokens already trade. The <strong>launch model</strong> asks how often a protocol of a given age and size issues one at all, ' +
+      'and it is fitted on every eligible protocol in the universe. Neither model reads a name list: ' +
+      'both read the snapshot\'s own fields.',
     live_note:
       '<strong>These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
       '<strong>' + facts.live_in_cohort + ' of these ' + live.length + ' rows are in the model\'s calibration cohort</strong>, the ' +

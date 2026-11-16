@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="A radar for protocols that record no token yet, ranked by the value one may be worth if it issues, with the model's arithmetic and a farm plan for each row.">
+<meta name="description" content="Protocols that record no token yet, ranked by the value one may be worth if it issues, with the model's arithmetic and a farm plan each.">
 <title>Token Radar: pre-token protocols ranked by implied value</title>
 <link rel="stylesheet" href="colors.css">
 <link rel="stylesheet" href="theme.css">
@@ -24,15 +24,15 @@
   <div id="note" hidden></div>
   <section class="hero" id="hero"></section>
   <nav class="tabs" id="tabs" aria-label="Views"></nav>
-  <section class="view" id="view-board">
+  <section class="view" id="view-board" role="tabpanel" aria-labelledby="tab-board">
     <div class="controls" id="controls"></div>
     <div class="plot-wrap" id="plot-wrap"></div>
     <div class="table-wrap" id="table-wrap"></div>
   </section>
-  <section class="view" id="view-live" hidden></section>
-  <section class="view" id="view-model" hidden></section>
+  <section class="view" id="view-live" role="tabpanel" aria-labelledby="tab-live" hidden></section>
+  <section class="view" id="view-model" role="tabpanel" aria-labelledby="tab-model" hidden></section>
 </main>
-<div class="drawer" id="drawer" hidden aria-label="Protocol detail"></div>
+<div class="drawer" id="drawer" hidden></div>
 <script src="../data.js"></script>
 <script src="model.js"></script>
 <script src="page.js"></script>

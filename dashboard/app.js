@@ -1,15 +1,14 @@
 // The Token Radar page. One dataset (data.js), one board, one model, no network and no framework.
-//
-// The page refits the model from the raw snapshot figures it carries (model.js) and checks its own
-// numbers against the board, so a reader can verify the model's work rather than take it on trust.
+// It refits the model from the figures it carries (model.js) and checks its own numbers against
+// the board, so a reader can verify the model rather than take it on trust.
 
 (function () {
   'use strict';
 
   var D = window.RADAR;
-  if (!D) return;
+  if (!D) { renderMissingData(); return; }
 
-  // ---- helpers
+  // helpers
 
   function money(n) {
     if (n === null || n === undefined) return '—';
@@ -25,6 +24,11 @@
     return '$' + Math.round(n).toLocaleString('en-US');
   }
 
+  // The seven-day change cell, the same in both tables.
+  function chg(r) {
+    return el('td', { class: 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), text: pct(r.change_7d) });
+  }
+
   function pct(n, digits) {
     if (n === null || n === undefined) return '—';
     return (n >= 0 ? '+' : '') + n.toFixed(digits === undefined ? 1 : digits) + '%';
@@ -35,6 +39,15 @@
     if (days < 60) return days + 'd';
     if (days < 730) return Math.round(days / 30.44) + 'mo';
     return (days / 365.25).toFixed(1) + 'y';
+  }
+
+  // The commonest call shapes: an element with a class and children, or one with text.
+  function h(tag, cls, children) {
+    return el(tag, { class: cls }, children);
+  }
+
+  function t(tag, text) {
+    return el(tag, { text: text });
   }
 
   function el(tag, attrs, children) {
@@ -50,7 +63,6 @@
         else node.setAttribute(k, v === true ? '' : String(v));
       });
     }
-    // Children may be a node, an array of nodes, or a bare string.
     var kids = children === null || children === undefined ? [] : (typeof children === 'string' ? [children] : children);
     kids.forEach(function (c) {
       if (c === null || c === undefined || c === false) return;
@@ -59,72 +71,128 @@
     return node;
   }
 
+  function line(label, value) {
+    return h('div','line', [el('span', { text: label }), el('span', { text: value })]);
+  }
+
+  function kpi(label, value, tone) {
+    return h('div','kpi', [
+      el('div', { class: 'k', text: label }),
+      el('div', { class: 'v' + (tone ? ' ' + tone : ''), text: value })
+    ]);
+  }
+
+  function card(title, children) {
+    return h('div','card stack', [
+      el('h3', { text: title })
+    ].concat(children));
+  }
+
   function clear(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
     return node;
   }
 
-  // The off-list rows at or above the house's TVL floor: the floor excluded none of the watchlist,
-  // so these are off the list for the house's structural reason instead.
+  // state
+
+  var VIEWS = ['board', 'live', 'model'];
+  var state = { view: 'board', q: '', category: 'all', chain: 'all', scope: 'all', sort: 'rank', dir: 1, selected: null };
+
+  // The off-list rows at or above the house's TVL floor: the floor excluded none of the
+  // watchlist, so these are off the list for the house's structural reason instead.
   var OFF_ABOVE = D.rows.filter(function (r) { return !r.on_watchlist && r.tvl_usd >= D.floor_usd; }).length;
   var FLOOR = '$' + (D.floor_usd / 1e6) + 'M';
-  // One sentence, carried by the hero and the model page alike, so the two cannot disagree.
+  // One sentence, carried by the hero and the model page alike, so they cannot disagree.
   var SEP = 'Of those ' + D.early_size + ', ' + OFF_ABOVE + ' sit above the house\'s ' + FLOOR +
     ' floor and are off the list for another reason: DefiLlama names a parent protocol for each, and the house\'s rule keeps only protocols with none.';
 
-  // ---- state
+  // What a link asked for that the board does not have. The page says so.
+  var notes = [];
 
-  var state = {
-    view: 'board',
-    q: '',
-    category: 'all',
-    chain: 'all',
-    scope: 'all',
-    sort: 'rank',
-    dir: 1,
-    selected: null
-  };
+  // A hash that will not decode is a broken link, not a name: reported, not guessed at, so a
+  // bad escape can neither blank the page nor quietly filter the board to nothing.
+  function dec(s) {
+    try { return decodeURIComponent(s); } catch (e) { return null; }
+  }
+
+  // The hash is a wish, not a command: every name in it is checked against the page's own
+  // lists, so an unknown value falls back to the default and says so.
+  var HASH = { p: 'selected', q: 'q', cat: 'category', chain: 'chain', scope: 'scope', view: 'view', sort: 'sort' };
+  var HASH_DEFAULT = { p: '', q: '', cat: 'all', chain: 'all', scope: 'all', view: 'board', sort: 'rank' };
 
   function readHash() {
+    notes = [];
+    Object.keys(HASH_DEFAULT).forEach(function (k) { state[HASH[k]] = HASH_DEFAULT[k]; });
+    state.dir = 1;
     var h = (location.hash || '').replace(/^#/, '');
-    if (!h) return;
-    var parts = h.split('&');
-    parts.forEach(function (p) {
-      var kv = p.split('=');
-      var k = decodeURIComponent(kv[0] || '');
-      var v = decodeURIComponent(kv[1] || '');
-      if (k === 'p') state.selected = v;
-      else if (k === 'q') state.q = v;
-      else if (k === 'cat') state.category = v;
-      else if (k === 'chain') state.chain = v;
-      else if (k === 'scope') state.scope = v;
-      else if (k === 'view') state.view = v;
-      else if (k === 'sort') state.sort = v;
-      else if (k === 'dir') state.dir = v === 'asc' ? 1 : -1;
+    h.split('&').forEach(function (p) {
+      var i = p.indexOf('=');
+      var k = dec(i < 0 ? p : p.slice(0, i));
+      var v = dec(i < 0 ? '' : p.slice(i + 1));
+      if (k === null || v === null) { notes.push('That link is broken: its text is not a valid escape sequence.'); return; }
+      if (k === 'dir') state.dir = v === 'asc' ? 1 : -1;
+      else if (HASH[k] && v !== 'null') state[HASH[k]] = v;
     });
+    if (VIEWS.indexOf(state.view) === -1) {
+      notes.push('No view named "' + state.view + '". Showing the pre-token board.');
+      state.view = 'board';
+    }
+    if (state.category !== 'all' && categories().indexOf(state.category) === -1) {
+      notes.push('No category named "' + state.category + '". Showing every category.');
+      state.category = 'all';
+    }
+    if (state.chain !== 'all' && chains().indexOf(state.chain) === -1) {
+      notes.push('No chain named "' + state.chain + '". Showing every chain.');
+      state.chain = 'all';
+    }
+    if (['all', 'watchlist', 'early'].indexOf(state.scope) === -1) state.scope = 'all';
+    if (!SORTS[state.sort]) state.sort = 'rank';
+    if (state.selected) {
+      var row = rowBySlug(state.selected);
+      if (row) state.selected = row.slug;
+      else { notes.push(missingProtocol(state.selected)); state.selected = null; }
+    }
   }
 
-  function writeHash() {
+  function missingProtocol(slug) {
+    for (var i = 0; i < D.live.length; i++) {
+      if (D.live[i].slug === slug) {
+        return D.live[i].name + ' already trades: it is on the "Already trading" tab, not on this board.';
+      }
+    }
+    for (var j = 0; j < D.universe.length; j++) {
+      if (D.universe[j].slug === slug && D.universe[j].token === 1) {
+        return 'That protocol already trades a token, so it is not on this board.';
+      }
+    }
+    return 'No protocol with that name is on this board.';
+  }
+
+  function writeHash(push) {
     var parts = [];
-    if (state.selected) parts.push('p=' + encodeURIComponent(state.selected));
-    if (state.q) parts.push('q=' + encodeURIComponent(state.q));
-    if (state.category !== 'all') parts.push('cat=' + encodeURIComponent(state.category));
-    if (state.chain !== 'all') parts.push('chain=' + encodeURIComponent(state.chain));
-    if (state.scope !== 'all') parts.push('scope=' + state.scope);
-    if (state.view !== 'board') parts.push('view=' + state.view);
-    if (state.sort !== 'rank') parts.push('sort=' + state.sort);
+    Object.keys(HASH_DEFAULT).forEach(function (k) {
+      var v = state[HASH[k]];
+      if (v !== null && v !== HASH_DEFAULT[k]) parts.push(k + '=' + encodeURIComponent(v));
+    });
     if (state.dir !== 1) parts.push('dir=' + (state.dir === 1 ? 'asc' : 'desc'));
     var next = parts.length ? '#' + parts.join('&') : '';
-    if (next !== location.hash) history.replaceState(null, '', next);
+    if (next === location.hash) return;
+    var url = next || location.pathname + location.search;
+    if (push) history.pushState(null, '', url);
+    else history.replaceState(null, '', url);
   }
 
-  // ---- the model, refitted in the page
+  function rowBySlug(slug) {
+    for (var i = 0; i < D.rows.length; i++) if (D.rows[i].slug === slug) return D.rows[i];
+    return null;
+  }
 
-  // The page refits the model from the raw snapshot figures it carries, with the procedure
-  // main.ts used, and checks its own numbers against the board.
+  // the model, refitted in the page
+
+  // The page refits the model from the figures it carries, with main.ts's procedure, and
+  // checks its own numbers against the board. It says so if they disagree.
   var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
-  // How many rows the page's own fit reproduces, and how far off the rest are.
   var FIT = (function () {
     if (!MODEL) return null;
     var exact = 0;
@@ -142,29 +210,38 @@
     return { exact: exact, within1: within1, worst: worst, total: D.rows.length };
   })();
 
-  // The chance it issues, from the page's own fit, not from the board's stored copy.
-  function launchP(row) {
-    return MODEL ? MODEL.launchP(row.tvl_usd, row.change_7d, row.age_days) : row.launch_probability;
-  }
-
-  // The row priced by the page's own fit: the fitted log10 before the category term, the chance it
-  // issues, and the implied value the two multiply to.
   function recompute(row) {
-    var log10 = row.tvl_usd > 0 ? Math.log10(row.conditional_value_usd / row.tvl_usd) : 0;
+    var cond = MODEL
+      ? MODEL.conditional(row.tvl_usd, row.change_7d, row.category)
+      : row.conditional_value_usd;
+    // The fit's log10 BEFORE the category term, so the chain adds up to what the panel shows.
+    var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
     var odds = launchP(row);
     return {
-      base: log10 - row.category_log,
-      odds: odds,
-      expected: Math.round(row.conditional_value_usd * odds)
+      conditional: cond,
+      expected: Math.round(cond * odds),
+      log10: log10,
+      launch: odds
     };
   }
 
-  // The odds, to one decimal of a percent: the same figure everywhere they are printed.
-  function oddsText(p) {
-    return (p * 100).toFixed(1) + '%';
+  function launchP(row) {
+    if (!MODEL) return row.launch_probability;
+    return MODEL.launchP(row.tvl_usd, row.change_7d, row.age_days);
   }
 
-  // ---- the top bar and the hero
+  // The odds, to one decimal of a percent: the same figure everywhere.
+  function oddsText(p) { return (p * 100).toFixed(1) + '%'; }
+
+  // the top bar and the hero
+
+  function renderNote() {
+    var host = document.getElementById('note');
+    if (!host) return;
+    clear(host);
+    host.hidden = !notes.length;
+    if (notes.length) host.appendChild(el('div', { class: 'warn note', text: notes.join(' ') }));
+  }
 
   function renderMeta() {
     var host = clear(document.getElementById('bar-meta'));
@@ -184,9 +261,9 @@
     var host = clear(document.getElementById('hero'));
     var lede = el('div', null, [
       el('h1', null, [
-        document.createTextNode('Every protocol here records '),
-        el('em', { text: 'no token' }),
-        document.createTextNode('. This is what each may be worth if it issues one.')
+        'Every protocol here records ',
+        t('em','no token'),
+        '. This is what each may be worth if it issues one.'
       ]),
       el('p', { class: 'lede', html:
         'The board ranks ' + D.board_size + ' protocols with no market cap, no CoinGecko id and no symbol: the ' +
@@ -196,18 +273,18 @@
         ' protocols whose tokens <strong>already trade</strong> teach it what a market cap is worth against TVL and seven-day growth; ' +
         'the whole universe teaches it how often a protocol of a given age and size issues one at all.' })
     ]);
-    var steps = el('div', { class: 'callout' }, [
-      el('h2', { text: 'How a row is priced' }),
+    var steps = h('div','callout', [
+      t('h2','How a row is priced'),
       el('ol', null, [
         el('li', { html: '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size, growth and category.' }),
         el('li', { html: '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols of its age and size have issued.' }),
         el('li', { html: '<strong>Implied value.</strong> The two multiplied. This is what the board ranks.' })
       ])
     ]);
-    host.appendChild(el('div', { class: 'hero-grid' }, [lede, steps]));
+    host.appendChild(h('div','hero-grid', [lede, steps]));
   }
 
-  // ---- the tabs
+  // the tabs
 
   function renderTabs() {
     var host = clear(document.getElementById('tabs'));
@@ -228,7 +305,7 @@
     });
   }
 
-  // ---- the board
+  // the board
 
   function categories() {
     var seen = {};
@@ -283,22 +360,18 @@
       value: state.q, 'aria-label': 'Search protocols',
       oninput: function () { state.q = search.value; writeHash(); renderControlsResult(); renderTable(); renderPlot(); }
     });
-    var cat = el('select', {
-      'aria-label': 'Filter by category',
-      onchange: function () { state.category = cat.value; writeHash(); renderTable(); renderPlot(); }
-    }, [el('option', { value: 'all', text: 'All categories' })].concat(
-      categories().map(function (c) {
-        return el('option', { value: c, text: c, selected: c === state.category ? 'selected' : null });
-      })
-    ));
-    var chain = el('select', {
-      'aria-label': 'Filter by chain',
-      onchange: function () { state.chain = chain.value; writeHash(); renderTable(); renderPlot(); }
-    }, [el('option', { value: 'all', text: 'All chains' })].concat(
-      chains().map(function (c) {
-        return el('option', { value: c, text: c, selected: c === state.chain ? 'selected' : null });
-      })
-    ));
+    // A dropdown of one dimension of the board, with "all" at the top.
+    function filter(label, all, list, chosen, set) {
+      var box = el('select', {
+        'aria-label': 'Filter by ' + label,
+        onchange: function () { set(box.value); writeHash(); renderTable(); renderPlot(); }
+      }, [el('option', { value: 'all', text: all })].concat(list.map(function (v) {
+        return el('option', { value: v, text: v, selected: v === chosen ? 'selected' : null });
+      })));
+      return box;
+    }
+    var cat = filter('category', 'All categories', categories(), state.category, function (v) { state.category = v; });
+    var chain = filter('chain', 'All chains', chains(), state.chain, function (v) { state.chain = v; });
     var scope = el('button', {
       class: 'chip', type: 'button', 'aria-pressed': state.scope === 'watchlist' ? 'true' : 'false',
       text: 'Watchlist only',
@@ -323,15 +396,15 @@
         writeHash(); renderControls(); renderTable(); renderPlot();
       }
     });
-    host.appendChild(el('label', { text: 'Search' }));
+    host.appendChild(t('label','Search'));
     host.appendChild(search);
-    host.appendChild(el('label', { text: 'Category' }));
+    host.appendChild(t('label','Category'));
     host.appendChild(cat);
-    host.appendChild(el('label', { text: 'Chain' }));
+    host.appendChild(t('label','Chain'));
     host.appendChild(chain);
     host.appendChild(scope);
     host.appendChild(early);
-    host.appendChild(el('span', { class: 'spacer' }));
+    host.appendChild(h('span','spacer'));
     host.appendChild(result);
     host.appendChild(reset);
     renderControlsResult();
@@ -396,17 +469,17 @@
         el('td', { class: 'rk num', text: String(r.rank) }),
         el('td', { class: 'pname', text: r.name }),
         el('td', null, [
-          el('span', { class: 'tag ' + (r.on_watchlist ? 'wl' : 'early'), text: r.on_watchlist ? 'Watchlist' : 'Off list' })
+          el('span', { class: 'tag ' + (r.on_watchlist ? 'wl' : 'early'), text: r.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist' })
         ]),
         el('td', { class: 'cat', text: r.category || 'Uncategorised' }),
         el('td', { class: 'right num', text: money(r.tvl_usd) }),
-        el('td', { class: 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), text: pct(r.change_7d) }),
-        el('td', { class: 'right' }, [el('span', { class: 'pill', text: oddsText(launchP(r)) })]),
+        chg(r),
+        h('td','right', [el('span', { class: 'pill', text: oddsText(launchP(r)) })]),
         el('td', { class: 'right cond', text: money(r.conditional_value_usd) }),
-        el('td', { class: 'right' }, [
+        h('td','right', [
           el('div', { class: 'val', text: money(r.implied_value_usd) }),
-          el('div', { class: 'bar-cell' }, [
-            el('div', { class: 'bar-track' }, [el('div', { class: 'bar-fill', style: 'width:' + (share * 100).toFixed(1) + '%' })])
+          h('div','bar-cell', [
+            h('div','bar-track', [el('div', { class: 'bar-fill', style: 'width:' + (share * 100).toFixed(1) + '%' })])
           ])
         ])
       ]);
@@ -415,9 +488,9 @@
     wrap.appendChild(el('table', null, [head, body]));
   }
 
-  // ---- the plot
+  // the plot
 
-  // The visible rows: implied value against launch odds, dot size is TVL.
+  // The visible rows as a scatter: implied value against launch odds, dot size is TVL.
   function renderPlot() {
     var host = clear(document.getElementById('plot-wrap'));
     var list = visibleRows();
@@ -461,13 +534,11 @@
       return n;
     }
 
-    // The horizontal grid, at powers of ten.
     for (var v = 1; v <= maxV; v *= 10) {
       var y = yOf(v);
       add('line', { x1: padL, y1: y, x2: W - padR, y2: y, class: 'grid' });
       add('text', { x: padL - 8, y: y + 3.5, class: 'tick', 'text-anchor': 'end' }, money(v));
     }
-    // The vertical grid, at launch-odds steps.
     [0.1, 0.3, 0.5, 0.7, 0.9].forEach(function (p) {
       add('line', { x1: xOf(p), y1: padT, x2: xOf(p), y2: H - padB, class: 'grid' });
       add('text', { x: xOf(p), y: H - padB + 13, class: 'tick', 'text-anchor': 'middle' }, Math.round(p * 100) + '%');
@@ -477,7 +548,7 @@
     add('text', { x: padL, y: H - 4, class: 'axis-title' }, 'Launch odds (chance it issues a token)');
     add('text', { x: 8, y: padT + 4, class: 'axis-title' }, 'Implied value');
 
-    // The dots, biggest TVL first so the small ones stay clickable on top.
+    // The dots, biggest TVL first, so the small ones stay clickable on top.
     list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
       var c = add('circle', {
         cx: xOf(launchP(r)), cy: yOf(r.implied_value_usd), r: rOf(r.tvl_usd),
@@ -490,7 +561,6 @@
       c.appendChild(t);
     });
 
-    // The name of the board's leader, so the plot says something on its own.
     var top = list.slice().sort(function (a, b) { return b.implied_value_usd - a.implied_value_usd; })[0];
     if (top) {
       var ty = yOf(top.implied_value_usd);
@@ -500,20 +570,20 @@
       add('text', { x: tx + dx, y: ty + 3.5, class: 'q', 'text-anchor': anchor }, top.name);
     }
 
-    host.appendChild(el('div', { class: 'plot-head' }, [
-      el('h3', { text: 'The board, plotted' }),
+    host.appendChild(h('div','plot-head', [
+      h('h3', null, ['The board, plotted']),
       el('span', { class: 'hint', text: 'Implied value against launch odds · dot size is TVL · click a dot for its detail' })
     ]));
-    var plotBox = el('div', { class: 'plot' });
+    var plotBox = h('div','plot');
     plotBox.appendChild(svg);
     host.appendChild(plotBox);
-    host.appendChild(el('div', { class: 'plot-legend' }, [
-      el('span', null, [el('i', { style: 'background:var(--value)' }), document.createTextNode('On the house watchlist')]),
-      el('span', null, [el('i', { style: 'background:var(--odds)' }), document.createTextNode('Not on the house watchlist')])
+    host.appendChild(h('div','plot-legend', [
+      el('span', null, [el('i', { style: 'background:var(--value)' }), 'On the house watchlist']),
+      el('span', null, [el('i', { style: 'background:var(--odds)' }), 'Early name, below the floor'])
     ]));
   }
 
-  // ---- the live table
+  // the live table
 
   function renderLive() {
     var host = clear(document.getElementById('view-live'));
@@ -535,7 +605,7 @@
     D.live.forEach(function (r) {
       body.appendChild(el('tr', null, [
         el('td', null, [
-          el('div', { class: 'pname' }, [
+          h('div','pname', [
             document.createTextNode(r.name),
             el('span', { class: 'slug', text: r.slug })
           ])
@@ -543,40 +613,39 @@
         el('td', { class: 'cat', text: r.category || 'Uncategorised' }),
         el('td', { class: 'right num', text: money(r.mcap_usd) }),
         el('td', { class: 'right num', text: money(r.tvl_usd) }),
-        el('td', { class: 'right num' }, [el('span', { class: 'pill live', text: r.ratio === null ? '—' : r.ratio.toFixed(2) })]),
-        el('td', { class: 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), text: pct(r.change_7d) })
+        h('td','right num', [el('span', { class: 'pill live', text: r.ratio === null ? '—' : r.ratio.toFixed(2) })]),
+        chg(r)
       ]));
     });
-    host.appendChild(el('div', { class: 'table-wrap' }, [el('table', null, [head, body])]));
+    host.appendChild(h('div','table-wrap', [el('table', null, [head, body])]));
   }
 
-  // ---- the model page
+  // the model page
 
   function renderModel() {
     var host = clear(document.getElementById('view-model'));
     var c = D.calibration;
 
-    var cards = el('div', { class: 'model-grid' }, [
-      el('div', { class: 'card' }, [
-        el('h3', { text: 'Value fit' }),
+    var cards = h('div','model-grid', [
+      h('div','card', [
+        t('h3','Value fit'),
         el('div', { class: 'big', text: c.mae_log10.toFixed(3) }),
         el('p', { text: 'Median error of the value model, in log10 dollars, on the ' + c.cohort_size + ' protocols whose tokens already trade. Half land within a factor of ' + Math.pow(10, c.mae_log10).toFixed(1) + ' of the model.' })
       ]),
-      el('div', { class: 'card' }, [
-        el('h3', { text: 'Launch odds' }),
+      h('div','card', [
+        t('h3','Launch odds'),
         el('div', { class: 'big', text: c.launch_auc.toFixed(3) }),
-        el('p', { text: 'How well the launch model separates the protocols that have issued a token from those that have not, across the whole eligible universe.' })
+        t('p','How well the launch model separates the protocols that have issued a token from those that have not, across the whole eligible universe.'),
       ]),
-      el('div', { class: 'card' }, [
-        el('h3', { text: 'No name is special' }),
+      h('div','card', [
+        t('h3','No name is special'),
         el('p', { html: 'Every row is scored by one function of <code>TVL</code>, <code>change_7d</code>, <code>listed_at</code> and <code>category</code>. ' +
           'No protocol is named anywhere in the model, and the coefficients are fitted at run time on this snapshot — not typed in.' })
       ])
     ]);
     host.appendChild(cards);
 
-    host.appendChild(el('div', { class: 'card', style: 'margin-top:16px' }, [
-      el('h3', { text: 'The formula' }),
+    host.appendChild(card('The formula', [
       el('div', { class: 'formula', text:
         'log10(mcap / tvl) = a + b·log10(tvl) + c·(change_7d / 10) + category_log\n' +
         '  a = ' + c.value_beta[0].toFixed(4) + '    b = ' + c.value_beta[1].toFixed(4) + '    c = ' + c.value_beta[2].toFixed(4) + '\n' +
@@ -586,11 +655,9 @@
         'implied value    = conditional value · launch odds  ← the board ranks this' })
     ]));
 
-    // The page's own refit, checked against the board it was handed.
     if (FIT) {
       var ok = FIT.exact === FIT.total;
-      host.appendChild(el('div', { class: 'card', style: 'margin-top:16px' }, [
-        el('h3', { text: 'Refitted in this page' }),
+      host.appendChild(card('Refitted in this page', [
         el('div', { class: 'big', style: ok ? '' : 'color:var(--live)' },
           FIT.exact + ' / ' + FIT.total),
         el('p', { html: 'This page carries the raw snapshot figures for the ' + D.calibration.cohort_size +
@@ -603,25 +670,24 @@
       ]));
     }
 
-    // The launch curve, read off the universe's age cohorts.
-    var curve = el('div', { class: 'card', style: 'margin-top:16px' }, [
-      el('h3', { text: 'How often a protocol issues a token, by how long it has run' }),
-      el('p', { text: 'Counted across every eligible protocol in the snapshot. This is where the launch odds come from.' })
+    // The launch curve, from the age cohorts.
+    var curve = card('How often a protocol issues a token, by how long it has run', [
+      t('p','Counted across every eligible protocol in the snapshot. This is where the launch odds come from.'),
     ]);
-    var curveBox = el('div', { class: 'curve' });
+    var curveBox = h('div','curve');
     c.bands.forEach(function (b) {
       var rate = b.n ? b.issued / b.n : 0;
-      curveBox.appendChild(el('div', { class: 'curve-row' }, [
+      curveBox.appendChild(h('div','curve-row', [
         el('span', { class: 'lbl', text: (b.lo / 365.25).toFixed(1) + 'y – ' + (b.hi === null ? '∞' : (b.hi / 365.25).toFixed(1) + 'y') }),
-        el('span', { class: 'track' }, [el('span', { class: 'fill', style: 'width:' + (rate * 100).toFixed(1) + '%' })]),
+        h('span','track', [el('span', { class: 'fill', style: 'width:' + (rate * 100).toFixed(1) + '%' })]),
         el('span', { class: 'v', text: Math.round(rate * 100) + '%' })
       ]));
     });
     curve.appendChild(curveBox);
-    var bandsTable = el('table', { class: 'bands' }, [
+    var bandsTable = h('table','bands', [
       el('thead', null, [el('tr', null, [
-        el('th', { text: 'Cohort' }), el('th', { text: 'Protocols' }),
-        el('th', { text: 'Issued a token' }), el('th', { text: 'Rate' })
+        t('th','Cohort'), t('th','Protocols'),
+        t('th','Issued a token'), t('th','Rate')
       ])]),
       el('tbody', null, c.bands.map(function (b) {
         return el('tr', null, [
@@ -635,14 +701,13 @@
     curve.appendChild(bandsTable);
     host.appendChild(curve);
 
-    var catCard = el('div', { class: 'card', style: 'margin-top:16px' }, [
-      el('h3', { text: 'Category corrections' }),
-      el('p', { text: 'How far each category sits from the fitted line, in log10 dollars, shrunk toward the global mean so a thin category cannot speak for itself.' })
+    var catCard = card('Category corrections', [
+      t('p','How far each category sits from the fitted line, in log10 dollars, shrunk toward the global mean so a thin category cannot speak for itself.'),
     ]);
     var catRows = Object.keys(c.category_log).map(function (k) {
       return { k: k, v: c.category_log[k] };
     }).sort(function (a, b) { return b.v - a.v; });
-    var catTable = el('table', { class: 'cat-table' });
+    var catTable = h('table','cat-table');
     catRows.forEach(function (r) {
       catTable.appendChild(el('tr', null, [
         el('td', { text: r.k }),
@@ -652,69 +717,68 @@
     catCard.appendChild(catTable);
     host.appendChild(catCard);
 
-    host.appendChild(el('div', { class: 'card', style: 'margin-top:16px' }, [
-      el('h3', { text: 'What this is and is not' }),
+    host.appendChild(card('What this is and is not', [
       el('div', { class: 'prose', html:
-        '<p><strong>It is:</strong> what a token may be worth if its protocol\'s record stays as it is, ranked by that number, with a farm plan for each row. Every figure is the snapshot\'s own; the model is fitted on the snapshot at run time.</p>' +
+        '<p><strong>It is:</strong> what a token may be worth if its protocol\'s record stays as it is, ranked by that number, with a farm plan for each row. Every figure is the snapshot\'s own, fitted at run time.</p>' +
         '<p><strong>It is not:</strong> a prediction that a token will be issued, or of when, or at what price. The launch odds say how often protocols like this one have issued, not that this one will. A protocol records no token in DefiLlama\'s record; that is not proof that it has none, and the board says so.</p>' +
-        '<p><strong>The separation:</strong> the ' + D.watchlist_size + ' watchlist protocols are all on the board, and so are ' + D.early_size + ' more the house\'s list does not name — the watchlist is a floor, never a ceiling. ' + SEP + ' The ' + D.live_size + ' protocols whose tokens already trade are kept in their own table and never mixed into the ranking.</p>' })
+        '<p><strong>The separation:</strong> the ' + D.watchlist_size + ' watchlist protocols are all on the board, but so are ' + D.early_size + ' more — the watchlist is a floor, never a ceiling. ' + SEP + ' The ' + D.live_size + ' protocols whose tokens already trade are kept in their own table and never mixed into the ranking.</p>' })
     ]));
   }
 
-  // ---- the detail drawer
+  // the detail drawer
 
-  function openDetail(slug) {
-    var row = null;
-    for (var i = 0; i < D.rows.length; i++) if (D.rows[i].slug === slug) { row = D.rows[i]; break; }
+  function openDetail(slug, push) {
+    var row = rowBySlug(slug);
     if (!row) return;
     state.selected = slug;
-    writeHash();
+    writeHash(push !== false);
     var calc = recompute(row);
+    var odds = launchP(row);
     var host = clear(document.getElementById('drawer'));
     host.hidden = false;
 
-    var kpis = el('div', { class: 'kpis' }, [
-      el('div', { class: 'kpi' }, [el('div', { class: 'k', text: 'Implied value' }), el('div', { class: 'v gold', text: moneyExact(row.implied_value_usd) })]),
-      el('div', { class: 'kpi' }, [el('div', { class: 'k', text: 'If it issues' }), el('div', { class: 'v', text: moneyExact(row.conditional_value_usd) })]),
-      el('div', { class: 'kpi' }, [el('div', { class: 'k', text: 'Launch odds' }), el('div', { class: 'v cyan', text: oddsText(calc.odds) })]),
-      el('div', { class: 'kpi' }, [el('div', { class: 'k', text: 'TVL' }), el('div', { class: 'v', text: moneyExact(row.tvl_usd) })])
+    var kpis = h('div','kpis', [
+      kpi('Implied value', moneyExact(row.implied_value_usd), 'gold'),
+      kpi('If it issues', moneyExact(row.conditional_value_usd)),
+      kpi('Launch odds', oddsText(calc.launch), 'cyan'),
+      kpi('TVL', moneyExact(row.tvl_usd))
     ]);
 
-    var deriv = el('div', { class: 'deriv' }, [
-      el('div', { class: 'line' }, [el('span', { text: 'TVL' }), el('span', { text: moneyExact(row.tvl_usd) })]),
-      el('div', { class: 'line' }, [el('span', { text: 'Fitted log10(mcap / TVL), before the correction' }), el('span', { text: calc.base.toFixed(5) })]),
-      el('div', { class: 'line' }, [el('span', { text: 'Category correction' }), el('span', { text: (row.category_log >= 0 ? '+' : '') + row.category_log.toFixed(4) })]),
-      el('div', { class: 'line' }, [el('span', { text: 'Value if it issues' }), el('span', { text: moneyExact(row.conditional_value_usd) })]),
-      el('div', { class: 'line' }, [el('span', { text: 'Launch odds (recomputed in the page)' }), el('span', { text: oddsText(calc.odds) })]),
-      el('div', { class: 'line total' }, [el('span', { text: 'Implied value' }), el('span', { text: moneyExact(calc.expected) })])
+    var deriv = h('div','deriv', [
+      line('TVL', moneyExact(row.tvl_usd)),
+      line('Fitted log10(mcap / TVL), before the correction', calc.log10.toFixed(5)),
+      line('Category correction', (row.category_log >= 0 ? '+' : '') + row.category_log.toFixed(4)),
+      line('Value if it issues', moneyExact(calc.conditional)),
+      line('Launch odds (recomputed in the page)', oddsText(odds)),
+      h('div','line total', [el('span', null, ['Implied value']), el('span', { text: moneyExact(calc.expected) })])
     ]);
 
-    var steps = el('ol', { class: 'steps' });
+    var steps = h('ol','steps');
     farmSteps(row).forEach(function (s) {
       steps.appendChild(el('li', null, [
         el('div', { class: 'act', text: s.text }),
-        el('div', { class: 'meta' }, [
+        h('div','meta', [
           el('span', { class: 'cost', text: 'Cost: ' + s.cost }),
           el('span', { text: '  ·  Time: ' + s.time })
         ])
       ]));
     });
 
-    var record = el('div', { class: 'deriv' }, [
-      el('div', { class: 'line' }, [el('span', { text: 'Seven-day TVL change' }), el('span', { text: pct(row.change_7d) })]),
-      el('div', { class: 'line' }, [el('span', { text: 'First tracked' }), el('span', { text: row.age_days === null ? 'not recorded' : age(row.age_days) + ' ago' })]),
-      el('div', { class: 'line' }, [el('span', { text: 'Category' }), el('span', { text: row.category || 'Uncategorised' })]),
-      el('div', { class: 'line' }, [el('span', { text: 'Chains' }), el('span', { text: String((row.chains || []).length) })]),
-      el('div', { class: 'line' }, [el('span', { text: 'Token recorded?' }), el('span', { text: 'none: no cap, no id, no symbol' })])
+    var record = h('div','deriv', [
+      line('Seven-day TVL change', pct(row.change_7d)),
+      line('First tracked', row.age_days === null ? 'not recorded' : age(row.age_days) + ' ago'),
+      line('Category', row.category || 'Uncategorised'),
+      line('Chains', String((row.chains || []).length)),
+      line('Token recorded?', 'none: no cap, no id, no symbol')
     ]);
 
-    // Peers: the other protocols of the same category, by TVL, each with its own implied value.
+    // Peers: the other protocols of this category, by TVL.
     var peers = D.rows.filter(function (r) {
       return r.slug !== row.slug && (r.category || 'Other') === (row.category || 'Other');
     }).sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).slice(0, 5);
     var peerBox = null;
     if (peers.length) {
-      peerBox = el('div', { class: 'peers' });
+      peerBox = h('div','peers');
       peers.forEach(function (p) {
         peerBox.appendChild(el('button', {
           class: 'peer', type: 'button',
@@ -728,28 +792,28 @@
     }
 
     var sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' }, [
-      el('div', { class: 'sheet-head' }, [
+      h('div','sheet-head', [
         el('div', null, [
           el('h2', { text: row.name }),
           el('div', { class: 'slug', text: row.slug + ' · rank ' + row.rank + ' of ' + D.board_size })
         ]),
         el('button', { class: 'close', type: 'button', 'aria-label': 'Close details', text: '×', onclick: closeDetail })
       ]),
-      el('div', { class: 'chips' }, [
-        el('span', { class: 'tag ' + (row.on_watchlist ? 'wl' : 'early'), text: row.on_watchlist ? 'On the house watchlist' : 'Not on the house watchlist — ' + (row.tvl_usd >= D.floor_usd ? 'above' : 'below') + ' the ' + FLOOR + ' floor' }),
+      h('div','chips', [
+        el('span', { class: 'tag ' + (row.on_watchlist ? 'wl' : 'early'), text: row.on_watchlist ? 'On the house watchlist' : (row.tvl_usd >= D.floor_usd ? 'Not on the house watchlist — above the ' + FLOOR + ' floor' : 'Not on the house watchlist — below the ' + FLOOR + ' floor') }),
         el('span', { class: 'chip-static', text: row.category || 'Uncategorised' })
       ]),
-      (row.chains || []).length ? el('div', { class: 'chips' }, (row.chains || []).slice(0, 8).map(function (c) {
+      (row.chains || []).length ? h('div','chips', (row.chains || []).slice(0, 8).map(function (c) {
         return el('span', { class: 'chip-static', text: c });
       })) : null,
       kpis,
-      el('h4', { text: 'How this row is priced' }),
+      h('h4', null, ['How this row is priced']),
       deriv,
-      el('h4', { text: 'The snapshot record it read' }),
+      h('h4', null, ['The snapshot record it read']),
       record,
-      el('h4', { text: 'How to farm it' }),
+      h('h4', null, ['How to farm it']),
       steps,
-      peerBox ? el('h4', { text: 'Others in this category' }) : null,
+      peerBox ? h('h4', null, ['Others in this category']) : null,
       peerBox,
       el('div', { class: 'warn', text:
         'An implied value is this entry\'s own estimate of what a token may be worth if ' + row.name +
@@ -776,10 +840,10 @@
     if (e.key === 'Escape') closeDetail();
   }
 
-  // ---- the farm plan, shown as the board carries it
+  // the farm plan, shown as the board carries it
 
-  // The plan is generated once, by main.ts, and carried in board.json and in the dataset the page
-  // reads: the plan a reader reads here is the plan the board hands in.
+  // The plan is generated once, by main.ts, and carried in board.json and in the dataset the
+  // page reads, so the plan a reader reads is the plan the board hands in.
   function farmSteps(row) {
     return (row.farm_steps || []).map(function (text) {
       var cost = '';
@@ -791,12 +855,27 @@
     });
   }
 
-  // ---- render
+  // render
+
+  // Without the dataset there is no board to draw, but there is a page to read: say what is
+  // missing and where it comes from, rather than leave a blank screen.
+  function renderMissingData() {
+    var main = document.getElementById('board');
+    if (!main) return;
+    main.appendChild(h('section','card prose missing', [
+      h('h1', null, ['This page has no board yet']),
+      t('p','The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.'),
+      el('p', { class: 'muted', text: 'Run the entry (node main.ts) and open the dashboard it writes into its output directory: the board, the protocol details and the farm plans are all in that file.' })
+    ]));
+    var bar = document.getElementById('bar-meta');
+    if (bar) clear(bar);
+  }
 
   function render() {
     renderMeta();
     renderHero();
     renderTabs();
+    renderNote();
     document.getElementById('view-board').hidden = state.view !== 'board';
     document.getElementById('view-live').hidden = state.view !== 'live';
     document.getElementById('view-model').hidden = state.view !== 'model';
@@ -805,10 +884,23 @@
     if (state.view === 'model') renderModel();
     if (state.selected) {
       var host = document.getElementById('drawer');
-      if (host.hidden) openDetail(state.selected);
+      if (host.hidden) openDetail(state.selected, false);
+    } else {
+      var drawer = document.getElementById('drawer');
+      if (!drawer.hidden) { drawer.hidden = true; clear(drawer); document.removeEventListener('keydown', escClose); }
     }
   }
 
+  // The hash is read again whenever it changes, so a deep link pasted into an open page works
+  // and the Back button closes the drawer.
+  function onHashChange() {
+    readHash();
+    writeHash();
+    render();
+  }
+
   readHash();
+  writeHash();
   render();
+  window.addEventListener('hashchange', onHashChange);
 })();

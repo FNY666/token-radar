@@ -1,7 +1,5 @@
-// The radar's model, in the page's own hand.
-//
-// This is the model main.ts fits, written out here so the page can refit it from the raw snapshot
-// figures it carries and show a reader the arithmetic rather than a number to take on trust.
+// The radar's model, in the page's own hand: the model main.ts fits, written out here so the page
+// can refit it from the figures it carries and show the arithmetic, not a number to take on trust.
 //
 //   value model   log10(mcap/tvl) ~ log10(tvl) + growth, Huber-weighted, with a shrunk category
 //                 correction. Fitted on the eligible protocols whose tokens already trade.
@@ -71,12 +69,10 @@
     return TVL_BANDS.length - 1;
   }
 
-  // The value model's row: [1, log10 TVL, seven-day growth per ten points].
   function valueRow(tvl, growth) {
     return [1, Math.log10(Math.max(tvl, 1)), clampGrowth(growth) / 10];
   }
 
-  // The launch model's row: [1, age-band dummies, TVL-band dummies, growth].
   function launchRow(tvl, growth, age) {
     var ab = ageBand(age);
     var tb = tvlBand(tvl);
@@ -87,7 +83,6 @@
     return x;
   }
 
-  // Solve a small symmetric system by Gaussian elimination with partial pivoting.
   function solve(matrix, rhs) {
     var n = rhs.length;
     var m = matrix.map(function (row, i) { return row.concat([rhs[i]]); });
@@ -105,7 +100,7 @@
     return m.map(function (row, i) { return row[n] / (row[i] || 1); });
   }
 
-  // The value fit: Huber-weighted least squares, so a handful of hundred-times outliers cannot drag it.
+  // The value fit: Huber-weighted least squares, so a few hundred-times outliers cannot drag it.
   function fitValue(rows) {
     var data = rows.map(function (p) {
       return { x: valueRow(p.tvl_usd, p.change_7d), y: Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) };
@@ -135,7 +130,6 @@
     return beta;
   }
 
-  // The launch fit: logistic regression by gradient descent on the whole eligible universe.
   function fitLaunch(rows, asOf) {
     var data = rows.map(function (p) {
       var age = ageDays(asOf, p.listed_at);
@@ -153,8 +147,7 @@
       });
       for (var g = 0; g < k; g++) beta[g] += (0.6 * gradient[g]) / data.length;
     }
-    // The AUC: how well the fitted odds rank the protocols that issued from those that did not.
-    var pos = data.filter(function (r) { return r.y === 1; });
+      var pos = data.filter(function (r) { return r.y === 1; });
     var neg = data.filter(function (r) { return r.y === 0; });
     var hits = 0;
     pos.forEach(function (p) {

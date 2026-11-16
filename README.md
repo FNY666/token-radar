@@ -61,7 +61,7 @@ The board is not a number the reader has to take on trust; the page checks it in
 No framework, no network, no build step. The page is four files, and their source stays under
 64 KB so the judge reads all of it whole.
 
-## Running it
+## Run it
 
 ```sh
 mkdir -p out

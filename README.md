@@ -18,7 +18,7 @@ snapshot's own data, scores every protocol that records no token, and writes:
 | --- | --- |
 | `/output/board.json` | the ranked board, one row per protocol, each with its farm plan |
 | `/output/data.js` | the page's dataset — the same rows, plus the raw cohort and universe the page refits from |
-| `/output/dashboard/` | the page: `index.html`, `app.css`, `model.js`, `app.js` |
+| `/output/dashboard/` | the page: `index.html`, `colors.css`, `theme.css`, `model.js`, `page.js` |
 | `/output/screenshots/` | the board, a detail view and a filtered view |
 | `/output/dossier.json` | what the judge reads, written with the vendored make.fun library |
 

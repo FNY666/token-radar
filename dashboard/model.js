@@ -1,12 +1,12 @@
 // The radar's model, in the page's own hand: the model main.ts fits, written out here so the page
-// can refit it from the figures it carries and show the arithmetic, not a number to take on trust.
+// refits it from the figures it carries and shows the arithmetic, not a number to take on trust.
 //
 //   value model   log10(mcap/tvl) ~ log10(tvl) + growth, Huber-weighted, with a shrunk category
 //                 correction. Fitted on the eligible protocols whose tokens already trade.
 //   launch model  logistic(age band, TVL band, growth), fitted on the whole eligible universe.
 //   ranking       implied value = value if it issues x the chance it issues.
 //
-// Nothing here is a constant: every coefficient comes out of the cohort in the data, every time.
+// Every coefficient comes out of the cohort in the data, every time.
 
 (function (global) {
   'use strict';

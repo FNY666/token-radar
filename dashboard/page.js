@@ -1,6 +1,6 @@
 // The Token Radar page. One dataset (data.js), one board, one model, no network and no framework.
-// It refits the model from the figures it carries (model.js) and checks its own numbers against
-// the board, so a reader can verify the model rather than take it on trust.
+// It refits the model from the figures it carries (model.js) and checks its numbers against the
+// board, so a reader can verify the model rather than take it on trust.
 
 (function () {
   'use strict';
@@ -109,14 +109,14 @@
   // What a link asked for that the board does not have. The page says so.
   var notes = [];
 
-  // A hash that will not decode is a broken link, not a name: reported, not guessed at, so a
-  // bad escape can neither blank the page nor quietly filter the board to nothing.
+  // A hash that will not decode is a broken link, not a name: reported, not guessed at, so a bad
+  // escape can neither blank the page nor quietly filter the board to nothing.
   function dec(s) {
     try { return decodeURIComponent(s); } catch (e) { return null; }
   }
 
-  // The hash is a wish, not a command: every name in it is checked against the page's own
-  // lists, so an unknown value falls back to the default and says so.
+  // The hash is a wish, not a command: every name in it is checked against the page's own lists,
+  // so an unknown value falls back to the default and says so.
   var HASH = { p: 'selected', q: 'q', cat: 'category', chain: 'chain', scope: 'scope', view: 'view', sort: 'sort' };
   var HASH_DEFAULT = { p: '', q: '', cat: 'all', chain: 'all', scope: 'all', view: 'board', sort: 'rank' };
 
@@ -189,8 +189,8 @@
 
   // the model, refitted in the page
 
-  // The page refits the model from the figures it carries, with main.ts's procedure, and
-  // checks its own numbers against the board. It says so if they disagree.
+  // The page refits the model from the figures it carries, with main.ts's procedure, and checks
+  // its numbers against the board. It says so if they disagree.
   var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
   var FIT = (function () {
@@ -842,8 +842,8 @@
 
   // the farm plan, shown as the board carries it
 
-  // The plan is generated once, by main.ts, and carried in board.json and in the dataset the
-  // page reads, so the plan a reader reads is the plan the board hands in.
+  // The plan is generated once, by main.ts, and carried in board.json and in the dataset the page
+  // reads, so the plan a reader reads is the plan the board hands in.
   function farmSteps(row) {
     return (row.farm_steps || []).map(function (text) {
       var cost = '';

@@ -9,8 +9,8 @@
 //   /output/screenshots/   this repository's three screenshots, copied
 //   /output/dossier.json   what the judge reads, written with the vendored make.fun library
 //
-// The dashboard is a static page, no framework and no network: dashboard/index.html, dashboard/app.css
-// and dashboard/app.js read /output/data.js, which this program writes from the same board. The page
+// The dashboard is a static page, no framework and no network: dashboard/index.html, dashboard/colors.css and dashboard/theme.css
+// and dashboard/page.js read /output/data.js, which this program writes from the same board. The page
 // and the board therefore cannot disagree: one run, one dataset.
 //
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

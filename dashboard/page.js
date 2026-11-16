@@ -255,11 +255,7 @@
   function renderHero() {
     var host = clear(document.getElementById('hero'));
     var lede = el('div', null, [
-      el('h1', null, [
-        'Every protocol here records ',
-        t('em','no token'),
-        '. This is what each may be worth if it issues one.'
-      ]),
+      el('h1', null, ['Every protocol here records no token.']),
       el('p', { class: 'lede', html: D.copy.lede })
     ]);
     var steps = h('div','callout', [

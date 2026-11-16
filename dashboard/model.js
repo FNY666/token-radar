@@ -11,8 +11,8 @@
 // A farm plan is eight steps, each with a cost and a time, every number read off the protocol's
 // own record. Its second step, for the first row:
 //
-//   Deposit $400 of USDC into a Steakhouse Financial curated vault on Base and keep the shares in
-//   the wallet.   Cost: $400 of capital and about $3 of gas.   Time: 20 minutes.
+//   Deposit $400 of USDC into a protocol's curated vault on Base and keep the shares in the
+//   wallet.   Cost: $400 of capital and about $3 of gas.   Time: 20 minutes.
 //
 // The capital is the protocol's own TVL, the gas the chain the plan names, the days its own age.
 

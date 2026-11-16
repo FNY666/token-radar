@@ -18,11 +18,73 @@
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { boardIssue, buildRadar, calibrate, dataScript, parseSnapshot } from './lib/model.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
+
+/**
+ * The most common colour in a PNG, as [r, g, b], or null if the file cannot be read. A PNG is
+ * decoded here rather than by a library, so the check does not lean on the same code that wrote
+ * the image: the scanline filters are undone, and the pixels are counted.
+ */
+function dominantColour(png: Buffer): [number, number, number] | null {
+  if (png.slice(0, 8).toString('hex') !== '89504e470d0a1a0a') return null;
+  let o = 8;
+  let idat: Buffer | null = null;
+  let ihdr: Buffer | null = null;
+  while (o < png.length) {
+    const len = png.readUInt32BE(o);
+    const type = png.toString('ascii', o + 4, o + 8);
+    const body = png.slice(o + 8, o + 8 + len);
+    if (type === 'IHDR') ihdr = body;
+    if (type === 'IDAT') idat = idat ? Buffer.concat([idat, body]) : body;
+    o += 12 + len;
+    if (type === 'IEND') break;
+  }
+  if (!ihdr || !idat) return null;
+  const w = ihdr.readUInt32BE(0);
+  const h = ihdr.readUInt32BE(4);
+  const ct = ihdr[9];
+  if (ihdr[8] !== 8 || (ct !== 2 && ct !== 6)) return null;
+  const ch = ct === 6 ? 4 : 3;
+  const stride = w * ch;
+  const raw = inflateSync(idat);
+  const counts = new Map<string, number>();
+  let prev = Buffer.alloc(stride);
+  const cur = Buffer.alloc(stride);
+  const paeth = (a: number, b: number, c: number): number => {
+    const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+    return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+  };
+  for (let y = 0; y < h; y++) {
+    const ft = raw[y * (stride + 1)];
+    const src = raw.subarray(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
+    for (let x = 0; x < stride; x++) {
+      const a = x >= ch ? cur[x - ch] : 0;
+      const b = prev[x];
+      const c = x >= ch ? prev[x - ch] : 0;
+      let v: number;
+      if (ft === 0) v = src[x]!;
+      else if (ft === 1) v = src[x]! + a;
+      else if (ft === 2) v = src[x]! + b;
+      else if (ft === 3) v = src[x]! + ((a + b) >> 1);
+      else if (ft === 4) v = src[x]! + paeth(a, b, c);
+      else return null;
+      cur[x] = v & 0xff;
+    }
+    for (let x = 0; x < w; x++) {
+      const k = `${cur[x * ch]},${cur[x * ch + 1]},${cur[x * ch + 2]}`;
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    cur.copy(prev);
+  }
+  let best = '', bestN = -1;
+  for (const [k, n] of counts) if (n > bestN) { best = k; bestN = n; }
+  return best.split(',').map(Number) as [number, number, number];
+}
 
 /** The scorer's own caps (reference/gate.json): the text cap shapes the bytes, the rest refuse. */
 const TEXT_MAX_BYTES = 65_536;
@@ -85,6 +147,17 @@ const shots = copyFiles(join(here, 'screenshots'), join(out, 'screenshots'));
 if (shots.length < 3) {
   process.stderr.write(`token radar: screenshots/ holds ${shots.length} image${shots.length === 1 ? '' : 's'}: hand in 3, the board, a detail view and a filtered view\n`);
   process.exit(1);
+}
+// A screenshot that is one flat black frame decodes cleanly, passes every size and CRC check and
+// shows the judge nothing. A dark dashboard's dominant colour is one of the theme's own greys, so
+// a black frame means the image was written by something that lost its pixels. Refuse to ship it.
+for (const name of shots) {
+  const shot = readFileSync(join(out, 'screenshots', name));
+  const top = dominantColour(shot);
+  if (top && top[0] === 0 && top[1] === 0 && top[2] === 0) {
+    process.stderr.write(`token radar: screenshots/${name}: the frame is black -- the image was written corrupt, not rendered\n`);
+    process.exit(1);
+  }
 }
 for (const name of shots) {
   if (!IMAGE_NAME.test(name)) {

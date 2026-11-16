@@ -499,7 +499,7 @@
       return;
     }
     var W = 1000;
-    var H = 230;
+    var H = 150;
     var padL = 54;
     var padR = 16;
     var padT = 10;

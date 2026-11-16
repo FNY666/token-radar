@@ -139,7 +139,7 @@ td {padding:var(--b) var(--c);vertical-align:middle}
 .sheet h2 {font-size:24px;line-height:1.2}
 .sheet .slug {color:var(--i3);margin-top:2px}
 .sheet .close {background:var(--panel);color:var(--i2);width:32px;height:32px;border-radius:var(--rs);font-size:18px;line-height:1;flex:none}
-.kpis {display:grid;grid-template-columns:repeat(2,1fr);gap:var(--b);margin:var(--d) 0}
+.kpis {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--b);margin:var(--d) 0}
 .bar-meta dt, .kpi .k {font-size:11px;color:var(--i3)}
 .kpi .v {font-family:var(--mono);font-size:18px;margin-top:2px}
 .sheet h4 {margin:var(--e) 0 var(--c);padding-bottom:var(--b);border-bottom:var(--bl)}
@@ -168,5 +168,5 @@ td {padding:var(--b) var(--c);vertical-align:middle}
 .chips {display:flex;flex-wrap:wrap;gap:var(--a);margin-top:var(--b)}
 .chip-static {background:var(--p2);color:var(--i2);border:var(--bl)}
 @media (max-width: 1000px) { .hero-grid {grid-template-columns:1fr}
-.brand-tag {display:none}
-}
+.brand-tag {display:none} }
+@media (max-width: 420px) { .kpis {grid-template-columns:1fr} }

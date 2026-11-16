@@ -140,7 +140,7 @@
     }
     var cat = filter('category', 'All categories', categories(), state.category, function (v) { state.category = v; });
     var chain = filter('chain', 'All chains', chains(), state.chain, function (v) { state.chain = v; });
-    // The two scope chips are one builder: the same chip, a different label.
+    // The two scope chips are one builder.
     function scopeChip(label, scope) {
       return el('button', {
         class: 'chip', type: 'button', 'aria-pressed': state.scope === scope ? 'true' : 'false',
@@ -180,7 +180,7 @@
     node.textContent = n + ' of ' + D.board_size + ' rows';
   }
 
-  // The lists the filters offer: the categories and chains the rows carry.
+  // The lists the filters offer.
   function listOf(get) {
     var seen = {};
     D.rows.forEach(function (r) { get(r).forEach(function (v) { seen[v] = true; }); });
@@ -233,7 +233,7 @@
   function oddsText(p) { return (p * 100).toFixed(1) + '%'; }
 
   // The plan is generated once, by main.ts, and carried in board.json and in the dataset, so the
-  // plan a reader reads is the plan the board hands in.
+  // plan a reader reads is the one the board hands in.
   function farmSteps(row) {
     return (row.farm_steps || []).map(function (text) {
       var m = /Cost:\s*(.*?)\.\s*Time:\s*(.*?)\.?\s*$/.exec(text);

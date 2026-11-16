@@ -80,6 +80,29 @@ export function isPreToken(p: SnapshotProtocol): boolean {
 }
 
 /**
+ * Whether a protocol issued a token of its own: it has its own market cap, or its own CoinGecko id.
+ *
+ * A symbol on its own is not that. A ticker names a family's token, and a product row carries the
+ * family's ticker because its parent put it there: `aave-v3` records AAVE, but `aave-v2` is the row
+ * that issued it. Counting such a row as an issuer would say the protocol issued a token when it
+ * issued a market.
+ */
+export function issuedOwnToken(p: SnapshotProtocol): boolean {
+  return p.mcap_usd !== null || p.gecko_id !== null;
+}
+
+/**
+ * Whether a protocol is a PRODUCT of a protocol that issued a token: it records a ticker, but
+ * neither its own market cap nor its own CoinGecko id. Its family issued the token; this row did not.
+ *
+ * A product row is neither evidence that the protocol issues a token nor evidence that it does not,
+ * so it is left out of the launch fit altogether rather than counted as a non-issuer.
+ */
+export function isTokenProduct(p: SnapshotProtocol): boolean {
+  return p.symbol !== null && !issuedOwnToken(p);
+}
+
+/**
  * Whether a protocol is one the radar may price: it is not a wrapped or staked product of a protocol
  * whose token already trades, not a bridge, not a versioned pool and not an exchange. This is the
  * structural part of the house's rule, and it holds whether or not the protocol records a token.
@@ -275,10 +298,12 @@ export interface Calibration {
   cohort_size: number;
   /** The median absolute error of the value fit, in log10 dollars. */
   mae_log10: number;
-  /** The AUC of the launch fit: how well it ranks tokenless protocols against token-holding ones. */
+  /** The AUC of the launch fit: how well it ranks protocols that issued a token of their own from those that did not. */
   launch_auc: number;
-  /** How many protocols the launch curve was read from. */
+  /** How many protocols the launch curve was read from: the eligible universe less the product rows. */
   universe_size: number;
+  /** How many product rows were left out of the launch fit: a ticker with no market cap or id of its own. */
+  product_rows: number;
   /** The smallest launch probability the model will report. */
   launch_floor: number;
 }
@@ -331,14 +356,18 @@ function fitValueModel(cohort: SnapshotProtocol[]): { beta: number[]; mae: numbe
 /**
  * Fit the launch model: the chance a protocol that still records no token issues one.
  *
- * A logistic fit on the whole eligible universe, using the same two facts the board reads: how long
- * the protocol has run, and how much TVL it holds. Its AUC on the universe is reported in the
- * dashboard, so the reader can see how much the odds are worth.
+ * A logistic fit on the eligible universe MINUS the product rows, using the same two facts the
+ * board reads: how long the protocol has run, and how much TVL it holds. Its AUC on that universe
+ * is reported in the dashboard, so the reader can see how much the odds are worth.
+ *
+ * The label is `issuedOwnToken`: a protocol counts as an issuer only if it has its own market cap or
+ * its own CoinGecko id. A row that carries a ticker but no market cap of its own is a product of
+ * whoever did issue, so it is neither an issuer nor a non-issuer and it stays out of the fit.
  */
 function fitLaunchModel(universe: SnapshotProtocol[], asOf: string): { beta: number[]; auc: number } {
   const rows = universe.map((p) => {
     const age = ageDays(asOf, p.listed_at) ?? UNKNOWN_AGE;
-    return { x: launchRow(p, age), y: isPreToken(p) ? 0 : 1 };
+    return { x: launchRow(p, age), y: issuedOwnToken(p) ? 1 : 0 };
   });
   const k = rows.length === 0 ? 1 : rows[0]!.x.length;
   let beta = new Array<number>(k).fill(0);
@@ -379,17 +408,30 @@ function fitLaunchModel(universe: SnapshotProtocol[], asOf: string): { beta: num
  */
 export function calibrate(snapshot: Snapshot): Calibration {
   const asOf = snapshot.as_of;
-  const universe = snapshot.protocols.filter(isEligible);
-  const cohort = universe.filter((p) => !isPreToken(p) && (p.mcap_usd ?? 0) >= 1_000_000 && p.tvl_usd >= 1_000_000);
+  const eligible = snapshot.protocols.filter(isEligible);
+  const cohort = eligible.filter((p) => !isPreToken(p) && (p.mcap_usd ?? 0) >= 1_000_000 && p.tvl_usd >= 1_000_000);
+
+  // The launch model's universe: the eligible protocols, LESS the product rows. A row that carries
+  // a ticker but no market cap of its own is a product of whoever issued, so it is not evidence
+  // either way, and it stays out of the fit and out of the published curve.
+  //
+  // This matters, and not by a little. Product rows are older and bigger than pre-token rows by
+  // construction — a pool of a protocol that already issued — so labelling them "issued" teaches
+  // the fit that old and big means issued, which is exactly the question the board is asking. On
+  // this snapshot 130 of the 238 rows the old labelling called issuers are products, and the base
+  // rate falls from 55.0% to 35.6% once they are taken out.
+  const universe = eligible.filter((p) => !isTokenProduct(p));
 
   // The launch curve's cohorts: how many protocols of each age, and how many of them issued a token.
+  // The same universe and the same label as the fit, so the published curve IS the curve the odds
+  // come from.
   const bands: AgeBand[] = AGE_BANDS.map((b) => ({ ...b }));
   for (const p of universe) {
     const age = ageDays(asOf, p.listed_at);
     if (age === null) continue;
     const i = ageBandOf(age);
     bands[i]!.n += 1;
-    if (!isPreToken(p)) bands[i]!.issued += 1;
+    if (issuedOwnToken(p)) bands[i]!.issued += 1;
   }
 
   const value = fitValueModel(cohort);
@@ -434,6 +476,7 @@ export function calibrate(snapshot: Snapshot): Calibration {
     mae_log10: value.mae,
     launch_auc: launch.auc,
     universe_size: universe.length,
+    product_rows: eligible.length - universe.length,
     launch_floor: 0.05,
   };
 }
@@ -469,7 +512,11 @@ export function scoreProtocol(p: SnapshotProtocol, asOf: string, cal: Calibratio
   const lx = launchRow(p, ageForModel);
   let z = 0;
   for (let j = 0; j < cal.launch_beta.length; j++) z += cal.launch_beta[j]! * lx[j]!;
-  const launchP = Math.max(cal.launch_floor, Math.min(0.95, 1 / (1 + Math.exp(-z))));
+  const raw = Math.max(cal.launch_floor, Math.min(0.95, 1 / (1 + Math.exp(-z))));
+  // The probability the model reports, at six decimals, and the implied value is computed FROM it.
+  // So the published triple is self-consistent: conditional value x launch probability is the
+  // implied value, on every row, and a reader can check the arithmetic with the numbers shown.
+  const launchP = Math.round(raw * 1e6) / 1e6;
 
   return {
     conditional_usd: conditional,
@@ -575,6 +622,10 @@ export interface RadarData {
     cohort_size: number;
     mae_log10: number;
     launch_auc: number;
+    /** The eligible protocols the launch model was fitted on: the universe less the product rows. */
+    universe_size: number;
+    /** The product rows left out of the launch fit: a ticker with no market cap or id of its own. */
+    product_rows: number;
   };
   rows: RadarRow[];
   live: LiveRow[];
@@ -663,7 +714,10 @@ export interface UniverseRow {
   tvl_usd: number;
   change_7d: number | null;
   listed_at: string | null;
-  token: 0 | 1;
+  /** The snapshot's own market cap, CoinGecko id and ticker, so the page applies the label itself. */
+  mcap_usd: number | null;
+  gecko_id: string | null;
+  symbol: string | null;
 }
 
 /** How many live-token protocols the page's own table carries, by market cap. */
@@ -709,9 +763,9 @@ export function buildBoard(snapshot: Snapshot, cal: Calibration): BoardRow[] {
     age_days: entry.s.age_days,
     implied_value_usd: entry.s.expected_usd,
     conditional_value_usd: entry.s.conditional_usd,
-    launch_probability: Math.round(entry.s.launch_p * 1000) / 1000,
+    launch_probability: entry.s.launch_p,
     growth_pct: entry.s.growth_pct,
-    category_log: Math.round(entry.s.category_log * 10000) / 10000,
+    category_log: Math.round(entry.s.category_log * 1e6) / 1e6,
     on_watchlist: watchlist.has(entry.p.slug),
     model: {
       version: MODEL_VERSION,
@@ -1041,7 +1095,9 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'Median error of the value model, in log10 dollars, on the ' + cal.cohort_size +
       ' protocols whose tokens trade. Half land within a factor of ' + Math.pow(10, cal.mae_log10).toFixed(1) + ' of the model.',
     launch_odds_note:
-      'How well the launch model separates the protocols that have issued from those that have not, across the whole universe.',
+      'How well the launch model separates the protocols that have issued a token of their own from those that have not, across the eligible universe less the ' +
+      cal.product_rows + ' product rows — rows that carry a ticker but no market cap of their own. ' +
+      'Those are a pool of a protocol that already issued, so they are evidence neither way.',
     no_name_special:
       'Every row is scored by one function of <code>TVL</code>, <code>change_7d</code>, <code>listed_at</code> and <code>category</code>. ' +
       'No protocol is named in the model, and the coefficients are fitted at run time on this snapshot — not typed in.',
@@ -1079,6 +1135,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       category_log: Object.fromEntries(Object.entries(cal.category_log).map(([k, v]) => [k, Math.round(v * 10000) / 10000])),
       bands: cal.bands.map((b) => ({ lo: b.lo, hi: b.hi === Number.POSITIVE_INFINITY ? null : b.hi, n: b.n, issued: b.issued })),
       cohort_size: cal.cohort_size,
+      universe_size: cal.universe_size,
+      product_rows: cal.product_rows,
       mae_log10: Math.round(cal.mae_log10 * 1000) / 1000,
       launch_auc: Math.round(cal.launch_auc * 1000) / 1000,
     },
@@ -1120,7 +1178,9 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       tvl_usd: p.tvl_usd,
       change_7d: p.change_7d,
       listed_at: p.listed_at,
-      token: isPreToken(p) ? 0 : 1,
+      mcap_usd: p.mcap_usd,
+      gecko_id: p.gecko_id,
+      symbol: p.symbol,
     })),
   };
   return { board, radar };

@@ -31,10 +31,10 @@ cohort — 75 protocols after the eligibility rules below — is the calibration
 least squares fits log(market cap over TVL) against log TVL and seven-day growth, with a
 per-category correction shrunk toward the global mean. The chosen form was picked by five-fold
 cross-validation on that cohort (0.420 median absolute error in log10 dollars). A second logistic
-fit, on the whole 433-protocol eligible universe, gives the chance a protocol of a given age and
-size issues a token at all (AUC 0.735). The board ranks the product: the value if it issues, times
-the chance it issues. No constant is typed in from outside and no protocol name is special-cased —
-the same function scores every row.
+fit, on the 303-protocol eligible universe that is left once the product rows are taken out, gives
+the chance a protocol of a given age and size issues a token of its own (AUC 0.754). The board ranks
+the product: the value if it issues, times the chance it issues. No constant is typed in from outside
+and no protocol name is special-cased — the same function scores every row.
 
 The full write-up, including the cross-validation table and the launch curve, is in
 [MODEL.md](MODEL.md).

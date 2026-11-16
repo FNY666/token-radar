@@ -3,7 +3,8 @@
 //
 //   value model   log10(mcap/tvl) ~ log10(tvl) + growth, Huber-weighted, with a shrunk category
 //                 correction. Fitted on the eligible protocols whose tokens already trade.
-//   launch model  logistic(age band, TVL band, growth), fitted on the whole eligible universe.
+//   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
+//                 product rows: rows that carry a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
 // Every coefficient comes out of the cohort in the data, every time.
 
@@ -53,7 +54,9 @@
         var x = launchRow(tvl, growth, age === null ? 365 : age);
         var z = 0;
         for (var j = 0; j < launch.beta.length; j++) z += launch.beta[j] * x[j];
-        return Math.max(0.05, Math.min(0.95, 1 / (1 + Math.exp(-z))));
+        var raw = Math.max(0.05, Math.min(0.95, 1 / (1 + Math.exp(-z))));
+        // The same six decimals the board publishes, so the page and the board are one number.
+        return Math.round(raw * 1e6) / 1e6;
       }
     };
   }
@@ -91,9 +94,10 @@
   }
 
   function fitLaunch(rows, asOf) {
-    var data = rows.map(function (p) {
+    // A product row is neither an issuer nor a non-issuer, so it stays out of the fit altogether.
+    var data = rows.filter(function (p) { return !isTokenProduct(p); }).map(function (p) {
       var age = ageDays(asOf, p.listed_at);
-      return { x: launchRow(p.tvl_usd, p.change_7d, age === null ? 365 : age), y: p.token };
+      return { x: launchRow(p.tvl_usd, p.change_7d, age === null ? 365 : age), y: issuedOwn(p) ? 1 : 0 };
     });
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
@@ -168,8 +172,17 @@
     return x;
   }
 
-  function ageDays(asOf, listedAt) {
-    if (!listedAt) return null;
+  // Whether a protocol issued a token of its own: its own market cap, or its own CoinGecko id.
+  function issuedOwn(p) {
+    return p.mcap_usd !== null || p.gecko_id !== null;
+  }
+
+  // Whether a protocol is a product of one that issued: it carries a ticker, but no market cap or
+  // CoinGecko id of its own. Its family issued the token; this row did not.
+  function isTokenProduct(p) {
+    return p.symbol !== null && !issuedOwn(p);
+  }
+  function ageDays(asOf, listedAt) {    if (!listedAt) return null;
     var a = Date.parse(asOf + 'T00:00:00Z');
     var b = Date.parse(listedAt + 'T00:00:00Z');
     if (!isFinite(a) || !isFinite(b)) return null;

@@ -158,7 +158,8 @@
       }
     }
     for (var j = 0; j < D.universe.length; j++) {
-      if (D.universe[j].slug === slug && D.universe[j].token === 1) {
+      var u = D.universe[j];
+      if (u.slug === slug && (u.mcap_usd !== null || u.gecko_id !== null)) {
         return 'That protocol already trades a token, so it is not on this board.';
       }
     }

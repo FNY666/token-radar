@@ -42,7 +42,7 @@
     age: function (r) { return r.age_days === null ? 999999 : r.age_days; }
   };
 
-  // The already-trading table sorts on its own columns -- the market's figures -- and its own state.
+  // The already-trading table sorts on its own columns -- the market's own figures.
   var LIVE_SORTS = {
     name: function (r) { return r.name.toLowerCase(); },
     category: function (r) { return (r.category || '').toLowerCase(); },
@@ -61,8 +61,8 @@
       wrap.appendChild(e('div', 'empty', 'No protocol matches these filters. Clear them to see the whole board.'));
       return;
     }
-    // The bar's scale is the LARGEST value on screen, not the first row: the first row changes with
-    // the sort, so scaling by it made 63 rows draw a bar six times too wide.
+    // The bar's scale is the LARGEST value on screen, not the first row: the first row changes
+    // with the sort, so scaling by it made 63 rows draw a bar six times too wide.
     var top = Math.max.apply(null, list.map(function (r) { return r.implied_value_usd; }));
     var head = el('thead', null, [
       el('tr', null, [
@@ -103,8 +103,8 @@
     wrap.appendChild(el('table', null, [head, body]));
   }
 
-  // One header serves both tables: it is given the sort state it drives and the redraw to make on a
-  // click. The sorted column says so to a screen reader too: an arrow glyph is not an announcement.
+  // One header serves both tables: it is given the sort state it drives and the redraw to make on
+  // a click. The sorted column says so to a screen reader too: an arrow glyph is not an announcement.
   function sortHeader(key, label, right, sort, redraw, firstDir) {
     var active = sort.key === key;
     function on() {
@@ -115,12 +115,10 @@
     return el('th', {
       class: right ? 'right' : null, scope: 'col',
       'aria-sort': active ? (sort.dir === 1 ? 'ascending' : 'descending') : null
-    }, [
-      el('button', { type: 'button', onclick: on }, [
-        document.createTextNode(label),
-        active ? e('span', 'arrow', sort.dir === 1 ? '▲' : '▼') : null
-      ])
-    ]);
+    }, [el('button', { type: 'button', onclick: on }, [
+      document.createTextNode(label),
+      active ? e('span', 'arrow', sort.dir === 1 ? '▲' : '▼') : null
+    ])]);
   }
 
 
@@ -142,7 +140,7 @@
     }
     var cat = filter('category', 'All categories', categories(), state.category, function (v) { state.category = v; });
     var chain = filter('chain', 'All chains', chains(), state.chain, function (v) { state.chain = v; });
-    // The two scope chips are one builder: the same chip, a different label and scope.
+    // The two scope chips are one builder: the same chip, a different label.
     function scopeChip(label, scope) {
       return el('button', {
         class: 'chip', type: 'button', 'aria-pressed': state.scope === scope ? 'true' : 'false',
@@ -182,7 +180,7 @@
     node.textContent = n + ' of ' + D.board_size + ' rows';
   }
 
-  // The lists the filters offer: the categories and the chains the board's rows carry.
+  // The lists the filters offer: the categories and chains the rows carry.
   function listOf(get) {
     var seen = {};
     D.rows.forEach(function (r) { get(r).forEach(function (v) { seen[v] = true; }); });
@@ -192,7 +190,7 @@
   function chains() { return listOf(function (r) { return r.chains || []; }); }
 
   // The page refits the model from the figures it carries, with main.ts's procedure, and checks it
-  // against the board. It says so if they disagree.
+  // against the board, saying so if they disagree.
   var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
   var FIT = (function () {
@@ -231,19 +229,16 @@
     return MODEL.launchP(row.tvl_usd, row.change_7d, row.age_days);
   }
 
-  // The odds, to one decimal of a percent: the same figure everywhere.
+  // The odds, to one decimal of a percent.
   function oddsText(p) { return (p * 100).toFixed(1) + '%'; }
 
   // The plan is generated once, by main.ts, and carried in board.json and in the dataset, so the
   // plan a reader reads is the plan the board hands in.
   function farmSteps(row) {
     return (row.farm_steps || []).map(function (text) {
-      var cost = '';
-      var time = '';
       var m = /Cost:\s*(.*?)\.\s*Time:\s*(.*?)\.?\s*$/.exec(text);
-      if (m) { cost = m[1]; time = m[2]; }
-      var act = m ? text.slice(0, m.index).trim() : text;
-      return { text: act, cost: cost, time: time };
+      if (!m) return { text: text, cost: '', time: '' };
+      return { text: text.slice(0, m.index).trim(), cost: m[1], time: m[2] };
     });
   }
 
@@ -323,7 +318,7 @@
     // The drawer's body: a heading and the block under it, over and over.
     function sect(title, block) { return [h('h4', null, [title]), block]; }
     var sheet = sheetFor(row, row.slug + ' · rank ' + row.rank + ' of ' + D.board_size,
-      row.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist — ' + (row.tvl_usd >= D.floor_usd ? 'above' : 'below') + ' the ' + FLOOR + ' floor',
+      row.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist — ' + (row.tvl_usd >= D.floor_usd ? 'above' : 'below') + ' the $' + (D.floor_usd / 1e6) + 'M floor',
       row.on_watchlist ? 'wl' : 'early', [kpis]
         .concat(sect('How this row is priced', deriv))
         .concat(sect('The snapshot record it read', record))
@@ -617,11 +612,7 @@
 
     // The three cards of the model page: a title, a figure, and a paragraph.
     function modelCard(title, big, note) {
-      return h('div','card', [
-        t('h3', title),
-        big ? e('div', 'big', big) : null,
-        el('p', { html: note })
-      ]);
+      return h('div','card', [t('h3', title), big ? e('div', 'big', big) : null, el('p', { html: note })]);
     }
     var cards = h('div','model-grid', [
       modelCard('Value fit', c.mae_log10.toFixed(3), D.copy.value_fit_note),
@@ -647,9 +638,7 @@
       ]));
     }
 
-    var curve = card('How often a protocol issues a token, by how long it has run', [
-      t('p', D.copy.curve_note)
-    ]);
+    var curve = card('How often a protocol issues a token, by how long it has run', [t('p', D.copy.curve_note)]);
     var curveBox = h('div','curve');
     c.bands.forEach(function (b) {
       var rate = b.n ? b.issued / b.n : 0;
@@ -677,9 +666,7 @@
     curve.appendChild(bandsTable);
     host.appendChild(curve);
 
-    var catCard = card('Category corrections', [
-      t('p', D.copy.category_note)
-    ]);
+    var catCard = card('Category corrections', [t('p', D.copy.category_note)]);
     var catRows = Object.keys(c.category_log).map(function (k) {
       return { k: k, v: c.category_log[k] };
     }).sort(function (a, b) { return b.v - a.v; });
@@ -719,7 +706,6 @@
     document.removeEventListener('keydown', trapFocus);
     state.selected = null;
     writeHash();
-  // The reader goes back to whatever opened the drawer.
     if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
     lastFocus = null;
   }
@@ -753,7 +739,6 @@
     };
   }
 
-  // The element that opened the drawer.
   var lastFocus = null;
 
   function money(n) {
@@ -844,8 +829,6 @@
 
   var VIEWS = ['board', 'live', 'model'];
   var state = { view: 'board', q: '', category: 'all', chain: 'all', scope: 'all', key: 'rank', dir: 1, selected: null };
-  // The house's TVL floor, as the page names it.
-  var FLOOR = '$' + (D.floor_usd / 1e6) + 'M';
 
 
   // What a link asked for that the board does not have.
@@ -931,7 +914,6 @@
   function rowBySlug(slug) { return bySlug(D.rows, slug); }
   function liveBySlug(slug) { return bySlug(D.live, slug); }
 
-  // The cohort the model was fitted on, as a lookup.
   var COHORT = {};
 
   // Without the dataset there is no board, but there is a page to read: say what is missing.

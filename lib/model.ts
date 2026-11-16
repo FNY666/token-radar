@@ -865,11 +865,11 @@ function holdDaysFor(age: number | null): number {
   return 30;
 }
 
-/** The gas cost of one transaction on the chain the protocol sits on, roughly. */
-function gasFor(p: SnapshotProtocol): number {
-  if (p.chains.includes('Ethereum')) return 12;
-  if (p.chains.includes('Bitcoin')) return 6;
-  if (p.chains.includes('Solana')) return 1;
+/** The gas cost of one transaction on a named chain, roughly. */
+function gasOnChain(chain: string): number {
+  if (chain === 'Ethereum') return 12;
+  if (chain === 'Bitcoin') return 6;
+  if (chain === 'Solana') return 1;
   return 3;
 }
 
@@ -896,7 +896,7 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   'Collateral Markets': "Post {cap} of USDC as collateral in {name} on {chain}, borrow the paired asset against it, and hold both sides of the trade.",
   'Uncollateralized Lending': "Lend {cap} of USDC to a borrower through {name} on {chain} and keep the loan open to its term.",
   'Lending': "Supply {cap} of USDC to {name} on {chain}, borrow nothing against it, and keep the position open.",
-  'RWA': "Mint {cap} of {poss} yield-bearing asset on {chain} and hold it to the end of the term.",
+  'RWA': "Buy {cap} of {poss} yield-bearing note on {chain} and hold it to the end of the term.",
   'Chain': "Bridge {cap} of USDC onto {name}'s own chain and spend it in its app and its ecosystem, keeping the bridged balance open.",
   'Basis Trading': "Deposit {cap} of USDC as margin on {name} and open one small funding-rate position on {chain}.",
   'Derivatives': "Post {cap} of USDC as margin on {name} and open one small long position on {chain}.",
@@ -909,7 +909,7 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   'CeDeFi': "Deposit {cap} of USDC into {name}'s CeDeFi product on {chain} and hold the receipt token it issues.",
   'Liquidity Manager': "Deposit {cap} of USDC into {poss} managed liquidity position on {chain} and hold it until the next rebalance.",
   'Stablecoin Wrapper': "Wrap {cap} of USDC into {poss} wrapper token on {chain} and hold the wrapped balance.",
-  'Dual-Token Stablecoin': "Mint {cap} of {poss} dual-token stablecoin on {chain} and hold both halves of the pair.",
+  'Dual-Token Stablecoin': "Swap {cap} of USDC into {poss} dual-token stablecoin on {chain} and hold both halves of the pair.",
   'Payments': "Buy {cap} of BTC with USDC, open a Lightning channel to a peer node on {chain}, and keep the channel balance in place.",
   'Governance Incentives': "Stake {cap} of the chain's native asset through {name} on {chain}, take part in its incentive programme, and keep the staking receipt.",
   'Insurance': "Buy {cap} of cover from {name} on {chain} and keep the policy open.",
@@ -976,9 +976,9 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
   const capital = capitalFor(p);
   const hold = holdDaysFor(age);
-  const gas = gasFor(p);
+  // The gas is the gas OF THE CHAIN THE PLAN NAMES, so the two can never disagree.
+  const gas = gasOnChain(chain);
   const action = actionFor(p, capital, chain);
-  const weeklyGas = Math.max(1, Math.round(gas / 3));
   const tracked = p.listed_at === null ? 'an unknown date' : `since ${p.listed_at}`;
   return [
     {
@@ -993,7 +993,9 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
     },
     {
       text: `Make one qualifying action every week: a deposit, a swap, a borrow or a vote, so the wallet shows activity in every weekly snapshot.`,
-      cost: `about $${weeklyGas} of gas a week`,
+      // The weekly action costs what any transaction on that chain costs. What makes the weeks
+      // cheaper than a month of them is the count, not a discount on the price.
+      cost: `about $${gas} of gas a week, so $${gas * 4} across the four weeks of a month`,
       time: '10 minutes a week',
     },
     {
@@ -1003,12 +1005,12 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
     },
     {
       text: `Watch ${p.name}'s own announcements and its points page for a token or a season, and check it weekly so you act the week it opens.`,
-      cost: 'no fee to read, and never any fee to claim a token',
+      cost: `no fee to read, no fee to claim, and about $${gas} of gas if you act on the claim`,
       time: '15 minutes a week',
     },
     {
       text: `If a claim opens, claim only from the link ${p.name} publishes itself, on the chain it names, and check the token contract before you sign.`,
-      cost: 'a few dollars of gas at most, and nothing to anyone else',
+      cost: `about $${gas} of gas for the claim, and nothing to anyone else`,
       time: '20 minutes',
     },
     {

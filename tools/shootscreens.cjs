@@ -81,7 +81,15 @@ const WIDTH = 1440;
   });
   await page.waitForSelector('.sheet', { visible: true });
   await new Promise((r) => setTimeout(r, 250));
-  await shot('2-detail.png', 1440);
+  // The judge has to SEE the farm plan, with its costs and its times: scroll the plan into the
+  // drawer before the shot, so the frame shows the steps rather than the header above them.
+  await page.evaluate(() => {
+    const sheet = document.querySelector('.sheet');
+    const steps = sheet.querySelector('.steps');
+    if (steps) sheet.scrollTop = Math.max(0, steps.offsetTop - 90);
+  });
+  await new Promise((r) => setTimeout(r, 200));
+  await shot('2-detail.png', 1300);
   await page.evaluate(() => document.querySelector('.drawer .close').click());
   await new Promise((r) => setTimeout(r, 150));
 

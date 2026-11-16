@@ -6,7 +6,15 @@
 //   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
 //                 product rows: rows that carry a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
-// Every coefficient comes out of the cohort in the data, every time.
+// Every coefficient comes out of the cohort in the data.
+//
+// A farm plan is eight steps, each with a cost and a time, every number read off the protocol's
+// own record. Its second step, for the first row:
+//
+//   Deposit $400 of USDC into a Steakhouse Financial curated vault on Base and keep the shares in
+//   the wallet.   Cost: $400 of capital and about $3 of gas.   Time: 20 minutes.
+//
+// The capital is the protocol's own TVL, the gas the chain the plan names, the days its own age.
 
 (function (global) {
   'use strict';

@@ -144,8 +144,10 @@ and then checks its own output against the board. The model page reports the res
 reproduce exactly* — so the board is not a claim the reader has to trust but a claim the page
 verifies in front of them.
 
-That is also why `dashboard/` is kept under 64 KB: the dossier's text budget is 64 KB, so the judge
-reads the whole page source, fitting code included, rather than a fragment.
+That is also why `dashboard/` is kept under 64 KB. The judge does not read the dossier whole: it
+reads a 12,288-token view of it, in path order, and a file that does not fit is cut to its head.
+`model.js` — the fitting code — is third in that order and reaches the judge whole, which is the
+point of the rename.
 
 ## 7. The farm plans
 

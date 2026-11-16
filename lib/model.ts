@@ -687,53 +687,98 @@ function gasFor(p: SnapshotProtocol): number {
   return 3;
 }
 
+/**
+ * The action each category's farmers actually do, one line per category.
+ *
+ * The table is keyed by DefiLlama's category name and looked up exactly, so no category can be
+ * shadowed by an earlier keyword match: `Indexes` is not a DEX because "indexes" contains "dex",
+ * and `CDP Manager` is not a lending market because both carry the word "CDP". Every line names the
+ * protocol, the amount, the asset, the chain and what the farmer ends up holding.
+ *
+ * `{name}` is the protocol's own name, `{poss}` its name in the possessive, `{cap}` the capital its
+ * TVL asks for, `{chain}` the chain it sits on and `{cat}` the category itself, used by the
+ * fallback line.
+ */
+const CATEGORY_ACTIONS: Record<string, string> = {
+  'Risk Curators': "Deposit {cap} of USDC into a {name} curated vault on {chain} and keep the shares in the wallet.",
+  'Onchain Capital Allocator': "Deposit {cap} of USDC into {poss} largest vault on {chain} and keep the vault receipt token.",
+  'Prediction Market': "Fund {cap} of USDC on {name} on {chain}, take one small position on a market, and hold the outcome shares to the settlement.",
+  'Dexs': "Provide {cap} of USDC and the paired asset in {poss} deepest pool on {chain} and hold the LP position open.",
+  'Indexes': "Buy {cap} of {poss} index token on {chain} and hold it to the next rebalance.",
+  'CDP': "Lock {cap} of USDC as collateral in {name} on {chain}, draw no debt against it, and keep the vault open.",
+  'CDP Manager': "Set up a {cap} USDC collateral position in {name} on {chain} and leave it open through the rebalances.",
+  'Collateral Markets': "Post {cap} of USDC as collateral in {name} on {chain}, borrow the paired asset against it, and hold both sides of the trade.",
+  'Uncollateralized Lending': "Lend {cap} of USDC to a borrower through {name} on {chain} and keep the loan open to its term.",
+  'Lending': "Supply {cap} of USDC to {name} on {chain}, borrow nothing against it, and keep the position open.",
+  'RWA': "Mint {cap} of {poss} yield-bearing asset on {chain} and hold it to the end of the term.",
+  'Chain': "Bridge {cap} of USDC onto {name}'s own chain and spend it in its app and its ecosystem, keeping the bridged balance open.",
+  'Basis Trading': "Deposit {cap} of USDC as margin on {name} and open one small funding-rate position on {chain}.",
+  'Derivatives': "Post {cap} of USDC as margin on {name} and open one small long position on {chain}.",
+  'Interest Rate Derivatives': "Post {cap} of USDC as margin on {name} on {chain} and open one small fixed-rate position.",
+  'Restaking': "Buy {cap} of the chain's native asset and restake it through {name} on {chain}, keeping the liquid restaking receipt.",
+  'Staking Pool': "Buy {cap} of the chain's native asset and delegate it to {poss} pool on {chain}, keeping the pool receipt.",
+  'OTC Marketplace': "Open a {cap} USDC position on {poss} OTC desk on {chain} and hold it to the settlement date.",
+  'Yield Aggregator': "Route {cap} of USDC into {poss} best-scoring strategy on {chain} and hold the strategy receipt token.",
+  'Yield': "Deposit {cap} of USDC into {poss} own yield product on {chain} and hold the receipt token until it claims.",
+  'CeDeFi': "Deposit {cap} of USDC into {name}'s CeDeFi product on {chain} and hold the receipt token it issues.",
+  'Liquidity Manager': "Deposit {cap} of USDC into {poss} managed liquidity position on {chain} and hold it until the next rebalance.",
+  'Stablecoin Wrapper': "Wrap {cap} of USDC into {poss} wrapper token on {chain} and hold the wrapped balance.",
+  'Dual-Token Stablecoin': "Mint {cap} of {poss} dual-token stablecoin on {chain} and hold both halves of the pair.",
+  'Payments': "Buy {cap} of BTC with USDC, open a Lightning channel to a peer node on {chain}, and keep the channel balance in place.",
+  'Governance Incentives': "Stake {cap} of the chain's native asset through {name} on {chain}, take part in its incentive programme, and keep the staking receipt.",
+  'Insurance': "Buy {cap} of cover from {name} on {chain} and keep the policy open.",
+  'Decentralized BTC': "Buy {cap} worth of BTC and deposit it into {poss} vault on {chain}, holding the BTC receipt.",
+  'Leveraged Farming': "Open a {cap} USDC leveraged farming position in {name} on {chain} and keep the collateral posted.",
+  'Farm': "Deposit {cap} of USDC into {poss} farm pool on {chain} and hold the pool receipt.",
+  'Crypto Card Issuer': "Open a {name} card on {chain}, fund it with {cap} of USDC, and keep the balance in the card account.",
+  // Categories the snapshot holds that the board does not rank today, kept here so a board that
+  // reaches them still reads like a plan and not like a slogan.
+  Options: "Write {cap} of USDC into one {name} option on {chain} and hold it to the expiry.",
+  'Options Vault': "Deposit {cap} of USDC into {poss} vault on {chain} and hold the vault shares.",
+  Synthetics: "Mint {cap} of the synthetic asset on {name} on {chain} and hold it against the underlying.",
+  'Algo-Stables': "Mint {cap} of the algorithmic dollar on {name} on {chain} and hold it through the peg.",
+  'Stablecoin Issuer': "Mint {cap} of the issued dollar on {name} on {chain} and hold it in the wallet.",
+  'Reserve Currency': "Hold {cap} of the reserve asset on {name} on {chain} and keep it in the reserve vault.",
+  'Collateral Management': "Post {cap} of USDC as collateral in {name} on {chain} and keep the position open.",
+  Launchpad: "Bridge {cap} of USDC to {name} on {chain} and buy one of the launches it lists.",
+  'Token Locker': "Lock {cap} of the protocol's own tokens in {name} on {chain} and keep the lock open to the unlock.",
+  Privacy: "Send {cap} of USDC through {poss} shielded pool on {chain} and keep the receipt.",
+  'NFT Marketplace': "Buy {cap} of USDC worth of a listed NFT from {name} on {chain} and keep it in the wallet.",
+  'AI Agents': "Deposit {cap} of USDC into {poss} agent treasury on {chain} and keep the agent's own receipt.",
+  'Decentralized AI': "Rent {cap} of USDC worth of compute from {name} on {chain} and keep the rental receipt.",
+  DOR: "Deposit {cap} of USDC into {poss} liquidity pool on {chain} and hold the LP receipt.",
+};
+
+/** The fallback line: the one action a category the table does not name still gets. */
+const FALLBACK_ACTION = "Deposit {cap} of USDC into {name}'s {cat} product on {chain} and hold the receipt it issues.";
+
+/** A name in the possessive: "Veda's", but "Plume Vaults'". */
+function possessive(name: string): string {
+  return name.endsWith('s') ? `${name}'` : `${name}'s`;
+}
+
+/** Fill one action's placeholders. */
+function fillAction(template: string, p: SnapshotProtocol, capital: number, chain: string): string {
+  const values: Record<string, string> = {
+    name: p.name,
+    poss: possessive(p.name),
+    cap: `$${capital}`,
+    chain,
+    cat: (p.category ?? 'protocol').toLowerCase(),
+  };
+  // "{name}'s" in a template means the possessive; "{poss}" already is one.
+  const prepared = template.replace(/\{name\}'s/g, '{poss}');
+  return prepared.replace(/\{(name|poss|cap|chain|cat)\}/g, (_m: string, key: string) => values[key]!);
+}
+
 /** The category's one action, in the words a farmer can follow. */
 function actionFor(p: SnapshotProtocol, capital: number, chain: string): string {
-  const c = (p.category ?? '').toLowerCase();
-  const name = p.name;
-  if (c.includes('risk curator') || c.includes('allocator')) {
-    return `Deposit $${capital} of USDC into a ${name} curated vault on ${chain} and keep the shares in the wallet.`;
-  }
-  if (c.includes('lending') || c.includes('cdp') || c.includes('collateral') || c.includes('uncollateralized')) {
-    return `Supply $${capital} of USDC to ${name} on ${chain}, borrow nothing, and keep the position open.`;
-  }
-  if (c.includes('dex')) {
-    return `Provide $${capital} of liquidity in ${name}'s deepest pool on ${chain} and keep the LP position open.`;
-  }
-  if (c.includes('yield aggregator') || c.includes('yield')) {
-    return `Deposit $${capital} of USDC into ${name}'s highest-yield strategy on ${chain} and hold the receipt token.`;
-  }
-  if (c.includes('basis')) {
-    return `Deposit $${capital} of USDC as margin on ${name} and open one small funding-rate position on ${chain}.`;
-  }
-  if (c.includes('derivative') || c.includes('options')) {
-    return `Post $${capital} of USDC as margin on ${name} and open one small long position on ${chain}.`;
-  }
-  if (c.includes('bridge')) {
-    return `Bridge $${capital} of USDC to ${chain} through ${name} and use the bridged balance in its own app.`;
-  }
-  if (c.includes('staking') || c.includes('restak')) {
-    return `Stake $${capital} of the chain's native asset through ${name} on ${chain} and keep the receipt.`;
-  }
-  if (c.includes('prediction')) {
-    return `Fund $${capital} on ${name} and open one small market position on ${chain}.`;
-  }
-  if (c.includes('rwa')) {
-    return `Mint or deposit $${capital} into ${name}'s yield asset on ${chain} and hold it to the term.`;
-  }
-  if (c.includes('insurance')) {
-    return `Buy $${capital} of cover from ${name} on ${chain} and keep the policy open.`;
-  }
-  if (c.includes('chain')) {
-    return `Bridge $${capital} of USDC to ${name}'s own chain and use it in its app and its ecosystem.`;
-  }
-  if (c.includes('stablecoin')) {
-    return `Mint or deposit $${capital} of the stable asset through ${name} on ${chain} and hold it.`;
-  }
-  if (c.includes('governance') || c.includes('dao')) {
-    return `Delegate $${capital} of the protocol's own tokens, or its votes, to ${name} on ${chain}.`;
-  }
-  return `Deposit $${capital} of USDC into ${name} on ${chain} and keep the position open.`;
+  const category = p.category ?? '';
+  const template = CATEGORY_ACTIONS[category];
+  if (template !== undefined) return fillAction(template, p, capital, chain);
+  // A category the table does not name still gets a concrete line: its own category name carries
+  // the action, so no row ever falls back to a sentence that says nothing.
+  return fillAction(FALLBACK_ACTION, p, capital, chain);
 }
 
 /**

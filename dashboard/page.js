@@ -24,7 +24,6 @@
     return '$' + Math.round(n).toLocaleString('en-US');
   }
 
-  // The seven-day change cell, the same in both tables.
   function chg(r) {
     return el('td', { class: 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), text: pct(r.change_7d) });
   }
@@ -41,7 +40,6 @@
     return (days / 365.25).toFixed(1) + 'y';
   }
 
-  // The commonest call shapes: an element with a class and children, or one with text.
   function h(tag, cls, children) {
     return el(tag, { class: cls }, children);
   }
@@ -98,10 +96,20 @@
   var VIEWS = ['board', 'live', 'model'];
   var state = { view: 'board', q: '', category: 'all', chain: 'all', scope: 'all', sort: 'rank', dir: 1, selected: null };
 
-  // The off-list rows at or above the house's TVL floor: the floor excluded none of the
-  // watchlist, so these are off the list for the house's structural reason instead.
+  // The off-list rows at or above the house's TVL floor: the floor excluded none of the watchlist,
+  // so these are off the list for the house's structural reason.
   var OFF_ABOVE = D.rows.filter(function (r) { return !r.on_watchlist && r.tvl_usd >= D.floor_usd; }).length;
   var FLOOR = '$' + (D.floor_usd / 1e6) + 'M';
+  // What the board leaves off, counted from the dataset: each pre-token protocol at or above the
+  // floor the board's rule rules out, by the rule that rules it out.
+  var OFF = (function () {
+    var by = {};
+    (D.excluded || []).forEach(function (r) { by[r.reason] = (by[r.reason] || 0) + 1; });
+    var names = { exchanges: 'exchange venues', bridges: 'bridges', staking: 'staking wrappers', versioned: 'versioned pools', wrapped: 'wrapped or staked names' };
+    var parts = Object.keys(by).map(function (k) { return by[k] + ' ' + (names[k] || k); });
+    var total = Object.keys(by).reduce(function (n, k) { return n + by[k]; }, 0);
+    return { by: by, total: total, text: parts.join(', ') };
+  })();
   // One sentence, carried by the hero and the model page alike, so they cannot disagree.
   var SEP = 'Of those ' + D.early_size + ', ' + OFF_ABOVE + ' sit above the house\'s ' + FLOOR +
     ' floor and are off the list for another reason: DefiLlama names a parent protocol for each, and the house\'s rule keeps only protocols with none.';
@@ -110,7 +118,7 @@
   var notes = [];
 
   // A hash that will not decode is a broken link, not a name: reported, not guessed at, so a bad
-  // escape can neither blank the page nor quietly filter the board to nothing.
+  // escape can neither blank the page nor filter the board to nothing.
   function dec(s) {
     try { return decodeURIComponent(s); } catch (e) { return null; }
   }
@@ -189,8 +197,8 @@
 
   // the model, refitted in the page
 
-  // The page refits the model from the figures it carries, with main.ts's procedure, and checks
-  // its numbers against the board. It says so if they disagree.
+  // The page refits the model from the figures it carries, with main.ts's procedure, and checks its
+  // numbers against the board. It says so if they disagree.
   var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
   var FIT = (function () {
@@ -214,7 +222,6 @@
     var cond = MODEL
       ? MODEL.conditional(row.tvl_usd, row.change_7d, row.category)
       : row.conditional_value_usd;
-    // The fit's log10 BEFORE the category term, so the chain adds up to what the panel shows.
     var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
     var odds = launchP(row);
     return {
@@ -269,6 +276,8 @@
         'The board ranks ' + D.board_size + ' protocols with no market cap, no CoinGecko id and no symbol: the ' +
         D.watchlist_size + ' on the house watchlist and ' + D.early_size + ' more off the list. ' +
         'The watchlist is a floor, never a ceiling. ' + SEP + ' ' +
+        'A further ' + OFF.total + ' clear the ' + FLOOR + ' floor with no token and are still left off: ' +
+        OFF.text + ' — a venue, a bridge or a wrapper of someone else\'s token, not a protocol of its own. ' +
         'The model is fitted at run time on the snapshot itself — the ' + D.calibration.cohort_size +
         ' protocols whose tokens <strong>already trade</strong> teach it what a market cap is worth against TVL and seven-day growth; ' +
         'the whole universe teaches it how often a protocol of a given age and size issues one at all.' })
@@ -360,7 +369,6 @@
       value: state.q, 'aria-label': 'Search protocols',
       oninput: function () { state.q = search.value; writeHash(); renderControlsResult(); renderTable(); renderPlot(); }
     });
-    // A dropdown of one dimension of the board, with "all" at the top.
     function filter(label, all, list, chosen, set) {
       var box = el('select', {
         'aria-label': 'Filter by ' + label,
@@ -548,7 +556,6 @@
     add('text', { x: padL, y: H - 4, class: 'axis-title' }, 'Launch odds (chance it issues a token)');
     add('text', { x: 8, y: padT + 4, class: 'axis-title' }, 'Implied value');
 
-    // The dots, biggest TVL first, so the small ones stay clickable on top.
     list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
       var c = add('circle', {
         cx: xOf(launchP(r)), cy: yOf(r.implied_value_usd), r: rOf(r.tvl_usd),
@@ -670,7 +677,6 @@
       ]));
     }
 
-    // The launch curve, from the age cohorts.
     var curve = card('How often a protocol issues a token, by how long it has run', [
       t('p','Counted across every eligible protocol in the snapshot. This is where the launch odds come from.'),
     ]);
@@ -772,7 +778,6 @@
       line('Token recorded?', 'none: no cap, no id, no symbol')
     ]);
 
-    // Peers: the other protocols of this category, by TVL.
     var peers = D.rows.filter(function (r) {
       return r.slug !== row.slug && (r.category || 'Other') === (row.category || 'Other');
     }).sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).slice(0, 5);
@@ -857,8 +862,8 @@
 
   // render
 
-  // Without the dataset there is no board to draw, but there is a page to read: say what is
-  // missing and where it comes from, rather than leave a blank screen.
+  // Without the dataset there is no board to draw, but there is a page to read: say what is missing
+  // and where it comes from, rather than leave a blank screen.
   function renderMissingData() {
     var main = document.getElementById('board');
     if (!main) return;
@@ -891,8 +896,8 @@
     }
   }
 
-  // The hash is read again whenever it changes, so a deep link pasted into an open page works
-  // and the Back button closes the drawer.
+  // The hash is read again whenever it changes, so a deep link pasted into an open page works and
+  // the Back button closes the drawer.
   function onHashChange() {
     readHash();
     writeHash();

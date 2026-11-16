@@ -101,6 +101,39 @@ export function isRankable(p: SnapshotProtocol): boolean {
   return isPreToken(p) && isEligible(p);
 }
 
+/**
+ * Why a protocol the board leaves off was left off, or null if the board holds it. The board's own
+ * rule is structural and applies to every protocol, so a protocol can be off the board for a reason
+ * the house's rule does not mention; the reasons here are the board's, not the house's.
+ */
+export function offBoardReason(p: SnapshotProtocol): ExcludedRow['reason'] | null {
+  if (isRankable(p)) return null;
+  if (p.category === 'CEX') return 'exchanges';
+  if (p.category === 'Bridge' || p.category === 'Canonical Bridge' || p.category === 'Cross Chain Bridge') return 'bridges';
+  if (p.category === 'Liquid Staking' || p.category === 'Liquid Restaking' || p.category === 'Restaked BTC' || p.category === 'Anchor BTC') return 'staking';
+  if (VERSIONED.test(p.name)) return 'versioned';
+  if (WRAPPED_WORD.test(p.name)) return 'wrapped';
+  if (EXCHANGE_NAME.test(p.name)) return 'exchanges';
+  return 'other';
+}
+
+/**
+ * Why a protocol whose token already trades is not one of the protocols the value model was fitted
+ * on, or null if it is. The cohort holds the eligible protocols whose tokens trade and whose
+ * market cap and TVL are both above a million dollars; a row outside it is here for contrast, not
+ * for the fit.
+ */
+export function cohortGap(p: SnapshotProtocol): string | null {
+  if (isEligible(p) && (p.mcap_usd ?? 0) >= 1_000_000 && p.tvl_usd >= 1_000_000) return null;
+  const reason = offBoardReason(p);
+  if (reason === 'exchanges') return 'exchange venue';
+  if (reason === 'bridges') return 'bridge';
+  if (reason === 'staking') return 'staking wrapper';
+  if (reason === 'versioned') return 'versioned pool';
+  if (reason === 'wrapped') return 'wrapped or staked name';
+  return 'under the model\'s $1M market-cap or TVL floor';
+}
+
 /** The days a protocol has been tracked, from its first day in the snapshot to the snapshot's date. */
 export function ageDays(asOf: string, listedAt: string | null): number | null {
   if (listedAt === null) return null;
@@ -499,6 +532,8 @@ export interface LiveRow {
   mcap_usd: number | null;
   change_7d: number | null;
   ratio: number | null;
+  /** Why the row is not one of the protocols the value model was fitted on, if it is not. */
+  not_in_cohort: string | null;
 }
 
 /** A row as the page reads it. */
@@ -547,6 +582,16 @@ export interface RadarData {
   cohort: CohortRow[];
   /** The eligible universe the launch model was fitted on, with whether each one records a token. */
   universe: UniverseRow[];
+  /** The pre-token protocols the board's own rule leaves off, and which rule left each one. */
+  excluded: ExcludedRow[];
+  /** The pre-token protocols below the house's TVL floor: too small to rank, not ruled out. */
+  below_floor: number;
+}
+
+/** One protocol the board leaves off, and the rule that left it off. */
+export interface ExcludedRow {
+  slug: string;
+  reason: 'exchanges' | 'bridges' | 'staking' | 'versioned' | 'wrapped' | 'other';
 }
 
 /** One protocol of the value model's cohort, as the page needs it to refit the model itself. */
@@ -643,6 +688,7 @@ export function liveRows(snapshot: Snapshot): LiveRow[] {
       mcap_usd: p.mcap_usd,
       change_7d: p.change_7d,
       ratio: p.tvl_usd > 0 ? Math.round(((p.mcap_usd ?? 0) / p.tvl_usd) * 1000) / 1000 : null,
+      not_in_cohort: cohortGap(p),
     }));
 }
 
@@ -845,6 +891,17 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
   const board = buildBoard(snapshot, cal);
   const live = liveRows(snapshot);
   const watchlist = new Set(snapshot.watchlist);
+  // The pre-token protocols the board leaves off, and the rule that left each one. A protocol
+  // below the house's TVL floor is not ruled out, it is simply too small to rank, so it is counted
+  // separately and the board says so rather than calling it a rule.
+  const excluded: ExcludedRow[] = [];
+  let belowFloor = 0;
+  for (const p of snapshot.protocols) {
+    if (!isPreToken(p)) continue;
+    if (p.tvl_usd < snapshot.floor_usd) { belowFloor++; continue; }
+    const reason = offBoardReason(p);
+    if (reason !== null) excluded.push({ slug: p.slug, reason });
+  }
   const radar: RadarData = {
     as_of: snapshot.as_of,
     source: snapshot.source,
@@ -893,6 +950,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
         mcap_usd: p.mcap_usd!,
         listed_at: p.listed_at,
       })),
+    excluded,
+    below_floor: belowFloor,
     universe: snapshot.protocols.filter(isEligible).map((p) => ({
       slug: p.slug,
       tvl_usd: p.tvl_usd,

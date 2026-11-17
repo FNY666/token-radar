@@ -20,14 +20,17 @@
     });
   }
 
-  function sortedRows(list) {
-    var key = SORTS[state.key] || SORTS.rank;
+  // The sort: a number, or NaN when the row has none. A row with no value sorts LAST in both
+  // directions: a missing 7d change is not the worst growth in the field, it is no growth.
+  function sortedRows(list, key, dir, tie) {
     return list.slice().sort(function (a, b) {
       var ka = key(a);
       var kb = key(b);
-      if (ka < kb) return -state.dir;
-      if (ka > kb) return state.dir;
-      return a.rank - b.rank;
+      if (ka !== ka) return kb !== kb ? tie(a, b) : 1;
+      if (kb !== kb) return -1;
+      if (ka < kb) return -dir;
+      if (ka > kb) return dir;
+      return tie(a, b);
     });
   }
 
@@ -35,14 +38,16 @@
     rank: function (r) { return r.rank; },
     name: function (r) { return r.name.toLowerCase(); },
     tvl: function (r) { return r.tvl_usd; },
-    growth: function (r) { return r.change_7d === null ? -999 : r.change_7d; },
+    growth: function (r) { return typeof r.change_7d !== 'number' ? NaN : r.change_7d; },
     value: function (r) { return r.implied_value_usd; },
     conditional: function (r) { return r.conditional_value_usd; },
-    odds: function (r) { return launchP(r); },
-    age: function (r) { return r.age_days === null ? 999999 : r.age_days; }
+    odds: function (r) { return launchP(r); }
   };
 
-  // The extreme of a column, read off the rows. Math.max.apply is how a list becomes an
+  function byRank(a, b) { return a.rank - b.rank; }
+function byName(a, b) { return a.name < b.name ? -1 : 1; }
+
+// The extreme of a column, read off the rows. Math.max.apply is how a list becomes an
   // argument list; this is the same call, named once.
   function colExtreme(list, key, pick) {
     return Math[pick].apply(null, list.map(function (r) { return r[key]; }));
@@ -50,7 +55,7 @@
 
   function renderTable() {
     var wrap = into('table-wrap');
-    var list = sortedRows(visibleRows());
+    var list = sortedRows(visibleRows(), SORTS[state.key] || SORTS.rank, state.dir, byRank);
     renderControlsResult();
     if (list.length === 0) {
       wrap.appendChild(e('div', 'empty', 'No protocol matches these filters. Clear them to see the whole board.'));
@@ -492,11 +497,7 @@
   var host = into('view-live');
   host.appendChild(el('p', { class: 'live-note', html: D.copy.live_note }));
   // The already-trading table sorts on its own columns: the market's figures, not the model's.
-  var key = LIVE_SORTS[liveSort.key] || LIVE_SORTS.mcap;
-  var rows = D.live.slice().sort(function (a, b) {
-  var ka = key(a), kb = key(b);
-  return ka < kb ? -liveSort.dir : ka > kb ? liveSort.dir : a.name < b.name ? -1 : 1;
-  });
+  var rows = sortedRows(D.live, LIVE_SORTS[liveSort.key] || LIVE_SORTS.mcap, liveSort.dir, byName);
   headCtx.sort = liveSort;
   headCtx.redraw = renderLive;
   var head = el('thead', null, [
@@ -925,8 +926,8 @@
   category: function (r) { return (r.category || '').toLowerCase(); },
   mcap: function (r) { return r.mcap_usd; },
   tvl: function (r) { return r.tvl_usd; },
-  ratio: function (r) { return r.ratio === null ? -999 : r.ratio; },
-  growth: function (r) { return r.change_7d === null ? -999 : r.change_7d; }
+  ratio: function (r) { return typeof r.ratio !== 'number' ? NaN : r.ratio; },
+  growth: function (r) { return typeof r.change_7d !== 'number' ? NaN : r.change_7d; }
   };
   var liveSort = { key: 'mcap', dir: -1 };
   // One header serves both tables: it is given the sort state it drives and the redraw to make on a click. The sorted column says so to a screen reader: an arrow glyph is not an announcement.

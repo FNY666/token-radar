@@ -9,29 +9,15 @@
 // Every coefficient comes out of the cohort in the data.
 //
 // A farm plan is eight steps, each with a cost and a time, every number read off the protocol's
-// own record. Its second step, for the first row:
-//
-//   Deposit $400 of USDC into a protocol's curated vault on Base and keep the shares in the
-//   wallet.   Cost: $400 of capital and about $3 of gas.   Time: 20 minutes.
-//
-// The capital is the protocol's own TVL, the gas the chain the plan names, the days its own age.
+// own record: the capital is the protocol's own TVL, the gas the chain the plan names, the days
+// its own age.
 (function (global) {
   'use strict';
 
   var DAY_MS = 86400000;
-  var AGE_BANDS = [
-    { lo: 0, hi: 182 },
-    { lo: 182, hi: 365 },
-    { lo: 365, hi: 730 },
-    { lo: 730, hi: 1460 },
-    { lo: 1460, hi: Infinity }
-  ];
-  var TVL_BANDS = [
-    { lo: 0, hi: 1e7 },
-    { lo: 1e7, hi: 5e7 },
-    { lo: 5e7, hi: 2e8 },
-    { lo: 2e8, hi: Infinity }
-  ];
+  // The bands, as their edges: the first edge past the number is the band it falls in.
+  var AGE_EDGES = [0, 182, 365, 730, 1460];
+  var TVL_EDGES = [0, 1e7, 5e7, 2e8];
   function fit(data) {
     var beta = fitValue(data.cohort);
     var launch = fitLaunch(data.universe, data.as_of);
@@ -66,8 +52,8 @@
 
   global.RadarModel = { fit: fit, ageDays: ageDays, clampGrowth: clampGrowth };
 
-  // The dot product of a coefficient vector and a row of the design matrix. Every fit in this
-  // file scores a model by one of these, so it is written once.
+  // The dot product of a coefficient vector and a row of the design matrix. Every fit here
+  // scores a model by one of these, so it is written once.
   function dot(b, x) {
     var s = 0;
     for (var i = 0; i < b.length; i++) s += b[i] * x[i];
@@ -158,18 +144,18 @@
     return out;
   }
 
-  // Fit the whole model from the snapshot figures, in the page, every time it loads.
-  // `data` is the dataset main.ts wrote: the cohort, the universe and the board.
+  // Fit the whole model from the snapshot figures, in the page, every time it loads. `data` is
+  // the dataset main.ts wrote: the cohort, the universe and the board.
   function valueRow(tvl, growth) {
     return [1, Math.log10(Math.max(tvl, 1)), clampGrowth(growth) / 10];
   }
 
   function launchRow(tvl, growth, age) {
-    var ab = ageBand(age);
-    var tb = tvlBand(tvl);
+    var ab = bandOf(AGE_EDGES, age);
+    var tb = bandOf(TVL_EDGES, tvl);
     var x = [1];
-    for (var i = 0; i < AGE_BANDS.length; i++) x.push(i === ab ? 1 : 0);
-    for (var j = 0; j < TVL_BANDS.length; j++) x.push(j === tb ? 1 : 0);
+    for (var i = 0; i < AGE_EDGES.length; i++) x.push(i === ab ? 1 : 0);
+    for (var j = 0; j < TVL_EDGES.length; j++) x.push(j === tb ? 1 : 0);
     x.push(clampGrowth(growth) / 10);
     return x;
   }
@@ -179,8 +165,8 @@
     return p.mcap_usd !== null || p.gecko_id !== null;
   }
 
-  // Whether a protocol is a product of one that issued: a ticker, but no market cap or CoinGecko
-  // id of its own. Its family issued the token; this row did not.
+  // Whether a protocol is a product of one that issued: a ticker, but no market cap or
+  // CoinGecko id of its own. Its family issued the token; this row did not.
   function isTokenProduct(p) {
     return p.symbol !== null && !issuedOwn(p);
   }
@@ -197,18 +183,13 @@
     return Math.max(-60, Math.min(120, g));
   }
 
-  function ageBand(age) {
-    for (var i = 0; i < AGE_BANDS.length; i++) {
-      if (age >= AGE_BANDS[i].lo && age < AGE_BANDS[i].hi) return i;
+  // The band a number falls in: the first edge it has passed. A number past the last edge is in
+  // the last band.
+  function bandOf(edges, v) {
+    for (var i = 0; i < edges.length; i++) {
+      if (v < edges[i + 1]) return i;
     }
-    return AGE_BANDS.length - 1;
-  }
-
-  function tvlBand(tvl) {
-    for (var i = 0; i < TVL_BANDS.length; i++) {
-      if (tvl >= TVL_BANDS[i].lo && tvl < TVL_BANDS[i].hi) return i;
-    }
-    return TVL_BANDS.length - 1;
+    return edges.length - 1;
   }
 
   function median(list) {

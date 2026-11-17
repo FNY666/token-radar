@@ -905,7 +905,7 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   'Uncollateralized Lending': "Lend {cap} of USDC to a borrower through {name} on {chain} and keep the loan open to its term.",
   'Lending': "Supply {cap} of USDC to {name} on {chain}, borrow nothing against it, and keep the position open.",
   'RWA': "Buy {cap} of {poss} yield-bearing note on {chain} and hold it to the end of the term.",
-  'Chain': "Bridge {cap} of USDC onto {name}'s own chain and spend it in its app and its ecosystem, keeping the bridged balance open.",
+  'Chain': "Bridge {cap} of USDC onto {chain} and spend it in {name}'s app and its ecosystem, keeping the bridged balance open.",
   'Basis Trading': "Deposit {cap} of USDC as margin on {name} and open one small funding-rate position on {chain}.",
   'Derivatives': "Post {cap} of USDC as margin on {name} and open one small long position on {chain}.",
   'Interest Rate Derivatives': "Post {cap} of USDC as margin on {name} on {chain} and open one small fixed-rate position.",
@@ -1012,7 +1012,7 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: `${hold} days`,
     },
     {
-      text: `Watch ${p.name}'s own announcements and its points page for a token or a season, and check it weekly so you act the week it opens.`,
+      text: `Watch ${possessive(p.name)} own announcements and its points page for a token or a season, and check it weekly so you act the week it opens.`,
       cost: `no fee to read, no fee to claim, and about $${gas} of gas if you act on the claim`,
       time: '15 minutes a week',
     },

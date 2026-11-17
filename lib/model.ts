@@ -719,6 +719,8 @@ export interface Facts {
   /** The off-list rows at or above the house's floor: the house's structural reason, not the floor's. */
   off_list_above_floor: number;
   off_list_below_floor: number;
+  /** The off-list rows above the floor that NO structural rule of the board excludes. */
+  off_list_above_floor_no_reason: number;
   /** The protocols the whole snapshot holds, and those of them that record a token of any kind. */
   snapshot_protocols: number;
   snapshot_tokens: number;
@@ -987,7 +989,8 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   // The gas is the gas OF THE CHAIN THE PLAN NAMES, so the two can never disagree.
   const gas = gasOnChain(chain);
   const action = actionFor(p, capital, chain);
-  const tracked = p.listed_at === null ? 'an unknown date' : `since ${p.listed_at}`;
+  const dated = p.listed_at !== null;
+  const tracked = dated ? `since ${p.listed_at}` : 'on an unknown date';
   return [
     {
       text: `Open a fresh wallet for ${p.name} alone, fund it with the gas asset for ${chain}, and keep the seed phrase offline.`,
@@ -1027,7 +1030,11 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: '30 minutes',
     },
     {
-      text: `Note the whole record: ${p.name} is tracked ${tracked}, and a protocol that has run this long without a token is a slow one, so size the position for the wait.`,
+      // A protocol with no first-tracked date has no age, so the plan must not claim it has run
+      // long: the record says nothing about how long it has run, and the plan says so.
+      text: dated
+        ? `Note the whole record: ${p.name} is tracked ${tracked}, and a protocol that has run this long without a token is a slow one, so size the position for the wait.`
+        : `Note the whole record: ${p.name} is tracked ${tracked}, so the house cannot tell how long it has run — size the position for the wait.`,
       cost: 'nothing but the note',
       time: '5 minutes',
     },
@@ -1085,6 +1092,15 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     off_total: excluded.length,
     off_list_above_floor: board.filter((r) => !watchlist.has(r.slug) && r.tvl_usd >= snapshot.floor_usd).length,
     off_list_below_floor: board.filter((r) => !watchlist.has(r.slug) && r.tvl_usd < snapshot.floor_usd).length,
+    // Of the off-list rows above the floor, the ones that NO structural rule of the board excludes.
+    // The snapshot carries no parent field, so no rule of ours can name a parent protocol: the
+    // truth is that these rows clear every test the board applies, and the watchlist simply does
+    // not carry their names.
+    off_list_above_floor_no_reason: board.filter((r) => {
+      if (watchlist.has(r.slug) || r.tvl_usd < snapshot.floor_usd) return false;
+      const p = snapshot.protocols.find((q) => q.slug === r.slug);
+      return p !== undefined && isPreToken(p) && isEligible(p);
+    }).length,
     snapshot_protocols: snapshot.protocols.length,
     snapshot_tokens: snapshot.protocols.filter((p) => p.mcap_usd !== null || p.gecko_id !== null || p.symbol !== null).length,
   };
@@ -1095,7 +1111,9 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
   const offListBelow = facts.off_list_below_floor;
   const sep =
     'Of the ' + (snapshot.watchlist.length + offListAbove) + ' rows that clear the house\'s ' + FLOOR + ' floor, ' + offListAbove +
-    ' sit above it and are off the list for another reason: DefiLlama names a parent protocol for each, and the house\'s rule keeps only protocols with none. ' +
+    ' sit above it and are off the list for another reason: all ' + facts.off_list_above_floor_no_reason +
+    ' of them clear the house\'s own structural test, and the snapshot names no rule that keeps any of them out — the watchlist is a list of ' +
+    snapshot.watchlist.length + ' names the snapshot carries, not a rule the board can apply. ' +
     'The other ' + offListBelow + ' board rows are off the list because they sit below that floor: the radar keeps them, because the floor is a house rule and the point of a radar is the protocol that is about to cross it.';
   const reasonNames: Record<string, string> = {
     exchanges: 'exchange venues', bridges: 'bridges', staking: 'staking wrappers',

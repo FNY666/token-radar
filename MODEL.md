@@ -64,18 +64,20 @@ conditional value  =  tvl · 10^(that sum)
 
 The growth term is clamped to ±60% / ±120% so that one wild week is a regime and not a hundred.
 
-**The form was chosen by five-fold cross-validation on that cohort**, not by taste:
+**The form was chosen by five-fold cross-validation on that cohort**, not by taste. The folds are
+by position, five apart, and the age is log10 of the years tracked:
 
 | Design | CV median absolute error (log10 dollars) |
 | --- | --- |
 | log10 TVL alone | 0.483 |
 | log10 TVL + growth | **0.420** |
 | log10 TVL + growth + log age | 0.461 |
-| log10 TVL + growth + growth² | 0.517 |
+| log10 TVL + growth + growth² | 0.456 |
 | log10 TVL + growth + log² age | 0.472 |
 
 Growth earns its place. Age does not, in this fit — and that is exactly why age is in the launch
-model instead. The fitted form is a power law in TVL: the median protocol trades at a small and
+model instead. Nor does growth squared: at 0.456 it lands between growth alone and growth with an
+age term, and it costs a parameter. The fitted form is a power law in TVL: the median protocol trades at a small and
 shrinking fraction of the deposits behind it, and the fit reproduces that.
 
 **The category correction.** Each category's residual is added to the fit, but three guards keep a

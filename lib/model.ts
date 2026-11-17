@@ -326,8 +326,9 @@ export interface Calibration {
  * squares on log10(market cap over TVL), so a handful of hundred-times outliers cannot drag it.
  *
  * The form was chosen by five-fold cross-validation on that cohort, among the candidates: log10 TVL
- * alone scored 0.483, log10 TVL with growth 0.420, and adding an age term 0.461. Growth earns its
- * place; age does not, because age belongs in the launch probability, not in the ratio.
+ * alone scored 0.483, log10 TVL with growth 0.420, adding an age term 0.461, growth squared 0.456
+ * and age squared 0.472. Growth earns its place; age does not, because age belongs in the launch
+ * probability, not in the ratio.
  */
 function fitValueModel(cohort: SnapshotProtocol[]): { beta: number[]; mae: number } {
   const rows = cohort.map((p) => ({ x: valueRow(p), y: Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)) }));

@@ -42,19 +42,14 @@
     age: function (r) { return r.age_days === null ? 999999 : r.age_days; }
   };
 
-  // The already-trading table sorts on its own columns -- the market's own figures.
-  var LIVE_SORTS = {
-    name: function (r) { return r.name.toLowerCase(); },
-    category: function (r) { return (r.category || '').toLowerCase(); },
-    mcap: function (r) { return r.mcap_usd; },
-    tvl: function (r) { return r.tvl_usd; },
-    ratio: function (r) { return r.ratio === null ? -999 : r.ratio; },
-    growth: function (r) { return r.change_7d === null ? -999 : r.change_7d; }
-  };
-  var liveSort = { key: 'mcap', dir: -1 };
+  // The extreme of a column, read off the rows. Math.max.apply is how a list becomes an
+  // argument list; this is the same call, named once.
+  function colExtreme(list, key, pick) {
+    return Math[pick].apply(null, list.map(function (r) { return r[key]; }));
+  }
 
   function renderTable() {
-    var wrap = clear(document.getElementById('table-wrap'));
+    var wrap = into('table-wrap');
     var list = sortedRows(visibleRows());
     renderControlsResult();
     if (list.length === 0) {
@@ -63,18 +58,20 @@
     }
     // The bar's scale is the LARGEST value on screen, not the first row: the first row changes
     // with the sort, so scaling by it made 63 rows draw a bar six times too wide.
-    var top = Math.max.apply(null, list.map(function (r) { return r.implied_value_usd; }));
+    var top = colExtreme(list, 'implied_value_usd', 'max');
+    headCtx.sort = state;
+    headCtx.redraw = refresh;
     var head = el('thead', null, [
       el('tr', null, [
-        sortHeader('rank', '#', false, state, refresh, 1),
-        sortHeader('name', 'Protocol', false, state, refresh, -1),
+        sortHeader('rank', '#', false, 1),
+        sortHeader('name', 'Protocol', false, -1),
         el('th', { scope: 'col', text: 'Scope' }),
         el('th', { scope: 'col', text: 'Category' }),
-        sortHeader('tvl', 'TVL', true, state, refresh, -1),
-        sortHeader('growth', '7d', true, state, refresh, -1),
-        sortHeader('odds', 'Launch odds', true, state, refresh, -1),
-        sortHeader('conditional', 'If issued', true, state, refresh, -1),
-        sortHeader('value', 'Implied value', true, state, refresh, -1)
+        sortHeader('tvl', 'TVL', true, -1),
+        sortHeader('growth', '7d', true, -1),
+        sortHeader('odds', 'Launch odds', true, -1),
+        sortHeader('conditional', 'If issued', true, -1),
+        sortHeader('value', 'Implied value', true, -1)
       ])
     ]);
     var body = el('tbody');
@@ -84,7 +81,7 @@
         e('td', 'rk num', String(r.rank)),
         e('td', 'pname', r.name),
         el('td', null, [
-          el('span', { class: 'tag ' + (r.on_watchlist ? 'wl' : 'early'), text: r.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist' })
+          e('span', 'tag ' + (r.on_watchlist ? 'wl' : 'early'), r.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist')
         ]),
         e('td', 'cat', r.category || 'Uncategorised'),
         e('td', 'right num', money(r.tvl_usd)),
@@ -102,10 +99,9 @@
     });
     wrap.appendChild(el('table', null, [head, body]));
   }
-
-  // One header serves both tables: it is given the sort state it drives and the redraw to make on
-  // a click. The sorted column says so to a screen reader too: an arrow glyph is not an announcement.
-  function sortHeader(key, label, right, sort, redraw, firstDir) {
+  function sortHeader(key, label, right, firstDir) {
+    var sort = headCtx.sort;
+    var redraw = headCtx.redraw;
     var active = sort.key === key;
     function on() {
       if (sort.key === key) sort.dir = -sort.dir;
@@ -121,74 +117,6 @@
     ])]);
   }
 
-
-  function renderControls() {
-    var host = clear(document.getElementById('controls'));
-    var search = el('input', {
-      class: 'q', type: 'search', placeholder: 'Search a protocol, a category, a chain…',
-      value: state.q, 'aria-label': 'Search protocols',
-      oninput: function () { state.q = search.value; writeHash(); renderControlsResult(); renderTable(); renderPlot(); }
-    });
-    function filter(label, all, list, chosen, set) {
-      var box = el('select', {
-        'aria-label': 'Filter by ' + label,
-        onchange: function () { set(box.value); refresh(); }
-      }, [el('option', { value: 'all', text: all })].concat(list.map(function (v) {
-        return el('option', { value: v, text: v, selected: v === chosen ? 'selected' : null });
-      })));
-      return box;
-    }
-    var cat = filter('category', 'All categories', categories(), state.category, function (v) { state.category = v; });
-    var chain = filter('chain', 'All chains', chains(), state.chain, function (v) { state.chain = v; });
-    // The two scope chips are one builder.
-    function scopeChip(label, scope) {
-      return el('button', {
-        class: 'chip', type: 'button', 'aria-pressed': state.scope === scope ? 'true' : 'false',
-        text: label,
-        onclick: function () {
-          state.scope = state.scope === scope ? 'all' : scope;
-          refresh();
-        }
-      });
-    }
-    var scope = scopeChip('Watchlist only', 'watchlist');
-    var early = scopeChip('Off list only', 'early');
-    var result = el('span', { class: 'result', id: 'result-count' });
-    var reset = el('button', {
-      class: 'ghost', type: 'button', text: 'Clear filters',
-      onclick: function () {
-        state.q = ''; state.category = 'all'; state.chain = 'all'; state.scope = 'all';
-        refresh();
-      }
-    });
-    [['Search', search], ['Category', cat], ['Chain', chain]].forEach(function (pair) {
-      host.appendChild(t('label', pair[0]));
-      host.appendChild(pair[1]);
-    });
-    host.appendChild(scope);
-    host.appendChild(early);
-    host.appendChild(h('span','spacer'));
-    host.appendChild(result);
-    host.appendChild(reset);
-    renderControlsResult();
-  }
-
-  function renderControlsResult() {
-    var node = document.getElementById('result-count');
-    if (!node) return;
-    var n = visibleRows().length;
-    node.textContent = n + ' of ' + D.board_size + ' rows';
-  }
-
-  // The lists the filters offer.
-  function listOf(get) {
-    var seen = {};
-    D.rows.forEach(function (r) { get(r).forEach(function (v) { seen[v] = true; }); });
-    return Object.keys(seen).sort();
-  }
-  function categories() { return listOf(function (r) { return [r.category || 'Other']; }); }
-  function chains() { return listOf(function (r) { return r.chains || []; }); }
-
   // The page refits the model from the figures it carries, with main.ts's procedure, and checks it
   // against the board, saying so if they disagree.
   var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
@@ -196,18 +124,16 @@
   var FIT = (function () {
     if (!MODEL) return null;
     var exact = 0;
-    var within1 = 0;
     var worst = 0;
     D.rows.forEach(function (r) {
       var cond = MODEL.conditional(r.tvl_usd, r.change_7d, r.category);
       var odds = MODEL.launchP(r.tvl_usd, r.change_7d, r.age_days);
       var ev = Math.round(cond * odds);
       if (ev === r.implied_value_usd) exact++;
-      if (Math.abs(ev - r.implied_value_usd) <= Math.max(1, r.implied_value_usd * 0.01)) within1++;
       var gap = r.implied_value_usd > 0 ? Math.abs(ev - r.implied_value_usd) / r.implied_value_usd : 0;
       if (gap > worst) worst = gap;
     });
-    return { exact: exact, within1: within1, worst: worst, total: D.rows.length };
+    return { exact: exact, worst: worst, total: D.rows.length };
   })();
 
   function recompute(row) {
@@ -229,8 +155,8 @@
     return MODEL.launchP(row.tvl_usd, row.change_7d, row.age_days);
   }
 
-  // The odds, to one decimal of a percent.
-  function oddsText(p) { return (p * 100).toFixed(1) + '%'; }
+  // The odds, to two decimals of a percent: enough for the reader's own multiplication to land.
+  function oddsText(p) { return (p * 100).toFixed(2) + '%'; }
 
   // The plan is generated once, by main.ts, and carried in board.json and in the dataset, so the
   // plan a reader reads is the one the board hands in.
@@ -259,7 +185,7 @@
     writeHash(push !== false);
     var calc = recompute(row);
     var odds = launchP(row);
-    var host = clear(document.getElementById('drawer'));
+    var host = into('drawer');
     host.hidden = false;
 
     var kpis = h('div','kpis', [
@@ -275,7 +201,7 @@
       line('Category correction', (row.category_log >= 0 ? '+' : '') + row.category_log.toFixed(4)),
       line('Value if it issues', moneyExact(calc.conditional)),
       line('Launch odds (recomputed in the page)', oddsText(odds)),
-      h('div','line total', [el('span', null, ['Implied value']), el('span', { text: moneyExact(calc.expected) })])
+      line('Implied value', moneyExact(calc.expected), true)
     ]);
 
     var steps = h('ol','steps');
@@ -284,7 +210,7 @@
         e('div', 'act', s.text),
         h('div','meta', [
           e('span', 'cost', 'Cost: ' + s.cost),
-          el('span', { text: '  ·  Time: ' + s.time })
+          t('span', '  ·  Time: ' + s.time)
         ])
       ]));
     });
@@ -326,6 +252,7 @@
         .concat(peerBox ? sect('Others in this category', peerBox) : [])
         .concat([e('div', 'warn', D.copy.drawer_note)]));
 
+    sheet.setAttribute('data-slug', row.slug);
     host.appendChild(sheet);
     wireDrawer(host, sheet);
   }
@@ -340,7 +267,7 @@
       el('button', { class: 'close', type: 'button', 'aria-label': 'Close details', text: '×', onclick: closeDetail })
     ]);
     var chips = h('div','chips', [
-      el('span', { class: 'tag ' + tagCls, text: tagText }),
+      e('span', 'tag ' + tagCls, tagText),
       e('span', 'chip-static', row.category || 'Uncategorised')
     ]);
     var kids = [head, chips];
@@ -359,7 +286,7 @@
   function openLive(row, push) {
     state.selected = row.slug;
     writeHash(push !== false);
-    var host = clear(document.getElementById('drawer'));
+    var host = into('drawer');
     host.hidden = false;
     var inCohort = COHORT[row.slug] === true;
     var gap = row.not_in_cohort || null;
@@ -378,10 +305,10 @@
       line('Seven-day TVL change', pct(row.change_7d)),
       line('Category', row.category || 'Uncategorised'),
       line('Chains', String((row.chains || []).length)),
-      h('div','line total', [el('span', null, ["In the model's calibration cohort"]), el('span', { text: inCohort ? 'yes' : 'no' })])
+      line("In the model's calibration cohort", inCohort ? 'yes' : 'no', true)
     ]);
     if (gap) {
-      record.appendChild(h('div','line', [el('span', null, ['Not in the cohort because']), el('span', { text: gap })]));
+      record.appendChild(line('Not in the cohort because', gap));
     }
 
     var sheet = sheetFor(row, row.slug + ' · already trading', 'Token already trades', 'live', [
@@ -391,28 +318,27 @@
       e('div', 'warn', inCohort ? D.copy.live_drawer_note : D.copy.live_gap_note + gap + '.')
     ]);
 
+    sheet.setAttribute('data-slug', row.slug);
     host.appendChild(sheet);
     wireDrawer(host, sheet);
   }
 
   // The visible rows as a scatter: implied value against launch odds, dot size is TVL.
   function renderPlot() {
-    var host = clear(document.getElementById('plot-wrap'));
+    var host = into('plot-wrap');
     var list = visibleRows();
     if (list.length === 0) {
       host.appendChild(e('div', 'plot-empty', 'No protocol matches these filters.'));
       return;
     }
-  // One SVG unit is one CSS pixel, so dots stay round.
     // The plot's own geometry: the SVG is drawn in CSS pixels, so a dot is round.
     var cs = getComputedStyle(document.querySelector('.plot-wrap'));
     var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
     var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
     var H = 150, padL = 54, padR = 16, padT = 10, padB = 30;
-    var maxV = Math.max.apply(null, list.map(function (r) { return r.implied_value_usd; }));
-    var tvls = list.map(function (r) { return r.tvl_usd; });
-    var logMin = Math.log10(Math.max(Math.min.apply(null, tvls), 1));
-    var logMax = Math.log10(Math.max(Math.max.apply(null, tvls), 1));
+    var maxV = colExtreme(list, 'implied_value_usd', 'max');
+    var logMin = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'min'), 1));
+    var logMax = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'max'), 1));
 
     function xOf(p) { return padL + (p - 0.05) / 0.9 * (W - padL - padR); }
     function yOf(v) { return padT + (1 - Math.log10(Math.max(v, 1)) / Math.log10(maxV)) * (H - padT - padB); }
@@ -489,125 +415,8 @@
     ]));
   }
 
-  // The three views are a tab set: a tablist, named panels, Left/Right between tabs.
-  function renderTabs() {
-    var host = clear(document.getElementById('tabs'));
-    host.setAttribute('role', 'tablist');
-    var tabs = [
-      { key: 'board', label: 'Pre-token board', count: D.board_size },
-      { key: 'live', label: 'Already trading', count: D.live_size },
-      { key: 'model', label: 'The model', count: null }
-    ];
-    tabs.forEach(function (t, i) {
-      var id = 'tab-' + t.key;
-      host.appendChild(el('button', {
-        class: 'tab', type: 'button', role: 'tab', id: id, 'data-view': t.key,
-        'aria-selected': state.view === t.key ? 'true' : 'false',
-        'aria-controls': 'view-' + t.key,
-        tabindex: state.view === t.key ? '0' : '-1',
-        onclick: function () { state.view = t.key; writeHash(); render(); },
-        onkeydown: function (e) {
-          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-          e.preventDefault();
-          var next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-          state.view = next.key; writeHash(); render();
-          var moved = document.getElementById('tab-' + next.key);
-          if (moved) moved.focus();
-        }
-      }, [
-        document.createTextNode(t.label),
-        t.count !== null ? e('span', 'count', String(t.count)) : null
-      ]));
-    });
-  }
-
-  // The hero states what the tab under it shows, so the headline never contradicts the table.
-  function renderHero() {
-    var host = clear(document.getElementById('hero'));
-    var view = state.view;
-    var headline = view === 'live' ? D.copy.live_headline : view === 'model' ? D.copy.model_headline : D.copy.board_headline;
-    var ledeText = view === 'live' ? D.copy.live_lede : view === 'model' ? D.copy.model_lede : D.copy.board_lede;
-    var lede = el('div', null, [
-      el('h1', null, [headline]),
-      el('p', { class: 'lede', html: ledeText })
-    ]);
-    var steps = h('div','callout', [
-      t('h2','How a row is priced'),
-      el('ol', null, D.copy.pricing_steps.map(function (s) { return el('li', { html: s }); }))
-    ]);
-    host.appendChild(h('div','hero-grid', [lede, steps]));
-  }
-
-  function renderMeta() {
-    var host = clear(document.getElementById('bar-meta'));
-    var facts = [
-      ['snapshot', D.as_of],
-      ['universe', D.universe_size + ' protocols'],
-      ['watchlist', D.watchlist_size + ' covered'],
-      ['board', D.board_size + ' rows'],
-      ['model', D.model_version]
-    ];
-    facts.forEach(function (f) {
-      host.appendChild(el('div', null, [el('dt', { text: f[0] }), el('dd', { text: f[1] })]));
-    });
-    sizeBar();
-  }
-
-  function renderNote() {
-    var host = document.getElementById('note');
-    if (!host) return;
-    clear(host);
-    host.hidden = !notes.length;
-    if (notes.length) host.appendChild(e('div', 'warn note', notes.join(' ')));
-  }
-
-  // The bar's height depends on how its facts wrap, so the sticky offset is MEASURED.
-  function sizeBar() {
-    var bar = document.querySelector('.bar');
-    if (bar) document.documentElement.style.setProperty('--bar-h', Math.round(bar.getBoundingClientRect().height) + 'px');
-  }
-
-  function renderLive() {
-    var host = clear(document.getElementById('view-live'));
-    host.appendChild(el('p', { class: 'live-note', html: D.copy.live_note }));
-    // The already-trading table sorts like the board does, on its own columns: the market's
-    // figures, not the model's. The two tables hold different things, so they keep their own state.
-    var key = LIVE_SORTS[liveSort.key] || LIVE_SORTS.mcap;
-    var rows = D.live.slice().sort(function (a, b) {
-      var ka = key(a), kb = key(b);
-      return ka < kb ? -liveSort.dir : ka > kb ? liveSort.dir : a.name < b.name ? -1 : 1;
-    });
-    var head = el('thead', null, [
-      el('tr', null, [
-        sortHeader('name', 'Protocol', false, liveSort, renderLive, 1),
-        sortHeader('category', 'Category', false, liveSort, renderLive, 1),
-        sortHeader('mcap', 'Market cap', true, liveSort, renderLive, -1),
-        sortHeader('tvl', 'TVL', true, liveSort, renderLive, -1),
-        sortHeader('ratio', 'Cap / TVL', true, liveSort, renderLive, -1),
-        sortHeader('growth', '7d', true, liveSort, renderLive, -1)
-      ])
-    ]);
-    var body = el('tbody');
-    rows.forEach(function (r) {
-      body.appendChild(el('tr', rowAttrs(r), [
-        el('td', null, [
-          h('div','pname', [
-            document.createTextNode(r.name),
-            e('span', 'slug', r.slug)
-          ])
-        ]),
-        e('td', 'cat', r.category || 'Uncategorised'),
-        e('td', 'right num', money(r.mcap_usd)),
-        e('td', 'right num', money(r.tvl_usd)),
-        h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : r.ratio.toFixed(2))]),
-        chg(r)
-      ]));
-    });
-    host.appendChild(h('div','table-wrap', [el('table', null, [head, body])]));
-  }
-
   function renderModel() {
-    var host = clear(document.getElementById('view-model'));
+    var host = into('view-model');
     var c = D.calibration;
 
     // The three cards of the model page: a title, a figure, and a paragraph.
@@ -655,28 +464,30 @@
         t('th','Issued a token'), t('th','Rate')
       ])]),
       el('tbody', null, c.bands.map(function (b) {
-        return el('tr', null, [
-          el('td', { text: b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days' }),
-          el('td', { text: String(b.n) }),
-          el('td', { text: String(b.issued) }),
-          el('td', { text: b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—' })
-        ]);
+        var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
+          b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—'];
+        return el('tr', null, cells.map(function (c) { return t('td', c); }));
       }))
     ]);
     curve.appendChild(bandsTable);
     host.appendChild(curve);
 
     var catCard = card('Category corrections', [t('p', D.copy.category_note)]);
+    // Every category the board uses, plus the ones the cohort never saw: those take the target.
     var catRows = Object.keys(c.category_log).map(function (k) {
       return { k: k, v: c.category_log[k] };
     }).sort(function (a, b) { return b.v - a.v; });
     var catTable = h('table','cat-table');
-    catRows.forEach(function (r) {
+    function catRow(k, v) {
       catTable.appendChild(el('tr', null, [
-        el('td', { text: r.k }),
-        el('td', { text: (r.v >= 0 ? '+' : '') + r.v.toFixed(3) + '  (×' + Math.pow(10, r.v).toFixed(2) + ')' })
+        t('td', k),
+        t('td', (v >= 0 ? '+' : '') + v.toFixed(3) + '  (×' + Math.pow(10, v).toFixed(2) + ')')
       ]));
-    });
+    }
+    catRows.forEach(function (r) { catRow(r.k, r.v); });
+    var seen = {};
+    D.rows.forEach(function (r) { seen[r.category || 'Uncategorised'] = true; });
+    var missing = Object.keys(seen).filter(function (k) { return !(k in c.category_log); });    if (missing.length) catRow(missing.length + ' more the cohort never saw', c.category_default);
     catCard.appendChild(catTable);
     host.appendChild(catCard);
 
@@ -684,6 +495,179 @@
     host.appendChild(card('What this is and is not', [
       el('div', { class: 'prose', html: D.copy.is_and_is_not })
     ]));
+  }
+
+  function renderLive() {
+    var host = into('view-live');
+    host.appendChild(el('p', { class: 'live-note', html: D.copy.live_note }));
+    // The already-trading table sorts like the board does, on its own columns: the market's
+    // figures, not the model's. The two tables hold different things, so they keep their own state.
+    var key = LIVE_SORTS[liveSort.key] || LIVE_SORTS.mcap;
+    var rows = D.live.slice().sort(function (a, b) {
+      var ka = key(a), kb = key(b);
+      return ka < kb ? -liveSort.dir : ka > kb ? liveSort.dir : a.name < b.name ? -1 : 1;
+    });
+    headCtx.sort = liveSort;
+    headCtx.redraw = renderLive;
+    var head = el('thead', null, [
+      el('tr', null, [
+        sortHeader('name', 'Protocol', false, 1),
+        sortHeader('category', 'Category', false, 1),
+        sortHeader('mcap', 'Market cap', true, -1),
+        sortHeader('tvl', 'TVL', true, -1),
+        sortHeader('ratio', 'Cap / TVL', true, -1),
+        sortHeader('growth', '7d', true, -1)
+      ])
+    ]);
+    var body = el('tbody');
+    rows.forEach(function (r) {
+      body.appendChild(el('tr', rowAttrs(r), [
+        el('td', null, [
+          h('div','pname', [
+            document.createTextNode(r.name),
+            e('span', 'slug', r.slug)
+          ])
+        ]),
+        e('td', 'cat', r.category || 'Uncategorised'),
+        e('td', 'right num', money(r.mcap_usd)),
+        e('td', 'right num', money(r.tvl_usd)),
+        h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : r.ratio.toFixed(2))]),
+        chg(r)
+      ]));
+    });
+    host.appendChild(h('div','table-wrap', [el('table', null, [head, body])]));
+  }
+
+
+  function renderControls() {
+    var host = into('controls');
+    var search = el('input', {
+      class: 'q', type: 'search', placeholder: 'Search a protocol, a category, a chain…',
+      value: state.q, 'aria-label': 'Search protocols',
+      oninput: function () { state.q = search.value; writeHash(); renderControlsResult(); renderTable(); renderPlot(); }
+    });
+    function filter(label, all, list, chosen, set) {
+      var box = el('select', {
+        'aria-label': 'Filter by ' + label,
+        onchange: function () { set(box.value); refresh(); }
+      }, [el('option', { value: 'all', text: all })].concat(list.map(function (v) {
+        return el('option', { value: v, text: v, selected: v === chosen ? 'selected' : null });
+      })));
+      return box;
+    }
+    var cat = filter('category', 'All categories', categories(), state.category, function (v) { state.category = v; });
+    var chain = filter('chain', 'All chains', chains(), state.chain, function (v) { state.chain = v; });
+    function scopeChip(label, scope) {
+      return el('button', {
+        class: 'chip', type: 'button', 'aria-pressed': state.scope === scope ? 'true' : 'false',
+        text: label,
+        onclick: function () { state.scope = state.scope === scope ? 'all' : scope; refresh(); }
+      });
+    }
+    var reset = el('button', {
+      class: 'ghost', type: 'button', text: 'Clear filters',
+      onclick: function () {
+        state.q = ''; state.category = 'all'; state.chain = 'all'; state.scope = 'all';
+        refresh();
+      }
+    });
+    [['Search', search], ['Category', cat], ['Chain', chain]].forEach(function (pair) {
+      host.appendChild(t('label', pair[0]));
+      host.appendChild(pair[1]);
+    });
+    host.appendChild(scopeChip('Watchlist only', 'watchlist'));
+    host.appendChild(scopeChip('Off list only', 'early'));
+    host.appendChild(h('span','spacer'));
+    host.appendChild(el('span', { class: 'result', id: 'result-count' }));
+    host.appendChild(reset);
+    renderControlsResult();
+  }
+
+  function renderControlsResult() {
+    var node = document.getElementById('result-count');
+    if (!node) return;
+    var n = visibleRows().length;
+    node.textContent = n + ' of ' + D.board_size + ' rows';
+  }
+  function categories() { return listOf(function (r) { return [r.category || 'Other']; }); }
+  function chains() { return listOf(function (r) { return r.chains || []; }); }
+
+  // The three views are a tab set: a tablist, named panels, Left/Right between tabs.
+  function renderTabs() {
+    var host = into('tabs');
+    host.setAttribute('role', 'tablist');
+    var tabs = [
+      { key: 'board', label: 'Pre-token board', count: D.board_size },
+      { key: 'live', label: 'Already trading', count: D.live_size },
+      { key: 'model', label: 'The model', count: null }
+    ];
+    tabs.forEach(function (t, i) {
+      var id = 'tab-' + t.key;
+      host.appendChild(el('button', {
+        class: 'tab', type: 'button', role: 'tab', id: id, 'data-view': t.key,
+        'aria-selected': state.view === t.key ? 'true' : 'false',
+        'aria-controls': 'view-' + t.key,
+        tabindex: state.view === t.key ? '0' : '-1',
+        onclick: function () { state.view = t.key; writeHash(); render(); },
+        onkeydown: function (e) {
+          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+          e.preventDefault();
+          var next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+          state.view = next.key; writeHash(); render();
+          var moved = document.getElementById('tab-' + next.key);
+          if (moved) moved.focus();
+        }
+      }, [
+        document.createTextNode(t.label),
+        t.count !== null ? e('span', 'count', String(t.count)) : null
+      ]));
+    });
+  }
+
+  // The hero states what the tab under it shows, so it never contradicts the table.
+  function renderHero() {
+    var host = into('hero');
+    var view = state.view;
+    var headline = view === 'live' ? D.copy.live_headline : view === 'model' ? D.copy.model_headline : D.copy.board_headline;
+    var ledeText = view === 'live' ? D.copy.live_lede : view === 'model' ? D.copy.model_lede : D.copy.board_lede;
+    var lede = el('div', null, [
+      el('h1', null, [headline]),
+      el('p', { class: 'lede', html: ledeText })
+    ]);
+    var steps = h('div','callout', [
+      t('h2','How a row is priced'),
+      el('ol', null, D.copy.pricing_steps.map(function (s) { return el('li', { html: s }); }))
+    ]);
+    host.appendChild(h('div','hero-grid', [lede, steps]));
+  }
+
+  function renderMeta() {
+    var host = into('bar-meta');
+    var facts = [
+      ['snapshot', D.as_of],
+      ['universe', D.universe_size + ' protocols'],
+      ['watchlist', D.watchlist_size + ' covered'],
+      ['board', D.board_size + ' rows'],
+      ['model', D.model_version]
+    ];
+    facts.forEach(function (f) {
+      host.appendChild(el('div', null, [t('dt', f[0]), t('dd', f[1])]));
+    });
+    sizeBar();
+  }
+
+  function renderNote() {
+    var host = document.getElementById('note');
+    if (!host) return;
+    clear(host);
+    host.hidden = !notes.length;
+    if (notes.length) host.appendChild(e('div', 'warn note', notes.join(' ')));
+  }
+
+  // The bar's height depends on how its facts wrap, so the sticky offset is MEASURED.
+  function sizeBar() {
+    var bar = document.querySelector('.bar');
+    if (bar) document.documentElement.style.setProperty('--bar-h', Math.round(bar.getBoundingClientRect().height) + 'px');
   }
 
   // The drawer's wiring: backdrop click, Escape, focus.
@@ -728,7 +712,7 @@
     else if (!sheet.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
   }
 
-  // The rows are keyboard-reachable and open the drawer; the trigger is passed so focus returns.
+  // The rows are keyboard-reachable; the trigger is passed so focus returns.
   function rowAttrs(r) {
     return {
       class: 'row', tabindex: '0',
@@ -741,12 +725,14 @@
 
   var lastFocus = null;
 
+  // Money to three significant figures, so that the odds and the conditional value on a row
+  // multiply to the implied value the row shows: the reader can do the sum and get the answer.
   function money(n) {
     if (n === null || n === undefined) return '—';
     var a = Math.abs(n);
-    if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-    if (a >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
-    if (a >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K';
+    if (a >= 1e9) return '$' + (n / 1e9).toPrecision(3) + 'B';
+    if (a >= 1e6) return '$' + (n / 1e6).toPrecision(3) + 'M';
+    if (a >= 1e3) return '$' + (n / 1e3).toPrecision(3) + 'K';
     return '$' + Math.round(n);
   }
 
@@ -756,7 +742,7 @@
   }
 
   function chg(r) {
-    return el('td', { class: 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), text: pct(r.change_7d) });
+    return e('td', 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), pct(r.change_7d));
   }
 
   function pct(n, digits) {
@@ -805,21 +791,27 @@
     return node;
   }
 
-  function line(label, value) {
-    return h('div','line', [el('span', { text: label }), el('span', { text: value })]);
+  function line(label, value, total) {
+    return h('div', total ? 'line total' : 'line', [t('span', label), t('span', value)]);
   }
 
   function kpi(label, value, tone) {
     return h('div','kpi', [
       e('div', 'k', label),
-      el('div', { class: 'v' + (tone ? ' ' + tone : ''), text: value })
+      e('div', 'v' + (tone ? ' ' + tone : ''), value)
     ]);
   }
 
   function card(title, children) {
     return h('div','card stack', [
-      el('h3', { text: title })
+      t('h3', title)
     ].concat(children));
+  }
+
+  // The element a view is drawn into: found and emptied in one call, so a redraw can never
+  // leave the old content behind.
+  function into(id) {
+    return clear(document.getElementById(id));
   }
 
   function clear(node) {
@@ -905,12 +897,6 @@
     if (push) history.pushState(null, '', url);
     else history.replaceState(null, '', url);
   }
-
-  // A row of the board, or of the already-trading table, by slug.
-  function bySlug(list, slug) {
-    for (var i = 0; i < list.length; i++) if (list[i].slug === slug) return list[i];
-    return null;
-  }
   function rowBySlug(slug) { return bySlug(D.rows, slug); }
   function liveBySlug(slug) { return bySlug(D.live, slug); }
 
@@ -943,20 +929,54 @@
     if (state.view === 'model') renderModel();
     var drawer = document.getElementById('drawer');
     if (state.selected) {
-      if (drawer.hidden) openDetail(state.selected, false);
+      // The drawer follows the URL: Back to a protocol's own link must show THAT protocol, not
+      // the one that was open before it.
+      var shown = drawer.querySelector('.sheet');
+      if (drawer.hidden || !shown || shown.getAttribute('data-slug') !== state.selected) {
+        openDetail(state.selected, false);
+      }
     } else if (!drawer.hidden) {
       drawer.hidden = true;
       clear(drawer);
       document.removeEventListener('keydown', escClose);
-      document.removeEventListener('keydown', trapFocus);
+    document.removeEventListener('keydown', trapFocus);
     }
   }
 
-  // The hash is read again whenever it changes: a deep link works, Back closes the drawer.
+  // The hash is read whenever it changes: a deep link works, Back closes the drawer.
   function onHashChange() {
     readHash();
     writeHash();
     render();
+  }
+
+  // The already-trading table sorts on its own columns -- the market's own figures.
+  var LIVE_SORTS = {
+    name: function (r) { return r.name.toLowerCase(); },
+    category: function (r) { return (r.category || '').toLowerCase(); },
+    mcap: function (r) { return r.mcap_usd; },
+    tvl: function (r) { return r.tvl_usd; },
+    ratio: function (r) { return r.ratio === null ? -999 : r.ratio; },
+    growth: function (r) { return r.change_7d === null ? -999 : r.change_7d; }
+  };
+  var liveSort = { key: 'mcap', dir: -1 };
+
+  // One header serves both tables: it is given the sort state it drives and the redraw to make on
+  // a click. The sorted column says so to a screen reader: an arrow glyph is not an announcement.
+  // The table being headed says which sort state that is, so the call sites name only their column.
+  var headCtx = { sort: null, redraw: null };
+
+  // The lists the filters offer.
+  function listOf(get) {
+    var seen = {};
+    D.rows.forEach(function (r) { get(r).forEach(function (v) { seen[v] = true; }); });
+    return Object.keys(seen).sort();
+  }
+
+  // A row of the board, or of the already-trading table, by slug.
+  function bySlug(list, slug) {
+    for (var i = 0; i < list.length; i++) if (list[i].slug === slug) return list[i];
+    return null;
   }
 
   // The hash is a wish, not a command: every name in it is checked against the lists.

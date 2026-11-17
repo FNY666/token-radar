@@ -15,7 +15,6 @@
 //   wallet.   Cost: $400 of capital and about $3 of gas.   Time: 20 minutes.
 //
 // The capital is the protocol's own TVL, the gas the chain the plan names, the days its own age.
-
 (function (global) {
   'use strict';
 
@@ -39,9 +38,7 @@
     var categories = fitCategories(data.cohort, beta);
     var errors = data.cohort.map(function (p) {
       var x = valueRow(p.tvl_usd, p.change_7d);
-      var acc = 0;
-      for (var j = 0; j < beta.length; j++) acc += beta[j] * x[j];
-      return Math.abs(Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - acc);
+      return Math.abs(Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - dot(beta, x));
     });
     return {
       value_beta: beta,
@@ -51,9 +48,7 @@
       mae_log10: median(errors),
       /** The value if this protocol issues, from the fitted model alone. */
       conditional: function (tvl, growth, category) {
-        var x = valueRow(tvl, growth);
-        var acc = 0;
-        for (var j = 0; j < beta.length; j++) acc += beta[j] * x[j];
+        var acc = dot(beta, valueRow(tvl, growth));
         var cat = categories[category || '(none)'];
         acc += cat === undefined ? categories.__default : cat;
         return Math.round(tvl * Math.pow(10, acc));
@@ -61,8 +56,7 @@
       /** The chance it issues, from the fitted launch model alone. */
       launchP: function (tvl, growth, age) {
         var x = launchRow(tvl, growth, age === null ? 365 : age);
-        var z = 0;
-        for (var j = 0; j < launch.beta.length; j++) z += launch.beta[j] * x[j];
+        var z = dot(launch.beta, x);
         var raw = Math.max(0.05, Math.min(0.95, 1 / (1 + Math.exp(-z))));
         // The same six decimals the board publishes, so the two are one number.
         return Math.round(raw * 1e6) / 1e6;
@@ -71,6 +65,14 @@
   }
 
   global.RadarModel = { fit: fit, ageDays: ageDays, clampGrowth: clampGrowth };
+
+  // The dot product of a coefficient vector and a row of the design matrix. Every fit in this
+  // file scores a model by one of these, so it is written once.
+  function dot(b, x) {
+    var s = 0;
+    for (var i = 0; i < b.length; i++) s += b[i] * x[i];
+    return s;
+  }
 
   // The value fit: Huber-weighted least squares, so outliers cannot drag it.
   function fitValue(rows) {
@@ -81,9 +83,7 @@
     var beta = new Array(k).fill(0);
     for (var it = 0; it < 24; it++) {
       var residual = function (i) {
-        var acc = 0;
-        for (var j = 0; j < k; j++) acc += beta[j] * data[i].x[j];
-        return data[i].y - acc;
+        return data[i].y - dot(beta, data[i].x);
       };
       var scale = 1.4826 * median(data.map(function (_, i) { return Math.abs(residual(i)); }));
       var matrix = [], rhs = new Array(k).fill(0);
@@ -113,9 +113,7 @@
     for (var it = 0; it < 400; it++) {
       var gradient = new Array(k).fill(0);
       data.forEach(function (row) {
-        var z = 0;
-        for (var j = 0; j < k; j++) z += beta[j] * row.x[j];
-        var error = row.y - 1 / (1 + Math.exp(-z));
+        var error = row.y - 1 / (1 + Math.exp(-dot(beta, row.x)));
         for (var i = 0; i < k; i++) gradient[i] += error * row.x[i];
       });
       for (var g = 0; g < k; g++) beta[g] += (0.6 * gradient[g]) / data.length;
@@ -124,11 +122,9 @@
     var neg = data.filter(function (r) { return r.y === 0; });
     var hits = 0;
     pos.forEach(function (p) {
-      var zp = 0;
-      for (var i = 0; i < k; i++) zp += beta[i] * p.x[i];
+      var zp = dot(beta, p.x);
       neg.forEach(function (n) {
-        var zn = 0;
-        for (var j = 0; j < k; j++) zn += beta[j] * n.x[j];
+        var zn = dot(beta, n.x);
         hits += zp > zn ? 1 : (zp === zn ? 0.5 : 0);
       });
     });
@@ -142,9 +138,7 @@
     var all = [];
     cohort.forEach(function (p) {
       var x = valueRow(p.tvl_usd, p.change_7d);
-      var acc = 0;
-      for (var j = 0; j < beta.length; j++) acc += beta[j] * x[j];
-      var r = Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - acc;
+      var r = Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - dot(beta, x);
       all.push(r);
       var key = p.category || '(none)';
       (byCat[key] = byCat[key] || []).push(r);
@@ -166,7 +160,6 @@
 
   // Fit the whole model from the snapshot figures, in the page, every time it loads.
   // `data` is the dataset main.ts wrote: the cohort, the universe and the board.
-
   function valueRow(tvl, growth) {
     return [1, Math.log10(Math.max(tvl, 1)), clampGrowth(growth) / 10];
   }
@@ -191,7 +184,8 @@
   function isTokenProduct(p) {
     return p.symbol !== null && !issuedOwn(p);
   }
-  function ageDays(asOf, listedAt) {    if (!listedAt) return null;
+  function ageDays(asOf, listedAt) {
+    if (!listedAt) return null;
     var a = Date.parse(asOf + 'T00:00:00Z');
     var b = Date.parse(listedAt + 'T00:00:00Z');
     if (!isFinite(a) || !isFinite(b)) return null;

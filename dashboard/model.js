@@ -4,13 +4,12 @@
 //   value model   log10(mcap/tvl) ~ log10(tvl) + growth, Huber-weighted, with a shrunk category
 //                 correction. Fitted on the protocols whose tokens trade.
 //   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
-//                 product rows: rows that carry a ticker but no market cap of their own.
+//                 product rows: rows with a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
 // Every coefficient comes out of the cohort in the data.
 //
 // A farm plan is eight steps, each with a cost and a time, every number read off the protocol's
-// own record: the capital is the protocol's own TVL, the gas the chain the plan names, the days
-// its own age.
+// own record: the capital is its own TVL, the gas the chain the plan names, the days its age.
 (function (global) {
   'use strict';
 

@@ -174,9 +174,11 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   }
 
   function openDetail(slug, push, trigger) {
-    // Whatever opened the drawer is what the reader comes back to.
+    // Whatever opened the drawer is what the reader comes back to. An opener inside the drawer
+    // is about to be destroyed by the drawer's own rebuild, so the board's row is where the
+    // reader comes back to.
     var opener = trigger || document.activeElement;
-    if (opener && opener !== document.body && opener.focus) lastFocus = opener;
+    if (opener && opener !== document.body && opener.focus && !opener.closest('.sheet')) lastFocus = opener;
     var row = rowBySlug(slug);
     if (!row) {
       // A protocol whose token already trades is not on the board: it has no implied value and no
@@ -260,7 +262,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
     mountSheet(host, sheet, row);
   }
 
-  // A token that already trades: no implied value, no farm plan -- the market's own.
+// A token that already trades: no implied value, no farm plan -- the market's own.
   function sheetFor(row, sub, tagText, tagCls, body) {
   var head = h('div','sheet-head', [
   el('div', null, [
@@ -279,7 +281,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   return e('span', 'chip-static', c);
   })));
   }
-  // The dialog names itself, so a screen reader announces the protocol.
+// The dialog names itself, so a screen reader announces the protocol.
   var sheet = el('div', {
   class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sheet-title', tabindex: '-1'
   }, kids.concat(body));
@@ -318,7 +320,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   ]);
   mountSheet(host, sheet, row);
   }
-  // The visible rows as a scatter: implied value against launch odds, dot size is TVL.
+// The visible rows as a scatter: implied value against launch odds, dot size is TVL.
   function renderPlot() {
   var host = into('plot-wrap');
   var list = visibleRows();
@@ -326,8 +328,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   host.appendChild(e('div', 'plot-empty', 'No protocol matches these filters.'));
   return;
   }
-  // The plot's own geometry: the SVG is drawn in CSS pixels, so a dot is round. The viewBox must
-  // be the box's own size, or the SVG is scaled to fit it and everything shrinks.
+  // The plot's own geometry: the SVG is drawn in CSS pixels, so a dot is round. The viewBox must be the box's own size, or the SVG is scaled to fit it and everything shrinks.
   var cs = getComputedStyle(document.querySelector('.plot-wrap'));
   var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
   var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
@@ -344,7 +345,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   var ns = 'http://www.w3.org/2000/svg';
   var svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-  // The viewBox scales UNIFORMLY: a dot is a circle, a label is not stretched.
+// The viewBox scales UNIFORMLY: a dot is a circle, a label is not stretched.
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', 'Implied value against launch odds for the filtered rows');
@@ -368,7 +369,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   add('line', { x1: padL, y1: H - padB, x2: W - padR, y2: H - padB, class: 'axis' });
   add('text', { x: padL - 8, y: H - 4, class: 'axis-title' }, 'Launch odds (chance it issues a token)');
   add('text', { x: 8, y: 11, class: 'axis-title' }, 'Implied value');
-  // The dots are a picture of the board, and the table below is the board: every row is reachable by keyboard there. So the dots are not tab stops -- 195 of them would put a reader through the whole scatter -- but the plot is one keyboard stop, walked with the arrow keys.
+// The dots are a picture of the board, and the table below is the board: every row is reachable by keyboard there. So the dots are not tab stops -- 195 of them would put a reader through the whole scatter -- but the plot is one keyboard stop, walked with the arrow keys.
   var dots = [];
   list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
   var c = add('circle', {
@@ -399,7 +400,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   h('h3', null, ['The board, plotted']),
   e('span', 'hint', 'Implied value against launch odds · dot size is TVL · click a dot for its detail')
   ]));
-  // The plot is one stop for a keyboard: focus it and the arrow keys walk the dots.
+// The plot is one stop for a keyboard: focus it and the arrow keys walk the dots.
   var plotBox = el('div', { class: 'plot', tabindex: '0', role: 'group',
   'aria-label': 'The board plotted: implied value against launch odds. Use the arrow keys to walk the rows.' });
   var dotAt = 0;
@@ -422,7 +423,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   function renderModel() {
   var host = into('view-model');
   var c = D.calibration;
-  // The three cards of the model page: a title, a figure, and a paragraph.
+// The three cards of the model page: a title, a figure, and a paragraph.
   function modelCard(title, big, note) {
   return h('div','card', [t('h3', title), big ? e('div', 'big', big) : null, el('p', { html: note })]);
   }
@@ -472,7 +473,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   curve.appendChild(bandsTable);
   host.appendChild(curve);
   var catCard = card('Category corrections', [t('p', D.copy.category_note)]);
-  // Every category the board uses, plus the ones the cohort never saw: those take the target.
+// Every category the board uses, plus the ones the cohort never saw: those take the target.
   var catRows = Object.keys(c.category_log).map(function (k) {
   return { k: k, v: c.category_log[k] };
   }).sort(function (a, b) { return b.v - a.v; });
@@ -489,7 +490,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   var missing = Object.keys(seen).filter(function (k) { return !(k in c.category_log); });    if (missing.length) catRow(missing.length + ' more the cohort never saw', c.category_default);
   catCard.appendChild(catTable);
   host.appendChild(catCard);
-  // The prose lives in the dataset, where its figures are interpolated from.
+// The prose lives in the dataset, where its figures are interpolated from.
   host.appendChild(card('What this is and is not', [
   el('div', { class: 'prose', html: D.copy.is_and_is_not })
   ]));
@@ -497,7 +498,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   function renderLive() {
   var host = into('view-live');
   host.appendChild(el('p', { class: 'live-note', html: D.copy.live_note }));
-  // The already-trading table sorts on its own columns: the market's figures, not the model's.
+// The already-trading table sorts on its own columns: the market's figures.
   var rows = sortedRows(D.live, LIVE_SORTS[liveSort.key] || LIVE_SORTS.mcap, liveSort.dir, byName);
   headCtx.sort = liveSort;
   headCtx.redraw = renderLive;
@@ -529,7 +530,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   });
   host.appendChild(h('div','table-wrap', [el('table', null, [head, body])]));
   }
-  // The controls are built once, then only their state changes: a filter that rebuilt itself took the reader's focus with it.
+// The controls are built once, then only their state changes: a filter that rebuilt itself took the reader's focus with it.
   var CTL = {};
   function buildControls() {
   var host = into('controls');
@@ -572,7 +573,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   }
   }));
   }
-  // The controls' state follows the board's state: a filter that says one thing and filters another is the worst kind of lie.
+// The controls' state follows the board's state: a filter that says one thing and filters another is the worst kind of lie.
   function updateControls() {
   if (!CTL.cat) return;
   CTL.search.value = state.q;
@@ -590,7 +591,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   }
   function categories() { return listOf(function (r) { return [r.category || 'Other']; }); }
   function chains() { return listOf(function (r) { return r.chains || []; }); }
-  // The three views are a tab set: a tablist, named panels, Left/Right between tabs. The tabs are built once, then only their state and counts change.
+// The three views are a tab set: a tablist, named panels, Left/Right between tabs. The tabs are built once, then only their state and counts change.
   var TAB_KEYS = ['board', 'live', 'model'];
   var TAB_LABELS = { board: 'Pre-token board', live: 'Already trading', model: 'The model' };
   function buildTabs() {
@@ -615,7 +616,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   ]));
   });
   }
-  // The counts are what the reader sees now: the board's filtered rows and the trading table's rows, so a badge never contradicts the table.
+// The counts are what the reader sees now: the board's filtered rows and the trading table's rows, so a badge never contradicts the table.
   function renderTabs() {
   var counts = { board: visibleRows().length, live: D.live.length, model: null };
   TAB_KEYS.forEach(function (key) {
@@ -628,7 +629,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   if (badge && counts[key] !== null) badge.textContent = String(counts[key]);
   });
   }
-  // The hero states what the tab under it shows, so it never contradicts the table.
+// The hero states what the tab under it shows, so it never contradicts the table.
   function renderHero() {
   var host = into('hero');
   var view = state.view;
@@ -665,18 +666,18 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   host.hidden = !notes.length;
   if (notes.length) host.appendChild(e('div', 'warn note', notes.join(' ')));
   }
-  // The bar's height depends on how its facts wrap, so the sticky offset is MEASURED.
+// The bar's height depends on how its facts wrap, so the sticky offset is measured.
   function sizeBar() {
   var bar = document.querySelector('.bar');
   if (bar) document.documentElement.style.setProperty('--bar-h', Math.round(bar.getBoundingClientRect().height) + 'px');
   }
-  // A sheet goes into the drawer and remembers which protocol it shows, so the Back button and the URL agree about what is open.
+// A sheet goes into the drawer and remembers which protocol it shows, so the Back button and the URL agree.
   function mountSheet(host, sheet, row) {
   sheet.setAttribute('data-slug', row.slug);
   host.appendChild(sheet);
   wireDrawer(host, sheet);
   }
-  // The drawer's wiring: backdrop click, Escape, focus.
+// The drawer's wiring: backdrop click, Escape, focus.
   function wireDrawer(host, sheet) {
   if (!host.dataset.wired) {
   host.dataset.wired = '1';
@@ -693,15 +694,22 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   clear(host);
   document.removeEventListener('keydown', escClose);
   document.removeEventListener('keydown', trapFocus);
+  var was = state.selected;
   state.selected = null;
   writeHash();
-  if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+  // Come back to where the reader was, if it is still on the page; else the row for the protocol that was open.
+  if (lastFocus && document.contains(lastFocus)) {
+    lastFocus.focus();
+  } else if (was) {
+    var back = document.querySelector('tr[data-slug="' + was + '"]');
+    if (back) back.focus();
+  }
   lastFocus = null;
   }
   function escClose(e) {
   if (e.key === 'Escape') closeDetail();
   }
-  // Focus containment: Tab cycles inside the drawer, not into the page behind.
+// Focus containment: Tab cycles inside the drawer, not into the page behind.
   function trapFocus(e) {
   if (e.key !== 'Tab') return;
   var sheet = document.querySelector('.sheet');
@@ -714,10 +722,10 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   else if (!sheet.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
   }
-  // The rows are keyboard-reachable; the trigger is passed so focus returns.
+// The rows are keyboard-reachable; the trigger is passed so focus returns.
   function rowAttrs(r) {
   return {
-  class: 'row', tabindex: '0',
+  class: 'row', tabindex: '0', 'data-slug': r.slug,
   onclick: function (e) { openDetail(r.slug, undefined, e.currentTarget); },
   onkeydown: function (e) {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.slug, undefined, e.currentTarget); }
@@ -725,7 +733,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   };
   }
   var lastFocus = null;
-  // Money to three significant figures, so the odds and the conditional value on a row multiply to the implied value the row shows.
+// Money to three significant figures, so the odds and the conditional value on a row multiply to the implied value the row shows.
   function money(n) {
   if (n === null || n === undefined) return '—';
   var a = Math.abs(n);
@@ -757,7 +765,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   function t(tag, text) {
   return el(tag, { text: text });
   }
-  // The commonest element on the page: a tag, a class and some text.
+// The commonest element on the page: a tag, a class and some text.
   function e(tag, cls, text) {
   return el(tag, { class: cls, text: text });
   }
@@ -795,7 +803,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   t('h3', title)
   ].concat(children));
   }
-  // The element a view is drawn into: found and emptied in one call, so a redraw leaves no old content.
+// The element a view is drawn into: found and emptied in one call, so a redraw leaves no old.
   function into(id) {
   return clear(document.getElementById(id));
   }
@@ -805,11 +813,11 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   }
   var VIEWS = ['board', 'live', 'model'];
   var state = { view: 'board', q: '', category: 'all', chain: 'all', scope: 'all', key: 'rank', dir: 1, selected: null };
-  // What a link asked for that the board does not have.
+// What a link asked for that the board does not have.
   var notes = [];
-  // The board changed: write the state to the URL, then redraw it, controls too.
+// The board changed: write the state to the URL, then redraw it.
   function refresh() { writeHash(); updateControls(); renderTabs(); renderTable(); renderPlot(); }
-  // A hash that will not decode is a broken link: reported, not guessed.
+// A hash that will not decode is a broken link, not a name.
   function dec(s) {
   try { return decodeURIComponent(s); } catch (e) { return null; }
   }
@@ -877,7 +885,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   function rowBySlug(slug) { return bySlug(D.rows, slug); }
   function liveBySlug(slug) { return bySlug(D.live, slug); }
   var COHORT = {};
-  // Without the dataset there is no board, but there is a page to read: say what is missing.
+// Without the dataset there is no board, but there is a page to read.
   function renderMissingData() {
   var main = document.getElementById('board');
   if (!main) return;
@@ -894,7 +902,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   renderHero();
   renderTabs();
   renderNote();
-  // One loop over the three views, so a fourth is a word, not a line.
+// One loop over the three views, so a fourth is a word, not a line.
   VIEWS.forEach(function (v) {
   document.getElementById('view-' + v).hidden = state.view !== v;
   });
@@ -903,7 +911,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   if (state.view === 'model') renderModel();
   var drawer = document.getElementById('drawer');
   if (state.selected) {
-  // The drawer follows the URL: Back to a protocol's own link must show THAT protocol.
+// The drawer follows the URL: Back must show THAT protocol.
   var shown = drawer.querySelector('.sheet');
   if (drawer.hidden || !shown || shown.getAttribute('data-slug') !== state.selected) {
   openDetail(state.selected, false);
@@ -915,13 +923,13 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   document.removeEventListener('keydown', trapFocus);
   }
   }
-  // The hash is read whenever it changes: a deep link works, Back closes the drawer.
+// The hash is read whenever it changes: a deep link works, Back closes the drawer.
   function onHashChange() {
   readHash();
   writeHash();
   render();
   }
-  // The already-trading table sorts on its own columns -- the market's own figures.
+// The already-trading table sorts on its own columns -- the market's own figures.
   var LIVE_SORTS = {
   name: function (r) { return r.name.toLowerCase(); },
   category: function (r) { return (r.category || '').toLowerCase(); },
@@ -931,20 +939,20 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   growth: function (r) { return typeof r.change_7d !== 'number' ? NaN : r.change_7d; }
   };
   var liveSort = { key: 'mcap', dir: -1 };
-  // One header serves both tables: it is given the sort state it drives and the redraw to make on a click. The sorted column says so to a screen reader.
+// One header serves both tables: it is given the sort state it drives and the redraw to make on a click. The sorted column says so to a screen reader.
   var headCtx = { sort: null, redraw: null };
-  // The lists the filters offer.
+// The lists the filters offer.
   function listOf(get) {
   var seen = {};
   D.rows.forEach(function (r) { get(r).forEach(function (v) { seen[v] = true; }); });
   return Object.keys(seen).sort();
   }
-  // A row of the board, or of the already-trading table, by slug.
+// A row of the board, or of the already-trading table, by slug.
   function bySlug(list, slug) {
   for (var i = 0; i < list.length; i++) if (list[i].slug === slug) return list[i];
   return null;
   }
-  // The hash is a wish, not a command: every name in it is checked against the lists.
+// The hash is a wish, not a command: every name is checked against the lists.
   var HASH = { p: 'selected', q: 'q', cat: 'category', chain: 'chain', scope: 'scope', view: 'view', sort: 'key' };
   var HASH_DEFAULT = { p: '', q: '', cat: 'all', chain: 'all', scope: 'all', view: 'board', sort: 'rank' };
   D.cohort.forEach(function (c) { COHORT[c.slug] = true; });
@@ -957,3 +965,4 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   window.addEventListener('hashchange', onHashChange);
   window.addEventListener('resize', sizeBar);
 })();
+

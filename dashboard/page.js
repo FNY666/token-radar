@@ -326,11 +326,12 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   host.appendChild(e('div', 'plot-empty', 'No protocol matches these filters.'));
   return;
   }
-  // The plot's own geometry: the SVG is drawn in CSS pixels, so a dot is round.
+  // The plot's own geometry: the SVG is drawn in CSS pixels, so a dot is round. The viewBox must
+  // be the box's own size, or the SVG is scaled to fit it and everything shrinks.
   var cs = getComputedStyle(document.querySelector('.plot-wrap'));
   var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
   var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
-  var H = 170, padL = 54, padR = 16, padT = 22, padB = 30;
+  var H = 150, padL = 54, padR = 16, padT = 22, padB = 30;
   var maxV = colExtreme(list, 'implied_value_usd', 'max');
   var logMin = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'min'), 1));
   var logMax = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'max'), 1));
@@ -367,7 +368,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   add('line', { x1: padL, y1: H - padB, x2: W - padR, y2: H - padB, class: 'axis' });
   add('text', { x: padL - 8, y: H - 4, class: 'axis-title' }, 'Launch odds (chance it issues a token)');
   add('text', { x: 8, y: 11, class: 'axis-title' }, 'Implied value');
-  // The dots are a picture of the board, and the table below is the board: every row is reachable by keyboard there. So the dots are not tab stops -- 195 of them would put a reader through the whole scatter -- but the plot is one keyboard stop, and its rows are walked with the arrow keys.
+  // The dots are a picture of the board, and the table below is the board: every row is reachable by keyboard there. So the dots are not tab stops -- 195 of them would put a reader through the whole scatter -- but the plot is one keyboard stop, walked with the arrow keys.
   var dots = [];
   list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
   var c = add('circle', {
@@ -398,7 +399,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   h('h3', null, ['The board, plotted']),
   e('span', 'hint', 'Implied value against launch odds · dot size is TVL · click a dot for its detail')
   ]));
-  // The plot is one stop for a keyboard: focus it and the arrow keys walk the dots, so a reader can read the scatter without tabbing through a hundred of them.
+  // The plot is one stop for a keyboard: focus it and the arrow keys walk the dots.
   var plotBox = el('div', { class: 'plot', tabindex: '0', role: 'group',
   'aria-label': 'The board plotted: implied value against launch odds. Use the arrow keys to walk the rows.' });
   var dotAt = 0;
@@ -528,7 +529,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   });
   host.appendChild(h('div','table-wrap', [el('table', null, [head, body])]));
   }
-  // The controls are built once, then only their state changes. A filter that rebuilt itself took the reader's focus with it: choosing a category threw the caret to the top of the page.
+  // The controls are built once, then only their state changes: a filter that rebuilt itself took the reader's focus with it.
   var CTL = {};
   function buildControls() {
   var host = into('controls');
@@ -589,7 +590,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   }
   function categories() { return listOf(function (r) { return [r.category || 'Other']; }); }
   function chains() { return listOf(function (r) { return r.chains || []; }); }
-  // The three views are a tab set: a tablist, named panels, Left/Right between tabs. The tabs are built once, then only their state and counts change, so clicking one keeps the reader's focus.
+  // The three views are a tab set: a tablist, named panels, Left/Right between tabs. The tabs are built once, then only their state and counts change.
   var TAB_KEYS = ['board', 'live', 'model'];
   var TAB_LABELS = { board: 'Pre-token board', live: 'Already trading', model: 'The model' };
   function buildTabs() {
@@ -614,7 +615,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   ]));
   });
   }
-  // The counts are what the reader sees now: the board's filtered rows and the trading table's rows, so a badge never contradicts the table under it.
+  // The counts are what the reader sees now: the board's filtered rows and the trading table's rows, so a badge never contradicts the table.
   function renderTabs() {
   var counts = { board: visibleRows().length, live: D.live.length, model: null };
   TAB_KEYS.forEach(function (key) {
@@ -724,7 +725,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   };
   }
   var lastFocus = null;
-  // Money to three significant figures, so the odds and the conditional value on a row multiply to the implied value the row shows: the reader can do the sum and get the answer.
+  // Money to three significant figures, so the odds and the conditional value on a row multiply to the implied value the row shows.
   function money(n) {
   if (n === null || n === undefined) return '—';
   var a = Math.abs(n);
@@ -930,7 +931,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   growth: function (r) { return typeof r.change_7d !== 'number' ? NaN : r.change_7d; }
   };
   var liveSort = { key: 'mcap', dir: -1 };
-  // One header serves both tables: it is given the sort state it drives and the redraw to make on a click. The sorted column says so to a screen reader: an arrow glyph is not an announcement.
+  // One header serves both tables: it is given the sort state it drives and the redraw to make on a click. The sorted column says so to a screen reader.
   var headCtx = { sort: null, redraw: null };
   // The lists the filters offer.
   function listOf(get) {

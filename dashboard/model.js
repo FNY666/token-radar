@@ -6,8 +6,6 @@
 //   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
 //                 product rows: rows with a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
-//
-// Every coefficient comes out of the cohort in the data.
 (function (global) {
   'use strict';
 
@@ -20,7 +18,6 @@
     var launch = fitLaunch(data.universe, data.as_of);
     var categories = fitCategories(data.cohort, beta);
     // The error of the model the board PRICES with: the line plus the category correction.
-    // Measured on the line alone, the card contradicted the formula card beneath it.
     var errors = data.cohort.map(function (p) {
       var x = valueRow(p.tvl_usd, p.change_7d);
       var cat = categories[p.category || '(none)'];
@@ -68,7 +65,7 @@
       return { x: valueRow(p.tvl_usd, p.change_7d), y: Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) };
     });
     // An empty cohort has no first row to read the design's width from, so the fit is given the
-    // width the design always has and a zero coefficient: the page still renders.
+    // width the design always has and a zero coefficient.
     if (data.length === 0) return new Array(valueRow(1, 0).length).fill(0);
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
@@ -170,8 +167,7 @@
     return p.mcap_usd !== null || p.gecko_id !== null;
   }
 
-  // Whether a protocol is a product of one that issued: a ticker, but no market cap or
-  // CoinGecko id of its own. Its family issued the token; this row did not.
+  // A product of one that issued: a ticker, but no market cap or CoinGecko id of its own.
   function isTokenProduct(p) {
     return p.symbol !== null && !issuedOwn(p);
   }
@@ -188,7 +184,7 @@
     return Math.max(-60, Math.min(120, g));
   }
 
-  // The band a number falls in: the first edge it has passed. Past the last edge is the last band.
+  // The band a number falls in: the first edge it has passed. Past the last edge is the last.
   function bandOf(edges, v) {
     for (var i = 0; i < edges.length; i++) {
       if (v < edges[i + 1]) return i;

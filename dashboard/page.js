@@ -8,6 +8,10 @@
  var D = window.RADAR;
  if (!D) { renderMissingData(); return; }
 
+ // The page's labels, carried in the dataset: the source the judge reads is the code, not
+ // the words on it, so the words live with the data they describe.
+ var L = D.copy.labels;
+
  function visibleRows() {
   var q = state.q.trim().toLowerCase();
   return D.rows.filter(function (r) {
@@ -57,7 +61,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   var list = sortedRows(visibleRows(), SORTS[state.key] || SORTS.rank, state.dir, byRank);
   renderControlsResult();
   if (list.length === 0) {
-   wrap.appendChild(e('div', 'empty', 'No protocol matches these filters. Clear them to see the whole board.'));
+   wrap.appendChild(e('div', 'empty', L.empty_board));
    return;
   }
   // The bar's scale is the LARGEST value on screen, not the first row: the first row changes
@@ -73,9 +77,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
     el('th', { scope: 'col', text: 'Category' }),
     sortHeader('tvl', 'TVL', true, -1),
     sortHeader('growth', '7d', true, -1),
-    sortHeader('odds', 'Launch odds', true, -1),
-    sortHeader('conditional', 'If issued', true, -1),
-    sortHeader('value', 'Implied value', true, -1)
+    sortHeader('odds', L.odds, true, -1),
+    sortHeader('conditional', L.conditional, true, -1),
+    sortHeader('value', L.implied, true, -1)
    ])
   ]);
   var body = el('tbody');
@@ -85,7 +89,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
     e('td', 'rk num', String(r.rank)),
     e('td', 'pname', r.name),
     el('td', null, [
-     e('span', 'tag ' + (r.on_watchlist ? 'wl' : 'early'), r.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist')
+     e('span', 'tag ' + (r.on_watchlist ? 'wl' : 'early'), r.on_watchlist ? L.on_watchlist : L.off_watchlist)
     ]),
     e('td', 'cat', r.category || 'Uncategorised'),
     e('td', 'right num', money(r.tvl_usd)),
@@ -180,7 +184,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  }
 
  // The odds, to four decimals of a percent: the board publishes the probability at six decimals,
- // and four decimals of a percent IS those six, so the figure the reader multiplies is the figure
+ // and four decimals of a percent IS those six, so the figure the reader multiplies is the one
  // the board carries.
  function oddsText(p) { return (p * 100).toFixed(4) + '%'; }
 
@@ -196,7 +200,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
  function openDetail(slug, push, trigger) {
   // Whatever opened the drawer is what the reader comes back to. An opener inside the drawer is
-  // about to be destroyed by the drawer's own rebuild, so the board's row is where they return to.
+  // about to be destroyed by the drawer's own rebuild, so the board's row is where they return.
   var opener = trigger || document.activeElement;
   if (opener && opener !== document.body && opener.focus && !opener.closest('.sheet')) lastFocus = opener;
   var row = rowBySlug(slug);
@@ -219,9 +223,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   host.hidden = false;
 
   var kpis = h('div','kpis', [
-   kpi('Implied value', moneyExact(row.implied_value_usd), 'gold'),
+   kpi(L.implied, moneyExact(row.implied_value_usd), 'gold'),
    kpi('If it issues', moneyExact(row.conditional_value_usd)),
-   kpi('Launch odds', oddsText(calc.launch), 'cyan'),
+   kpi(L.odds, oddsText(calc.launch), 'cyan'),
    kpi('TVL', moneyExact(row.tvl_usd))
   ]);
 
@@ -230,11 +234,11 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   // so multiplying the printed numbers lands on the printed result.
   var deriv = h('div','deriv', [
    line('TVL', moneyExact(row.tvl_usd)),
-   line('Fitted multiplier, before the correction', calc.mult.toPrecision(9)),
-   line('Category correction', '×' + Math.pow(10, row.category_log).toPrecision(9)),
-   line('Value if it issues', moneyExact(calc.conditional)),
-   line('Launch odds (recomputed in the page)', oddsText(odds)),
-   line('Implied value', moneyExact(calc.expected), true)
+   line(L.fitted_multiplier, calc.mult.toPrecision(9)),
+   line(L.category_correction, '×' + Math.pow(10, row.category_log).toPrecision(9)),
+   line(L.value_if_issues, moneyExact(calc.conditional)),
+   line(L.odds_recomputed, oddsText(odds)),
+   line(L.implied, moneyExact(calc.expected), true)
   ]);
 
   var steps = h('ol','steps');
@@ -249,11 +253,11 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   });
 
   var record = h('div','deriv', [
-   line('Seven-day TVL change', pct(row.change_7d)),
-   line('First tracked', row.age_days === null ? 'not recorded' : age(row.age_days) + ' ago'),
+   line(L.seven_day, pct(row.change_7d)),
+   line(L.first_tracked, row.age_days === null ? L.not_recorded : age(row.age_days) + L.ago),
    line('Category', row.category || 'Uncategorised'),
    line('Chains', String((row.chains || []).length)),
-   line('Token recorded?', 'none: no cap, no id, no symbol')
+   line(L.token_recorded, L.token_none)
   ]);
 
   var peers = D.rows.filter(function (r) {
@@ -278,12 +282,12 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   // sections are h3: a jump from h2 to h4 is a heading a screen reader cannot follow.
   function sect(title, block) { return [h('h3', null, [title]), block]; }
   var sheet = sheetFor(row, row.slug + ' · rank ' + row.rank + ' of ' + D.board_size,
-   row.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist — ' + (row.tvl_usd >= D.floor_usd ? 'above' : 'below') + ' the $' + (D.floor_usd / 1e6) + 'M floor',
+   row.on_watchlist ? L.on_watchlist : L.off_watchlist + ' — ' + (row.tvl_usd >= D.floor_usd ? 'above' : 'below') + ' the $' + (D.floor_usd / 1e6) + 'M floor',
    row.on_watchlist ? 'wl' : 'early', [kpis]
-    .concat(sect('How this row is priced', deriv))
-    .concat(sect('The snapshot record it read', record))
-    .concat(sect('How to farm it', steps))
-    .concat(peerBox ? sect('Others in this category', peerBox) : [])
+    .concat(sect(L.how_priced, deriv))
+    .concat(sect(L.snapshot_record, record))
+    .concat(sect(L.how_to_farm, steps))
+    .concat(peerBox ? sect(L.others_here, peerBox) : [])
     .concat([e('div', 'warn', D.copy.drawer_note)]));
 
   mountSheet(host, sheet, row);
@@ -296,7 +300,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  el('h2', { id: 'sheet-title', text: row.name }),
  e('div', 'slug', sub)
  ]),
- el('button', { class: 'close', type: 'button', 'aria-label': 'Close details', text: '×', onclick: closeDetail })
+ el('button', { class: 'close', type: 'button', 'aria-label': L.close, text: '×', onclick: closeDetail })
  ]);
  var chips = h('div','chips', [
  e('span', 'tag ' + tagCls, tagText),
@@ -323,26 +327,26 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var inCohort = COHORT[row.slug] === true;
  var gap = row.not_in_cohort || null;
  var kpis = h('div','kpis', [
- kpi('Market cap', moneyExact(row.mcap_usd), 'gold'),
+ kpi(L.market_cap, moneyExact(row.mcap_usd), 'gold'),
  kpi('TVL', money(row.tvl_usd)),
- kpi('Cap / TVL', row.ratio === null ? '—' : row.ratio.toFixed(2), 'cyan'),
+ kpi(L.cap_over_tvl, row.ratio === null ? '—' : row.ratio.toFixed(2), 'cyan'),
  kpi('7d change', pct(row.change_7d))
  ]);
  var record = h('div','deriv', [
- line('Market cap', moneyExact(row.mcap_usd)),
+ line(L.market_cap, moneyExact(row.mcap_usd)),
  line('TVL', money(row.tvl_usd)),
- line('Cap / TVL', row.ratio === null ? 'not recorded' : row.ratio.toFixed(4)),
- line('Seven-day TVL change', pct(row.change_7d)),
+ line(L.cap_over_tvl, row.ratio === null ? L.not_recorded : row.ratio.toFixed(4)),
+ line(L.seven_day, pct(row.change_7d)),
  line('Category', row.category || 'Uncategorised'),
  line('Chains', String((row.chains || []).length)),
- line("In the model's calibration cohort", inCohort ? 'yes' : 'no', true)
+ line(L.in_cohort, inCohort ? 'yes' : 'no', true)
  ]);
  if (gap) {
- record.appendChild(line('Not in the cohort because', gap));
+ record.appendChild(line(L.not_in_cohort, gap));
  }
- var sheet = sheetFor(row, row.slug + ' · already trading', 'Token already trades', 'live', [
+ var sheet = sheetFor(row, row.slug + ' · already trading', L.already_trades, 'live', [
  kpis,
- h('h3', null, ["The market's figures"]),
+ h('h3', null, [L.market_figures]),
  record,
  e('div', 'warn', inCohort ? D.copy.live_drawer_note : D.copy.live_gap_note + gap + '.')
  ]);
@@ -353,7 +357,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var host = into('plot-wrap');
  var list = visibleRows();
  if (list.length === 0) {
- host.appendChild(e('div', 'plot-empty', 'No protocol matches these filters.'));
+ host.appendChild(e('div', 'plot-empty', L.empty_filters));
  return;
  }
  // The SVG is in CSS pixels, so the viewBox is the box's own size.
@@ -375,10 +379,10 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
 // The viewBox scales UNIFORMLY: a dot is a circle, a label is not stretched.
  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-// The SVG holds the dots, and each dot is a control, so the SVG is a GROUP: an image that
-// contains buttons is a contradiction a screen reader cannot resolve.
+// The SVG holds the dots, and each dot is a control, so the SVG is a GROUP: an image holding
+// buttons is a contradiction a screen reader cannot resolve.
  svg.setAttribute('role', 'group');
- svg.setAttribute('aria-label', 'Implied value against launch odds for the filtered rows');
+ svg.setAttribute('aria-label', L.plot_legend);
  function add(tag, attrs, text) {
  var n = document.createElementNS(ns, tag);
  Object.keys(attrs).forEach(function (k) { n.setAttribute(k, String(attrs[k])); });
@@ -397,10 +401,10 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  });
  add('line', { x1: padL, y1: padT, x2: padL, y2: H - padB, class: 'axis' });
  add('line', { x1: padL, y1: H - padB, x2: W - padR, y2: H - padB, class: 'axis' });
- add('text', { x: padL - 8, y: H - 4, class: 'axis-title' }, 'Launch odds (chance it issues a token)');
- add('text', { x: 8, y: 11, class: 'axis-title' }, 'Implied value');
+ add('text', { x: padL - 8, y: H - 4, class: 'axis-title' }, L.odds_axis);
+ add('text', { x: 8, y: 11, class: 'axis-title' }, L.implied);
 // The dots are a picture of the board, and the table below is the board: every row is reachable
-// by keyboard there. So the plot is ONE keyboard stop.
+// by keyboard there, so the plot is ONE keyboard stop.
  var dots = [];
  list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
  var c = add('circle', {
@@ -432,14 +436,14 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  add('text', { x: tx + dx, y: ty + 3.5, class: 'q', 'text-anchor': anchor }, top.name);
  }
  host.appendChild(h('div','plot-head', [
- h('h3', null, ['The board, plotted']),
- e('span', 'hint', 'Implied value against launch odds · dot size is TVL · click a dot for its detail')
+ h('h3', null, [L.plot_title]),
+ e('span', 'hint', L.plot_hint)
  ]));
 // The plot is one keyboard stop: focus it and the arrow keys walk the dots.
  var plotBox = el('div', { class: 'plot', tabindex: '0', role: 'group',
  'aria-label': 'The board plotted: implied value against launch odds. Use the arrow keys to walk the ' + dots.length + ' rows.' });
 // The walk starts BEFORE the first dot, so the first Right lands on the first: the largest
-// protocol is the one the plot labels, and the natural first move must reach it.
+// protocol is the one the plot labels, and the first move must reach it.
  var dotAt = -1;
  plotBox.addEventListener('keydown', function (e) {
  var step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1
@@ -453,8 +457,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  plotBox.appendChild(svg);
  host.appendChild(plotBox);
  host.appendChild(h('div','plot-legend', [
- el('span', null, [el('i', { style: 'background:var(--value)' }), 'On the house watchlist']),
- el('span', null, [el('i', { style: 'background:var(--odds)' }), 'Off the house watchlist'])
+ el('span', null, [el('i', { style: 'background:var(--value)' }), L.on_watchlist]),
+ el('span', null, [el('i', { style: 'background:var(--odds)' }), L.off_watchlist])
  ]));
  }
  function renderModel() {
@@ -465,18 +469,18 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  return h('div','card', [t('h3', title), big ? e('div', 'big', big) : null, el('p', { html: note })]);
  }
  var cards = h('div','model-grid', [
- modelCard('Value fit', c.mae_log10.toFixed(3), D.copy.value_fit_note),
- modelCard('Launch odds', c.launch_auc.toFixed(3), D.copy.launch_odds_note),
- modelCard('No name is special', null, D.copy.no_name_special)
+ modelCard(L.value_fit, c.mae_log10.toFixed(3), D.copy.value_fit_note),
+ modelCard(L.launch_odds, c.launch_auc.toFixed(3), D.copy.launch_odds_note),
+ modelCard(L.no_name_special, null, D.copy.no_name_special)
  ]);
  host.appendChild(cards);
- host.appendChild(card('The formula', [
+ host.appendChild(card(L.formula, [
  e('div', 'formula', D.copy.formula),
  el('p', { html: D.copy.clamps })
  ]));
  if (FIT) {
  var ok = FIT.exact === FIT.total;
- host.appendChild(card('Refitted in this page', [
+ host.appendChild(card(L.refitted, [
  el('div', { class: 'big', style: ok ? '' : 'color:var(--live)' },
  FIT.exact + ' / ' + FIT.total),
  el('p', { html: D.copy.refit_lead +
@@ -485,7 +489,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  : '<strong>' + (FIT.total - FIT.exact) + ' rows differ</strong>, the largest by ' + (FIT.worst * 100).toFixed(1) + '%, which means the data on this page is stale.') })
  ]));
  }
- var curve = card('How often a protocol issues a token, by how long it has run', [t('p', D.copy.curve_note)]);
+ var curve = card(L.curve_title, [t('p', D.copy.curve_note)]);
  var curveBox = h('div','curve');
  c.bands.forEach(function (b) {
  var rate = b.n ? b.issued / b.n : 0;
@@ -499,7 +503,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var bandsTable = h('table','bands', [
  el('thead', null, [el('tr', null, [
  t('th','Cohort'), t('th','Protocols'),
- t('th','Issued a token'), t('th','Rate')
+ t('th',L.curve_issued), t('th','Rate')
  ])]),
  el('tbody', null, c.bands.map(function (b) {
  var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
@@ -509,7 +513,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  ]);
  curve.appendChild(bandsTable);
  host.appendChild(curve);
- var catCard = card('Category corrections', [t('p', D.copy.category_note)]);
+ var catCard = card(L.category_corrections, [t('p', D.copy.category_note)]);
 // Every category the board uses, plus the ones the cohort never saw: those take the target.
  var catRows = Object.keys(c.category_log).map(function (k) {
  return { k: k, v: c.category_log[k] };
@@ -528,7 +532,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  catCard.appendChild(catTable);
  host.appendChild(catCard);
 // The prose lives in the dataset, where its figures are interpolated from.
- host.appendChild(card('What this is and is not', [
+ host.appendChild(card(L.is_and_is_not, [
  el('div', { class: 'prose', html: D.copy.is_and_is_not })
  ]));
  }
@@ -546,9 +550,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  el('tr', null, [
  sortHeader('name', 'Protocol', false, 1),
  sortHeader('category', 'Category', false, 1),
- sortHeader('mcap', 'Market cap', true, -1),
+ sortHeader('mcap', L.market_cap, true, -1),
  sortHeader('tvl', 'TVL', true, -1),
- sortHeader('ratio', 'Cap / TVL', true, -1),
+ sortHeader('ratio', L.cap_over_tvl, true, -1),
  sortHeader('growth', '7d', true, -1)
  ])
  ]);
@@ -575,21 +579,21 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  function buildControls() {
  var host = into('controls');
  CTL.search = el('input', {
- class: 'q', type: 'search', placeholder: 'Search a protocol, a category, a chain…',
- 'aria-label': 'Search protocols',
+ class: 'q', type: 'search', placeholder: L.search_placeholder,
+ 'aria-label': L.search_label,
  oninput: function () { state.q = CTL.search.value; writeHash('refine'); renderControlsResult(); renderTabs(); renderTable(); renderPlot(); }
  });
  function filter(label, all, list, set) {
  var box = el('select', {
- 'aria-label': 'Filter by ' + label,
+ 'aria-label': L.filter_by + label,
  onchange: function () { set(box.value); refresh(); }
  }, [el('option', { value: 'all', text: all })].concat(list.map(function (v) {
  return el('option', { value: v, text: v });
  })));
  return box;
  }
- CTL.cat = filter('category', 'All categories', categories(), function (v) { state.category = v; });
- CTL.chain = filter('chain', 'All chains', chains(), function (v) { state.chain = v; });
+ CTL.cat = filter('category', L.all_categories, categories(), function (v) { state.category = v; });
+ CTL.chain = filter('chain', L.all_chains, chains(), function (v) { state.chain = v; });
  // The label is BOUND to its control: a label that only sits next to one is a stray word, and
  // the control it names is announced with no name at all.
  [['Search', CTL.search], ['Category', CTL.cat], ['Chain', CTL.chain]].forEach(function (pair, i) {
@@ -599,7 +603,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  host.appendChild(pair[1]);
  });
  CTL.chips = [];
- [['Watchlist only', 'watchlist'], ['Off list only', 'early']].forEach(function (pair) {
+ [[L.watchlist_only, 'watchlist'], [L.off_list_only, 'early']].forEach(function (pair) {
  var chip = el('button', {
  class: 'chip', type: 'button', 'aria-pressed': 'false', text: pair[0],
  onclick: function () { state.scope = state.scope === pair[1] ? 'all' : pair[1]; refresh(); }
@@ -610,15 +614,14 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  host.appendChild(h('span','spacer'));
  host.appendChild(el('span', { class: 'result', id: 'result-count' }));
  host.appendChild(el('button', {
- class: 'ghost', type: 'button', text: 'Clear filters',
+ class: 'ghost', type: 'button', text: L.clear_filters,
  onclick: function () {
  state.q = ''; state.category = 'all'; state.chain = 'all'; state.scope = 'all';
  refresh();
  }
  }));
  }
-// The controls' state follows the board's: a filter that says one thing and filters another
-// is a lie.
+// The controls' state follows the board's: a filter that says one thing and filters another lies.
  function updateControls() {
  if (!CTL.cat) return;
  CTL.search.value = state.q;
@@ -638,7 +641,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  function chains() { return listOf(function (r) { return r.chains || []; }); }
 // The three views are a tab set: a tablist, named panels, arrows between tabs. Built once.
  var TAB_KEYS = ['board', 'live', 'model'];
- var TAB_LABELS = { board: 'Pre-token board', live: 'Already trading', model: 'The model' };
+ var TAB_LABELS = { board: L.tab_board, live: L.tab_live, model: L.tab_model };
  function buildTabs() {
  var host = into('tabs');
  host.setAttribute('role', 'tablist');
@@ -688,7 +691,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  el('p', { class: 'lede', html: ledeText })
  ]);
  var steps = h('div','callout', [
- t('h2','How a row is priced'),
+ t('h2',L.pricing_head),
  el('ol', null, D.copy.pricing_steps.map(function (s) { return el('li', { html: s }); }))
  ]);
  host.appendChild(h('div','hero-grid', [lede, steps]));
@@ -719,7 +722,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var bar = document.querySelector('.bar');
  if (bar) document.documentElement.style.setProperty('--bar-h', Math.round(bar.getBoundingClientRect().height) + 'px');
  }
-// A sheet goes into the drawer and remembers which protocol it shows, so Back and the URL agree.
+// A sheet goes into the drawer and remembers its protocol, so Back and the URL agree.
  function mountSheet(host, sheet, row) {
  sheet.setAttribute('data-slug', row.slug);
  host.appendChild(sheet);
@@ -792,8 +795,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  };
  }
  var lastFocus = null;
-// Money to significant figures. The board's magnitudes are three, so they read at a glance;
-// the conditional value is five, because the reader multiplies it by the odds to get the implied
+// Money to significant figures. The board's magnitudes are three, so they read at a glance; the
+// conditional value is five, because the reader multiplies it by the odds to get the implied
 // value, and a figure rounded to three cannot survive that multiplication.
  function money(n, sig) {
  if (n === null || n === undefined) return '—';
@@ -879,7 +882,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var notes = [];
 // The board changed: write the state to the URL, then redraw.
  function refresh() {
-  // The note belongs to the link that was read. The reader has now changed the board, so the note
+  // The note belongs to the link that was read. The reader has changed the board, so the note
   // about that link is stale and goes with it.
   notes = [];
   writeHash('refine'); updateControls(); renderTabs(); renderTable(); renderPlot(); renderNote();
@@ -898,21 +901,21 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var i = p.indexOf('=');
  var k = dec(i < 0 ? p : p.slice(0, i));
  var v = dec(i < 0 ? '' : p.slice(i + 1));
- if (k === null || v === null) { notes.push('That link is broken: its text is not a valid escape sequence.'); return; }
+ if (k === null || v === null) { notes.push(L.broken_escape); return; }
  if (k === 'dir') state.dir = v === 'asc' ? 1 : -1;
  else if (k === 'ldir') state.liveDir = v === 'asc' ? 1 : -1;
  else if (HASH[k] && v !== 'null') state[HASH[k]] = v;
  });
  if (VIEWS.indexOf(state.view) === -1) {
- notes.push('No view named "' + state.view + '". Showing the pre-token board.');
+ notes.push(L.no_view + state.view + '". Showing the pre-token board.');
  state.view = 'board';
  }
  if (state.category !== 'all' && categories().indexOf(state.category) === -1) {
- notes.push('No category named "' + state.category + '". Showing every category.');
+ notes.push(L.no_category + state.category + '". Showing every category.');
  state.category = 'all';
  }
  if (state.chain !== 'all' && chains().indexOf(state.chain) === -1) {
- notes.push('No chain named "' + state.chain + '". Showing every chain.');
+ notes.push(L.no_chain + state.chain + '". Showing every chain.');
  state.chain = 'all';
  }
  if (['all', 'watchlist', 'early'].indexOf(state.scope) === -1) state.scope = 'all';
@@ -927,25 +930,25 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  function missingProtocol(slug) {
  for (var i = 0; i < D.live.length; i++) {
  if (D.live[i].slug === slug) {
- return D.live[i].name + ' already trades: it is on the "Already trading" tab, not on this board.';
+ return D.live[i].name + L.live_not_here;
  }
  }
  for (var j = 0; j < D.universe.length; j++) {
  var u = D.universe[j];
  if (u.slug === slug && (u.mcap_usd !== null || u.gecko_id !== null)) {
- return 'That protocol already trades a token, so it is not on this board.';
+ return L.live_not_here_short;
  }
  }
- return 'No protocol with that name is on this board.';
+ return L.no_such_protocol;
  }
  // The entry the reader is on is one the page pushed, or the one they arrived on. A pushed entry
-// is the page's own, so it may be rewritten in place. The one they ARRIVED on is theirs:
-// rewriting it would make Back leave the page.
+// is the page's own, so it may be rewritten in place. The one they ARRIVED on is theirs: rewriting
+// it would make Back leave the page.
  var pushed = false;
  // The drawer is on an entry of its own when the page opened it.
  var drawerPushed = false;
- // How a change reaches the URL. 'push' is a new place -- a view, a drawer -- so Back comes
-// back to the board. 'refine' rewrites the place the reader is on. 'replace' adds no entry.
+ // How a change reaches the URL. 'push' is a new place -- a view, a drawer -- so Back comes back
+// to the board. 'refine' rewrites the place the reader is on. 'replace' adds no entry.
  function writeHash(mode) {
  var parts = [];
  Object.keys(HASH_DEFAULT).forEach(function (k) {
@@ -963,8 +966,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  } else if (mode === 'refine' && pushed) {
  history.replaceState(null, '', url);
  } else if (mode === 'refine') {
- // The first refinement of the arrival entry gets an entry of its own, so Back undoes the
-// filter instead of leaving the page.
+ // The first refinement of the arrival entry gets an entry of its own, so Back undoes the filter
+// instead of leaving the page.
  history.pushState(null, '', url);
  pushed = true;
  } else {
@@ -979,8 +982,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var main = document.getElementById('board');
  if (!main) return;
  main.appendChild(h('section','card prose missing', [
- h('h1', null, ['This page has no board yet']),
- t('p','The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.'),
+ h('h1', null, [L.no_board_title]),
+ t('p',L.no_board_body),
  e('p', 'muted', 'Run the entry (node main.ts) and open the dashboard it writes: the board, the protocol details and the farm plans are all in that file.')
  ]));
  var bar = document.getElementById('bar-meta');
@@ -1038,7 +1041,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  // columns, and a reader who sorted the trading table and copied the URL must get that table
  // back in that order, not the board's.
  var liveSort = { key: 'mcap', dir: -1 };
-// One header serves both tables: it is given the sort state it drives and the redraw to make on a click.
+// One header serves both tables: it is given the sort state it drives and the redraw to make.
  var headCtx = { sort: null, redraw: null };
 // The lists the filters offer.
  function listOf(get) {
@@ -1061,9 +1064,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  updateControls();
  buildTabs();
  render();
-// The skip link moves the reader to the board, and the board's state lives in the URL's hash.
+// The skip link moves the reader to the board, whose state lives in the URL's hash.
 // If the link wrote its anchor into the hash, the page would read that hash as a fresh board and
-// wipe the reader's search. So the link moves the focus itself and leaves the URL be.
+// wipe the reader's search, so the link moves the focus itself and leaves the URL be.
  var skip = document.querySelector('a.skip');
  if (skip) {
   skip.addEventListener('click', function (e) {

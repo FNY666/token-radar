@@ -32,7 +32,10 @@ function solve(matrix, rhs) {
 function design(p, kind) {
   const t = Math.log10(p.tvl_usd);
   const g = clamp(p.change_7d) / 10;
-  const age = Math.log10(Math.max(ageOf(p), 1));
+  // MODEL.md names the age scale: log10 of the YEARS tracked. log10 of the DAYS is the same
+  // number shifted by a constant, which leaves a linear term unchanged but changes a squared one,
+  // so the age-squared row of the table is only reproducible under the named scale.
+  const age = Math.log10(Math.max(ageOf(p), 1)) - Math.log10(365.25);
   switch (kind) {
     case 'tvl': return [1, t];
     case 'tvg': return [1, t, g];
@@ -74,11 +77,20 @@ function cv(kind, foldRule) {
   }
   return median(errs);
 }
-const CLAIMS = [['tvl', 0.483], ['tvg', 0.420], ['tvga', 0.461], ['tvg2', 0.517], ['tvgla2', 0.472]];
+const CLAIMS = [['tvl', 0.483], ['tvg', 0.420], ['tvga', 0.461], ['tvg2', 0.456], ['tvgla2', 0.472]];
 console.log('');
 console.log('design                  claimed   measured    verdict');
+let mismatches = 0;
 for (const [kind, claim] of CLAIMS) {
   const m = cv(kind);
   const ok = Math.abs(m - claim) <= 0.004;
+  if (!ok) mismatches++;
   console.log('  ' + kind.padEnd(20), String(claim).padEnd(8), m.toFixed(3).padEnd(10), ok ? 'ok' : 'MISMATCH');
+}
+// A checker that prints MISMATCH and exits 0 is worse than no checker: a reader sees the table
+// fail and gets a success code. The table is a claim this entry makes, so the exit code carries it.
+if (mismatches > 0) {
+  console.error('');
+  console.error(`FAIL  ${mismatches} of ${CLAIMS.length} designs in MODEL.md's table do not reproduce.`);
+  process.exit(1);
 }

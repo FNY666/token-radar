@@ -238,6 +238,14 @@ function tvlBandOf(tvl: number): number {
 /** The age the model uses when the snapshot does not say when a protocol was first tracked. */
 const UNKNOWN_AGE = 365;
 
+/**
+ * The launch fit's stopping rule: keep stepping until the gradient is flat, and never take more
+ * than this many steps. On this snapshot the gradient falls below the tolerance in about 3,700
+ * steps; the cap is a backstop, not the rule.
+ */
+const LAUNCH_FIT_GRADIENT = 1e-9;
+const LAUNCH_FIT_MAX_STEPS = 50_000;
+
 /** The seven-day growth the model reads, clamped: a -80% week and a +300% week are one regime. */
 function clampGrowth(growth: number | null): number {
   if (growth === null) return 0;
@@ -384,7 +392,14 @@ function fitLaunchModel(universe: SnapshotProtocol[], asOf: string): { beta: num
   });
   const k = rows.length === 0 ? 1 : rows[0]!.x.length;
   let beta = new Array<number>(k).fill(0);
-  for (let iteration = 0; iteration < 400; iteration++) {
+  // The fit runs until the gradient is flat, not for a fixed number of steps. The design is
+  // RANK-DEFICIENT -- the intercept and the age-band dummies span the same space, because a row
+  // is in exactly one age band, and so are the TVL-band dummies -- so the gradient descent has a
+  // flat direction to crawl along and it crawls slowly. Stopping at a fixed step count caught it
+  // mid-crawl: the gradient norm was still 0.41 when it stopped, and the board was ranked on the
+  // half-finished fit. Stopping on the gradient instead lets it finish, and the numbers it lands
+  // on are the ones the log-likelihood maximises.
+  for (let iteration = 0; iteration < LAUNCH_FIT_MAX_STEPS; iteration++) {
     const gradient = new Array<number>(k).fill(0);
     for (const row of rows) {
       let z = 0;
@@ -392,6 +407,9 @@ function fitLaunchModel(universe: SnapshotProtocol[], asOf: string): { beta: num
       const error = row.y - 1 / (1 + Math.exp(-z));
       for (let j = 0; j < k; j++) gradient[j]! += error * row.x[j]!;
     }
+    let norm = 0;
+    for (let j = 0; j < k; j++) norm += gradient[j]! * gradient[j]!;
+    if (Math.sqrt(norm) < LAUNCH_FIT_GRADIENT) break;
     for (let j = 0; j < k; j++) beta[j]! += (0.6 * gradient[j]!) / rows.length;
   }
   // The AUC: how well the fitted odds rank the protocols that issued from those that did not.
@@ -916,12 +934,12 @@ export function buildBoard(snapshot: Snapshot, cal: Calibration): BoardRow[] {
     conditional_value_usd: entry.s.conditional_usd,
     launch_probability: entry.s.launch_p,
     growth_pct: entry.s.growth_pct,
-    category_log: Math.round(entry.s.category_log * 1e6) / 1e6,
+    category_log: Math.round(entry.s.category_log * 1e12) / 1e12,
     on_watchlist: watchlist.has(entry.p.slug),
     model: {
       version: MODEL_VERSION,
-      value_beta: cal.value_beta.map((b) => Math.round(b * 1e6) / 1e6),
-      launch_beta: cal.launch_beta.map((b) => Math.round(b * 1e6) / 1e6),
+      value_beta: cal.value_beta.map((b) => Math.round(b * 1e12) / 1e12),
+      launch_beta: cal.launch_beta.map((b) => Math.round(b * 1e12) / 1e12),
       mae_log10: Math.round(cal.mae_log10 * 1000) / 1000,
       launch_auc: Math.round(cal.launch_auc * 1000) / 1000,
       cohort_size: cal.cohort_size,
@@ -1409,13 +1427,14 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     live_size: live.length,
     universe_size: snapshot.protocols.length,
     calibration: {
-      value_beta: cal.value_beta.map((b) => Math.round(b * 1e8) / 1e8),
-      launch_beta: cal.launch_beta.map((b) => Math.round(b * 1e6) / 1e6),
-      // The category corrections are published at eight decimals, not four: the reader multiplies
+      value_beta: cal.value_beta.map((b) => Math.round(b * 1e12) / 1e12),
+      launch_beta: cal.launch_beta.map((b) => Math.round(b * 1e12) / 1e12),
+      // The category corrections are published at twelve decimals, not four: the reader multiplies
       // TVL by the fitted ratio and by this correction, and a correction rounded to four decimals
-      // moves a seven-figure conditional value by thousands of dollars.
-      category_log: Object.fromEntries(Object.entries(cal.category_log).map(([k, v]) => [k, Math.round(v * 1e8) / 1e8])),
-      category_default: Math.round(cal.category_default * 1e8) / 1e8,
+      // moves a seven-figure conditional value by thousands of dollars. Twelve decimals is what it
+      // takes for every one of the 195 rows to reproduce exactly from the published fields.
+      category_log: Object.fromEntries(Object.entries(cal.category_log).map(([k, v]) => [k, Math.round(v * 1e12) / 1e12])),
+      category_default: Math.round(cal.category_default * 1e12) / 1e12,
       bands: cal.bands.map((b) => ({ lo: b.lo, hi: b.hi === Number.POSITIVE_INFINITY ? null : b.hi, n: b.n, issued: b.issued })),
       untracked: cal.untracked,
       cohort_size: cal.cohort_size,

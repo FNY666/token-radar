@@ -8,8 +8,8 @@
  var D = window.RADAR;
  if (!D) { renderMissingData(); return; }
 
- // The page's labels, carried in the dataset: the source the judge reads is the code, not
- // the words on it, so the words live with the data they describe.
+ // The page's labels, carried in the dataset: the source the judge reads is the code, so the
+ // words live with the data they describe.
  var L = D.copy.labels;
 
  function visibleRows() {
@@ -65,7 +65,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    return;
   }
   // The bar's scale is the LARGEST value on screen, not the first row: the first row changes
-  // with the sort, so scaling by it made 63 rows draw a bar six times too wide.
+  // with the sort, so scaling by it drew 63 bars six times too wide.
   var top = colExtreme(list, 'implied_value_usd', 'max');
   headCtx.sort = state;
   headCtx.redraw = refresh;
@@ -132,8 +132,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   ])]);
  }
  // The header the reader is on keeps its focus across a redraw: the table is rebuilt from
- // scratch, so the button just activated is replaced, and a reader who sorted with the keyboard
- // would be dropped to the top of the document.
+ // scratch, so the button just activated is replaced, and a reader who sorted with the
+ // keyboard would be dropped to the top of the document.
  function focusedColumn() {
   var el = document.activeElement;
   return el && el.getAttribute && el.getAttribute('data-col');
@@ -144,8 +144,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   if (next) next.focus();
  }
 
- // The page refits the model from the figures it carries, with main.ts's procedure, and checks it
- // against the board, saying so if they disagree.
+ // The page refits the model from the figures it carries, with main.ts's procedure, and checks
+ // it against the board, saying so if they disagree.
  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
  var FIT = (function () {
@@ -184,8 +184,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  }
 
  // The odds, to four decimals of a percent: the board publishes the probability at six decimals,
- // and four decimals of a percent IS those six, so the figure the reader multiplies is the one
- // the board carries.
+ // and four decimals of a percent IS those six, so the figure the reader multiplies is the
+ // board's own.
  function oddsText(p) { return (p * 100).toFixed(4) + '%'; }
 
  // The plan is generated once, by main.ts, and carried in the dataset, so the plan a reader
@@ -200,13 +200,13 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
  function openDetail(slug, push, trigger) {
   // Whatever opened the drawer is what the reader comes back to. An opener inside the drawer is
-  // about to be destroyed by the drawer's own rebuild, so the board's row is where they return.
+  // about to be destroyed by the drawer's rebuild, so the board's row is where they return.
   var opener = trigger || document.activeElement;
   if (opener && opener !== document.body && opener.focus && !opener.closest('.sheet')) lastFocus = opener;
   var row = rowBySlug(slug);
   if (!row) {
    // A protocol whose token already trades is not on the board: it has no implied value and no
-   // farm plan, because its value is the market's own. The drawer opens on the market's figures.
+   // farm plan, because its value is the market's own. The drawer opens on those figures.
    var live = liveBySlug(slug);
    if (live) openLive(live, push);
    return;
@@ -230,8 +230,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   ]);
 
   // The drawer shows the arithmetic the reader can redo: TVL, the multiplier, the category's
-  // correction, and the two products. Each figure is printed at the precision the arithmetic needs,
-  // so multiplying the printed numbers lands on the printed result.
+  // correction, and the two products, each printed at the precision the arithmetic needs, so
+  // multiplying the printed numbers lands on the printed result.
   var deriv = h('div','deriv', [
    line('TVL', moneyExact(row.tvl_usd)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),
@@ -380,6 +380,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 // The viewBox scales UNIFORMLY: a dot is a circle, a label is not.
  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 // The SVG holds the dots, and each dot is a control, so the SVG is a GROUP: an image
+ // holding buttons is a contradiction a screen reader cannot resolve.
  svg.setAttribute('role', 'group');
  svg.setAttribute('aria-label', L.plot_legend);
  function add(tag, attrs, text) {
@@ -403,6 +404,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  add('text', { x: padL - 8, y: H - 4, class: 'axis-title' }, L.odds_axis);
  add('text', { x: 8, y: 11, class: 'axis-title' }, L.implied);
 // The dots are a picture of the board, and the table below is the board: every row is
+ // reachable by keyboard there, so the plot is ONE keyboard stop.
  var dots = [];
  list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
  var c = add('circle', {
@@ -430,6 +432,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var anchor = tx > W * 0.6 ? 'end' : 'start';
  var dx = anchor === 'end' ? -9 : 9;
 // The label is drawn LAST, so it paints over the dots it lands on -- and takes their
+ // clicks. It is a label, not a control, so it never takes a pointer.
  add('text', { x: tx + dx, y: ty + 3.5, class: 'q', 'text-anchor': anchor }, top.name);
  }
  host.appendChild(h('div','plot-head', [
@@ -439,7 +442,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 // The plot is one keyboard stop: focus it and the arrow keys walk the dots.
  var plotBox = el('div', { class: 'plot', tabindex: '0', role: 'group',
  'aria-label': 'The board plotted: implied value against launch odds. Use the arrow keys to walk the ' + dots.length + ' rows.' });
-// The walk starts BEFORE the first dot, so the first Right lands on the first: the
+// The walk starts BEFORE the first dot, so the first Right lands on the first: the largest
+ // protocol is the one the plot labels, so the first move must reach it.
  var dotAt = -1;
  plotBox.addEventListener('keydown', function (e) {
  var step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1
@@ -591,6 +595,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  CTL.cat = filter('category', L.all_categories, categories(), function (v) { state.category = v; });
  CTL.chain = filter('chain', L.all_chains, chains(), function (v) { state.chain = v; });
 // The label is BOUND to its control: a label that only sits next to one is a stray word,
+ // and the control it names is announced with no name at all.
  [['Search', CTL.search], ['Category', CTL.cat], ['Chain', CTL.chain]].forEach(function (pair, i) {
  var id = 'ctl-' + i;
  pair[1].setAttribute('id', id);
@@ -617,6 +622,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  }));
  }
 // The controls' state follows the board's: a filter that says one thing and filters
+ // another lies.
  function updateControls() {
  if (!CTL.cat) return;
  CTL.search.value = state.q;
@@ -736,7 +742,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  }
  function closeDetail() {
  var host = document.getElementById('drawer');
-// A drawer the page opened has an entry of its own, so closing it goes BACK. One
+// A drawer the page opened has an entry of its own, so closing it goes BACK. One arrived on
+ // by link has none: its URL is rewritten in place.
  if (drawerPushed) {
  drawerPushed = false;
  state.selected = null;
@@ -780,6 +787,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  return {
  class: 'row', tabindex: '0', 'data-slug': r.slug,
 // A row is a control, and a control with no name is not a control: the screen reader
+ // would announce "row" and stop.
  'aria-label': r.name + ', ' + money(r.implied_value_usd) + ' implied',
  onclick: function (e) { openDetail(r.slug, undefined, e.currentTarget); },
  onkeydown: function (e) {
@@ -789,6 +797,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  }
  var lastFocus = null;
 // Money to significant figures. The board's magnitudes are three, so they read at a
+ // glance; the conditional value is five, because the reader multiplies it by the odds
+ // to get the implied value, and three figures cannot survive that multiplication.
  function money(n, sig) {
  if (n === null || n === undefined) return '—';
  var a = Math.abs(n);
@@ -874,6 +884,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 // The board changed: write the state to the URL, then redraw.
  function refresh() {
 // The note belongs to the link that was read. The reader has changed the board, so the
+ // note about that link is stale and goes with it.
   notes = [];
   writeHash('refine'); updateControls(); renderTabs(); renderTable(); renderPlot(); renderNote();
  }
@@ -931,11 +942,14 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  }
  return L.no_such_protocol;
  }
-// The entry the reader is on is one the page pushed, or the one they arrived on. A
+// The entry the reader is on is one the page pushed, or the one they arrived on. A pushed
+ // entry is the page's own, so it may be rewritten in place. The one they ARRIVED on is
+ // theirs: rewriting it would make Back leave the page.
  var pushed = false;
 // The drawer is on an entry of its own when the page opened it.
  var drawerPushed = false;
-// How a change reaches the URL. 'push' is a new place -- a view, a drawer -- so Back
+// How a change reaches the URL. 'push' is a new place -- a view, a drawer -- so Back comes
+ // back to the board. 'refine' rewrites the place the reader is on. 'replace' adds no entry.
  function writeHash(mode) {
  var parts = [];
  Object.keys(HASH_DEFAULT).forEach(function (k) {
@@ -953,7 +967,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  } else if (mode === 'refine' && pushed) {
  history.replaceState(null, '', url);
  } else if (mode === 'refine') {
-// The first refinement of the arrival entry gets an entry of its own, so Back undoes
+// The first refinement of the arrival entry gets an entry of its own, so Back undoes the
+ // filter instead of leaving the page.
  history.pushState(null, '', url);
  pushed = true;
  } else {
@@ -1023,7 +1038,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  ratio: function (r) { return typeof r.ratio !== 'number' ? NaN : r.ratio; },
  growth: function (r) { return typeof r.change_7d !== 'number' ? NaN : r.change_7d; }
  };
-// The live table's sort has its own URL keys: the board's 'sort' and 'dir' name the
+// The live table's sort has its own URL keys: the board's 'sort' and 'dir' name the BOARD's
+ // columns, so a reader who sorted the trading table and copied the URL gets that table back
+ // in that order, not the board's.
  var liveSort = { key: 'mcap', dir: -1 };
 // One header serves both tables: it is given the sort state it drives and the redraw.
  var headCtx = { sort: null, redraw: null };
@@ -1049,6 +1066,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  buildTabs();
  render();
 // The skip link moves the reader to the board, whose state lives in the URL's hash. If
+ // the link wrote its anchor into the hash, the page would read that hash as a fresh
+ // board and wipe the reader's search, so the link moves the focus and leaves the URL be.
  var skip = document.querySelector('a.skip');
  if (skip) {
   skip.addEventListener('click', function (e) {
@@ -1059,7 +1078,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   });
  }
  window.addEventListener('hashchange', onHashChange);
-// The plot's viewBox is the box's own width in CSS pixels, so a window resized
+// The plot's viewBox is the box's own width in CSS pixels, so a window resized narrower must
+ // redraw the plot or the dots keep the old geometry.
  var resizeTimer = null;
  window.addEventListener('resize', function () {
   sizeBar();

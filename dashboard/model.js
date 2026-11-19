@@ -99,13 +99,19 @@
     if (data.length === 0) return { beta: new Array(launchRow(1, 0, 365).length).fill(0), auc: 0.5 };
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
-    for (var it = 0; it < 400; it++) {
+    // The fit runs until the gradient is flat. The design is rank-deficient -- the intercept and
+    // the band dummies span the same space -- so a fixed step count catches it mid-crawl, and the
+    // board would then be ranked on a half-finished fit.
+    for (var it = 0; it < 50000; it++) {
       var gradient = new Array(k).fill(0);
       data.forEach(function (row) {
         var error = row.y - 1 / (1 + Math.exp(-dot(beta, row.x)));
         for (var i = 0; i < k; i++) gradient[i] += error * row.x[i];
       });
-      for (var g = 0; g < k; g++) beta[g] += (0.6 * gradient[g]) / data.length;
+      var norm = 0;
+      for (var g = 0; g < k; g++) norm += gradient[g] * gradient[g];
+      if (Math.sqrt(norm) < 1e-9) break;
+      for (var g2 = 0; g2 < k; g2++) beta[g2] += (0.6 * gradient[g2]) / data.length;
     }
       var pos = data.filter(function (r) { return r.y === 1; });
     var neg = data.filter(function (r) { return r.y === 0; });

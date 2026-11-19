@@ -119,7 +119,7 @@ old, which is what the fit assumes for them, so the column adds up to the fit's 
 | 730–1460 days | 63 | 33 | 52.4% |
 | 1460+ days | 20 | 15 | 75.0% |
 
-The fitted model's **AUC on that universe is 0.754** — it separates the protocols that issued from
+The fitted model's **AUC on that universe is 0.753** — it separates the protocols that issued from
 those that did not better than chance, and the dashboard reports that number rather than asking to be
 taken on trust. The correction raised the AUC from 0.735: a model trained on the wrong labels was
 being asked to fit a relationship that was not there.

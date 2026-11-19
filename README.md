@@ -32,7 +32,7 @@ least squares fits log(market cap over TVL) against log TVL and seven-day growth
 per-category correction shrunk toward the global mean. The chosen form was picked by five-fold
 cross-validation on that cohort (0.420 median absolute error in log10 dollars). A second logistic
 fit, on the 303-protocol eligible universe that is left once the product rows are taken out, gives
-the chance a protocol of a given age and size issues a token of its own (AUC 0.754). The board ranks
+the chance a protocol of a given age and size issues a token of its own (AUC 0.753). The board ranks
 the product: the value if it issues, times the chance it issues. No constant is typed in from outside
 and no protocol name is special-cased — the same function scores every row.
 

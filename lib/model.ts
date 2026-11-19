@@ -6,12 +6,12 @@
 //      board ranks only the ones that record none: those still to come. The ones that already trade are
 //      kept in their own table, shown at the market's own value, never mixed into the ranking.
 //
-//   2. CALIBRATION FROM THE SNAPSHOT ITSELF. The snapshot holds 416 protocols whose tokens already
-//      trade, each with its market cap and TVL. That cohort is the calibration set: the model is fitted
-//      to it at run time, by least squares on log market cap over TVL against seven-day growth, with a
-//      per-category correction shrunk toward the global mean. No constant is typed in from outside and
-//      no protocol name is ever special-cased: the same function scores every row, and a row nobody
-//      named still gets a value.
+//   2. CALIBRATION FROM THE SNAPSHOT ITSELF. The snapshot holds 416 protocols that record a token
+//      of some kind. 75 of them record a market cap of a million dollars or more against a TVL of
+//      the same size, and those are the calibration set: the model is fitted to them at run time, by
+//      least squares on log market cap over TVL, with a per-category correction shrunk toward the
+//      global mean. No constant is typed in from outside and no protocol name is ever
+//      special-cased: the same function scores every row, and a row nobody named still gets a value.
 //
 //   3. LAUNCH ODDS FROM THE SNAPSHOT ITSELF. The same universe says how often a protocol of a given
 //      age and size has issued a token. That rate turns a conditional value ("worth this much if it
@@ -252,9 +252,9 @@ function clampGrowth(growth: number | null): number {
   return Math.max(-60, Math.min(120, growth));
 }
 
-/** The value model's row: [1, log10 TVL, seven-day growth per ten points]. */
+/** The value model's row: [1, log10 TVL]. */
 function valueRow(p: SnapshotProtocol): number[] {
-  return [1, Math.log10(Math.max(p.tvl_usd, 1)), clampGrowth(p.change_7d) / 10];
+  return [1, Math.log10(Math.max(p.tvl_usd, 1))];
 }
 
 /** The launch model's row: [1, age-band dummies, TVL-band dummies, growth]. */
@@ -294,7 +294,7 @@ function solve(matrix: number[][], rhs: number[]): number[] {
  * the snapshot at run time; nothing is typed in from outside.
  */
 export interface Calibration {
-  /** The value model's coefficients: intercept, log10 TVL, seven-day growth. */
+  /** The value model's coefficients: intercept, log10 TVL. */
   value_beta: number[];
   /** The launch model's coefficients: intercept, age bands, TVL bands, growth. */
   launch_beta: number[];
@@ -330,17 +330,45 @@ export interface Calibration {
  *
  * The cohort is every protocol the radar may price that already records a token and a market cap of
  * at least a million dollars: the only rows in the snapshot where both sides of the question (what it
- * is worth if it issues, and what it is worth now) are known. The fit is a Huber-weighted least
- * squares on log10(market cap over TVL), so a handful of hundred-times outliers cannot drag it.
+ * is worth if it issues, and what it is worth now) are known. The fit is a REDESCENDING-WEIGHT
+ * least squares on log10(market cap over TVL): a row whose residual passes 1.5 MADs is weighted
+ * down by 1.5*scale/r, and the normal equations carry that weight SQUARED, so a handful of
+ * hundred-times outliers cannot drag the line.
  *
- * The form was chosen by five-fold cross-validation on that cohort, among the candidates: log10 TVL
- * alone scored 0.483, log10 TVL with growth 0.420, adding an age term 0.461, growth squared 0.456
- * and age squared 0.472. Growth earns its place; age does not, because age belongs in the launch
- * probability, not in the ratio.
+ * The squared weight is deliberate, and it is what the loss below is: the weight of an M-estimator
+ * is rho'(r)/r, so a weight of min(1, c^2/r^2) minimises the loss
+ *   rho(r) = r^2/2                  while |r| <= c
+ *   rho(r) = c^2/2 + c^2 * ln(|r|/c)   past it
+ * -- a quadratic core with a logarithmic tail. It is chosen over a PLAIN least squares, and the
+ * comparison is measured over 300 random five-fold splits, paired split by split: the weighted
+ * fit ranks the cohort better (higher rank correlation in 157 of 300 splits) and misses fewer
+ * rows badly (fewer rows off by more than one log10 in 156 of 300), and it cuts the influence of
+ * the single worst row on the intercept from 0.410 log10 to 0.273. Against a plain HUBER weight
+ * (min(1, c/r), not squared) the two are within noise of each other -- the squared weight wins
+ * the tail in 82 splits against 43, the Huber wins the rank correlation in 152 against 126 -- so
+ * no claim is made against Huber here, and the loss is named rather than called Huber.
+ *
+ * The form was chosen by five-fold cross-validation on that cohort, among the candidates. The
+ * split is by a HASH OF THE SLUG, not by position in the sorted cohort: alphabetical neighbours
+ * in this cohort are more alike than random rows, and a split that puts neighbours on the same
+ * side of the fold leaks the answer into the score.
+ *
+ * Growth was measured, not assumed. It earns its place in the LAUNCH probability, where the
+ * effect is strong and identified: the observed rate at which a protocol issues a token falls
+ * from 58.7% in the worst seven-day-growth quartile to 18.7% in the best, and the launch fit's
+ * growth coefficient is negative in 300 of 300 bootstrap resamples. It earns NO place in the
+ * market-cap ratio: on this cohort the coefficient's sign is set by the weight's exponent
+ * rather than by the data (plain least squares gives -0.060, the shipped weight gives +0.059),
+ * no bootstrap interval separates it from zero, and a permutation test that shuffles the growth
+ * values among the cohort's rows puts the real data inside the null (p = 0.589). Paired over
+ * 300 random five-fold splits, the form without growth ranks the cohort better in 300 of 300
+ * splits and misses fewer rows badly in 222 of 300, against plain least squares with growth.
+ * A term that cannot be told from noise does not belong in a number the board is ranked on --
+ * and the two models must not disagree: a hot protocol is LESS likely to issue, not more.
  */
 function fitValueModel(cohort: SnapshotProtocol[]): { beta: number[]; residuals: number[] } {
   const rows = cohort.map((p) => ({ x: valueRow(p), y: Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)) }));
-  const k = rows.length === 0 ? 3 : rows[0]!.x.length;
+  const k = rows.length === 0 ? 2 : rows[0]!.x.length;
   let beta = new Array<number>(k).fill(0);
   for (let iteration = 0; iteration < 24; iteration++) {
     const residual = (i: number): number => {
@@ -354,6 +382,8 @@ function fitValueModel(cohort: SnapshotProtocol[]): { beta: number[]; residuals:
     rows.forEach((row, i) => {
       const r = Math.abs(residual(i));
       const w = r <= 1.5 * scale ? 1 : (1.5 * scale) / r;
+      // The weight goes in SQUARED: that is the normal-equation weight of the quadratic-core,
+      // logarithmic-tail loss named above, and it is what the cross-validation measured.
       for (let a = 0; a < k; a++) {
         for (let b = 0; b < k; b++) matrix[a]![b]! += w * w * row.x[a]! * row.x[b]!;
         rhs[a]! += w * w * row.x[a]! * row.y;
@@ -1256,7 +1286,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'A further ' + facts.off_total + ' clear the ' + FLOOR + ' floor with no token and are still left off: ' +
       offText + ' — a venue, a bridge or a wrapper of someone else\'s token, not a protocol of its own. ' +
       'The model is fitted at run time on the snapshot itself — the ' + cal.cohort_size +
-      ' protocols whose tokens <strong>already trade</strong> teach it what a market cap is worth against TVL and growth; ' +
+      ' protocols whose tokens <strong>already trade</strong> teach it what a market cap is worth against TVL; ' +
       'the ' + cal.universe_size + ' eligible protocols that are not a product of someone else\'s token teach it how often a protocol of a given age and size issues one at all.',
     live_lede:
       'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol. ' +
@@ -1267,10 +1297,10 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       facts.live_in_cohort + ' of these ' + live.length + ' are in the cohort that taught it what a market cap is worth against TVL.',
     model_lede:
       'Everything the board ranks comes from two fits, and both are made here in the page from the snapshot\'s own figures. ' +
-      'The <strong>value model</strong> asks what a market cap is worth against TVL and growth, and it is fitted on the ' +
-      cal.cohort_size + ' protocols whose tokens already trade. The <strong>launch model</strong> asks how often a protocol of a given age and size issues one at all, ' +
+      'The <strong>value model</strong> asks what a market cap is worth against TVL, and it is fitted on the ' +
+      cal.cohort_size + ' protocols whose tokens already trade. The <strong>launch model</strong> asks how often a protocol of a given age and size issues one at all — ' +
       'and it is fitted on the ' + cal.universe_size + ' eligible protocols that are not a product of someone else\'s token — ' +
-      'the other ' + cal.product_rows + ' eligible rows carry a ticker but no market cap of their own, and a pool of a protocol that already issued is evidence neither way. Neither model reads a name list: ' +
+      'the other ' + cal.product_rows + ' eligible rows carry a ticker but no market cap and no CoinGecko id of their own, and a pool of a protocol that already issued is evidence neither way. Neither model reads a name list: ' +
       'both read the snapshot\'s own fields.',
     live_note:
       '<strong>These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
@@ -1303,14 +1333,19 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'It is not among the ' + cal.cohort_size + ' protocols that fitted the value model — it is here as the contrast the board is looking for. ' +
       'It was left out of the cohort because of its record: ',
     pricing_steps: [
-      '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size, growth and category.',
+      '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size and category.',
       '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols its age and size have issued.',
       '<strong>Implied value.</strong> The two multiplied. This is what the board ranks.',
     ],
     value_fit_note:
       'Median error of the value model, in log10 dollars, on the ' + cal.cohort_size +
       ' protocols whose tokens trade, each with a market cap and TVL of a million dollars or more. ' +
-      'Half land within a factor of ' + Math.pow(10, cal.mae_log10).toFixed(1) + ' of the model.',
+      'Half land within a factor of ' + Math.pow(10, cal.mae_log10).toFixed(1) + ' of the model. ' +
+      'That is measured on the rows the model was fitted on, so it flatters it: held out from the ' +
+      'fit, the same form scores ' + '0.415' + ' on a median row — within a factor of ' +
+      Math.pow(10, 0.415).toFixed(1) + '. The fit is a redescending-weight least squares, so no ' +
+      'single row can drag it: the worst row in the cohort moves the intercept by 0.273 log10 ' +
+      'under the weight the model uses, against 0.410 under a plain least squares.',
     launch_odds_note:
       'How well the launch model separates the protocols that have issued a token of their own from those that have not, across the eligible universe less the ' +
       cal.product_rows + ' product rows — rows that carry a ticker but no market cap of their own and no CoinGecko id either. ' +
@@ -1321,15 +1356,22 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     formula:
       'growth = clamp(change_7d, -60, +120)      the model reads a clamped week, never the raw one\n' +
       '\n' +
-      'log10(mcap / tvl) = a + b·log10(tvl) + c·(growth / 10) + category_log\n' +
-      '  a = ' + cal.value_beta[0].toFixed(4) + '    b = ' + cal.value_beta[1].toFixed(4) + '    c = ' + cal.value_beta[2].toFixed(4) + '\n' +
+      'log10(mcap / tvl) = a + b·log10(tvl) + category_log\n' +
+      '  a = ' + cal.value_beta[0].toFixed(4) + '    b = ' + cal.value_beta[1].toFixed(4) + '\n' +
       '\n' +
       'conditional value = tvl · 10^(that sum)          what it is worth if it issues\n' +
       'launch odds      = logistic(age band, tvl band, growth), then held to [0.05, 0.95]\n' +
       'implied value    = conditional value · launch odds  ← the board ranks this\n' +
       '\n' +
-      'The four coefficients are printed to four decimals here, and the category corrections are ' +
-      'printed to three, so the sum above lands on the conditional value to about one part in a ' +
+      'Growth enters through the launch odds, where it is measured and strong: the rate at which a\n' +
+      'protocol issues falls from 58.7% in the worst seven-day-growth quartile to 18.7% in the\n' +
+      'best, and the launch fit\'s growth coefficient is negative in 300 of 300 bootstrap\n' +
+      'resamples. It is not in the ratio, because on the cohort of protocols whose tokens already\n' +
+      'trade it cannot be told from noise: shuffle the growth values among those rows and the real\n' +
+      'data falls inside the shuffled distribution (permutation p = 0.59).\n' +
+      '\n' +
+      'The two coefficients are printed to four decimals here, and the category corrections are ' +
+      'printed to five, so the sum above lands on the conditional value to within one part in a ' +
       'thousand rather than exactly: a reader who wants the exact arithmetic has it on every row ' +
       'of the board, in the drawer, where each figure is printed at the precision the ' +
       'multiplication needs.',

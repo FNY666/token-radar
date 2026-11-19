@@ -1,10 +1,10 @@
 // The radar's model, in the page's own hand: main.ts fits this, and the page refits it from the
 // figures it carries, so the arithmetic is shown rather than trusted.
 //
-//   value model   log10(mcap/tvl) ~ log10(tvl) + growth, Huber-weighted, with a shrunk category
+//   value model   log10(mcap/tvl) ~ log10(tvl), redescending-weight, with a shrunk category
 //                 correction. Fitted on the protocols whose tokens trade.
 //   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
-//                 product rows: rows with a ticker but no market cap of their own.
+//                 product rows: a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
 (function (global) {
   'use strict';
@@ -19,7 +19,7 @@
     var categories = fitCategories(data.cohort, beta);
     // The error of the model the board PRICES with: the line plus the category correction.
     var errors = data.cohort.map(function (p) {
-      var x = valueRow(p.tvl_usd, p.change_7d);
+      var x = valueRow(p.tvl_usd);
       var cat = categories[p.category || '(none)'];
       if (cat === undefined) cat = categories.__default;
       return Math.abs(Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - dot(beta, x) - cat);
@@ -34,7 +34,7 @@
       mae_log10: median(errors),
       /** The value if this protocol issues, from the fitted model alone. */
       conditional: function (tvl, growth, category) {
-        var acc = dot(beta, valueRow(tvl, growth));
+        var acc = dot(beta, valueRow(tvl));
         var cat = categories[category || '(none)'];
         acc += cat === undefined ? categories.__default : cat;
         return Math.round(tvl * Math.pow(10, acc));
@@ -59,14 +59,15 @@
     return s;
   }
 
-  // The value fit: Huber-weighted least squares, so outliers cannot drag it.
+  // The value fit: a redescending-weight least squares, so outliers cannot drag it. The weight
+  // goes into the normal equations SQUARED: the quadratic-core, logarithmic-tail loss.
   function fitValue(rows) {
     var data = rows.map(function (p) {
-      return { x: valueRow(p.tvl_usd, p.change_7d), y: Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) };
+      return { x: valueRow(p.tvl_usd), y: Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) };
     });
     // An empty cohort has no first row to read the design's width from, so the fit is given the
     // width the design always has and a zero coefficient.
-    if (data.length === 0) return new Array(valueRow(1, 0).length).fill(0);
+    if (data.length === 0) return new Array(valueRow(1).length).fill(0);
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
     for (var it = 0; it < 24; it++) {
@@ -100,8 +101,8 @@
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
     // The fit runs until the gradient is flat. The design is rank-deficient -- the intercept and
-    // the band dummies span the same space -- so a fixed step count catches it mid-crawl, and the
-    // board would then be ranked on a half-finished fit.
+    // the band dummies span the same space -- so a fixed step count catches it mid-crawl and the
+    // board would be ranked on a half-finished fit.
     for (var it = 0; it < 50000; it++) {
       var gradient = new Array(k).fill(0);
       data.forEach(function (row) {
@@ -113,7 +114,7 @@
       if (Math.sqrt(norm) < 1e-9) break;
       for (var g2 = 0; g2 < k; g2++) beta[g2] += (0.6 * gradient[g2]) / data.length;
     }
-      var pos = data.filter(function (r) { return r.y === 1; });
+    var pos = data.filter(function (r) { return r.y === 1; });
     var neg = data.filter(function (r) { return r.y === 0; });
     var hits = 0;
     pos.forEach(function (p) {
@@ -132,7 +133,7 @@
     var byCat = {};
     var all = [];
     cohort.forEach(function (p) {
-      var x = valueRow(p.tvl_usd, p.change_7d);
+      var x = valueRow(p.tvl_usd);
       var r = Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - dot(beta, x);
       all.push(r);
       var key = p.category || '(none)';
@@ -154,8 +155,8 @@
   }
 
   // The design matrix of the value fit.
-  function valueRow(tvl, growth) {
-    return [1, Math.log10(Math.max(tvl, 1)), clampGrowth(growth) / 10];
+  function valueRow(tvl) {
+    return [1, Math.log10(Math.max(tvl, 1))];
   }
 
   function launchRow(tvl, growth, age) {

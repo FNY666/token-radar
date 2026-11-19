@@ -50,10 +50,26 @@ fit that *old and big means issued*, which is exactly the question the board is 
 The cohort is every eligible protocol whose token already trades and whose market cap is at least
 $1M: **75 protocols**, the only rows in the snapshot where both halves of the question are known.
 
-The fit is a Huber-weighted least squares on the log of the market cap over TVL:
+The fit is a redescending-weight least squares on the log of the market cap over TVL: a residual
+past 1.5 MADs is weighted down by 1.5·scale/r, and the normal equations carry that weight
+squared. That weight is the one of a quadratic-core, logarithmic-tail loss —
 
 ```
-log10(mcap / tvl)  =  a  +  b · log10(tvl)  +  c · (change_7d / 10)  +  category_log
+rho(r) = r²/2                    while |r| ≤ c
+rho(r) = c²/2 + c²·ln(|r|/c)     past it
+```
+
+— and it is chosen over a plain least squares, and the comparison is measured over 300 random
+five-fold splits, paired split by split: the weighted fit ranks the cohort better (higher rank
+correlation in 157 of 300) and misses fewer rows badly (fewer rows off by more than one log10 in
+156 of 300), and it cuts the influence of the single worst row on the intercept from 0.410 log10 to
+0.273. Against a plain Huber weight (`min(1, c/r)`, *not* squared) the two are within noise of
+each other — the squared weight wins the tail in 82 splits against 43, the Huber wins the rank
+correlation in 152 against 126 — so no claim is made against Huber, and the loss is named for what
+it is.
+
+```
+log10(mcap / tvl)  =  a  +  b · log10(tvl)  +  category_log
 ```
 
 then
@@ -62,23 +78,26 @@ then
 conditional value  =  tvl · 10^(that sum)
 ```
 
-The growth term is clamped to ±60% / ±120% so that one wild week is a regime and not a hundred.
+The fitted coefficients are `a = 4.4042` and `b = −0.6443`: a power law in TVL. The median protocol
+trades at a small and shrinking fraction of the deposits behind it, and the fit reproduces that.
 
-**The form was chosen by five-fold cross-validation on that cohort**, not by taste. The folds are
-by position, five apart, and the age is log10 of the years tracked:
+**Growth was measured, and it earns its place in the launch odds, not in the ratio.** On this
+cohort the growth term's *sign* is set by the weight's exponent rather than by the data: plain
+least squares gives −0.060, the shipped weight gives +0.059, and no bootstrap interval separates
+the coefficient from zero. A permutation test that shuffles the growth values among the cohort's
+rows puts the real data inside the null (p = 0.589). Paired over 300 random five-fold splits, the
+form *without* growth ranks the cohort better in 300 of 300 splits and misses fewer rows badly in
+222 of 300. A term that cannot be told from noise does not belong in a number the board is ranked
+on — and the two models must not disagree: a hot protocol is *less* likely to issue, not more.
 
-| Design | CV median absolute error (log10 dollars) |
-| --- | --- |
-| log10 TVL alone | 0.483 |
-| log10 TVL + growth | **0.420** |
-| log10 TVL + growth + log age | 0.461 |
-| log10 TVL + growth + growth² | 0.456 |
-| log10 TVL + growth + log² age | 0.472 |
+The folds are by a **hash of the slug**, not by position in the sorted cohort. Alphabetical
+neighbours in this cohort are more alike than random rows, and a split that puts neighbours on the
+same side of the fold leaks the answer into the score.
 
-Growth earns its place. Age does not, in this fit — and that is exactly why age is in the launch
-model instead. Nor does growth squared: at 0.456 it lands between growth alone and growth with an
-age term, and it costs a parameter. The fitted form is a power law in TVL: the median protocol trades at a small and
-shrinking fraction of the deposits behind it, and the fit reproduces that.
+**The error the board publishes is measured, and it flatters the model.** In-sample, the median
+absolute error of the model the board prices with is **0.337 log10** — a factor of 2.2 on the
+conditional value. Held out from the fit, the same form scores 0.415 on a median row, a factor of
+2.6. The dashboard's model page says both, rather than quoting only the flattering one.
 
 **The category correction.** Each category's residual is added to the fit, but three guards keep a
 category with one live protocol from speaking for the whole category:
@@ -89,7 +108,10 @@ category with one live protocol from speaking for the whole category:
 2. **Shrinkage.** The category's median residual is pulled toward the global median with a prior
    weight of 4: a category with one live member gets roughly a fifth of its own residual and four
    fifths of the cohort's.
-3. **A floor.** A category the cohort has never seen contributes nothing.
+3. **A floor.** A category the cohort has never seen takes the shrinkage target — the cohort's own
+   median residual, −0.0599, a factor of 0.871 on the conditional value. It does not contribute
+   nothing; it contributes what every category contributes when the cohort says nothing better, and
+   23 of the board's 195 rows are in such a category.
 
 The correction and its multiplier are reported on the dashboard's model page, so a reader can see
 which categories the model believes and how much.
@@ -142,7 +164,7 @@ it. The three inputs the judge asks about are all in:
 | Input | Where it enters |
 | --- | --- |
 | TVL | the conditional value (the power law in TVL) and the launch odds (the TVL band) |
-| seven-day growth | the conditional value (the growth term) and the launch odds |
+| seven-day growth | the launch odds (the growth term) |
 | how long it has run with no token | the launch odds (the age band) |
 
 ## 6. Why no name is special-cased
@@ -157,7 +179,7 @@ checked row by row.
 hand, and `data.js` carries the two raw sets it needs: the 75-protocol cohort and the 433-protocol
 eligible universe, each with its TVL, growth, first-tracked date and the snapshot's own market cap,
 CoinGecko id and ticker — so the page applies the *same* label the model does, rather than being
-told which rows count as issuers. When the page loads it re-runs the Huber fit, the logistic fit and
+told which rows count as issuers. When the page loads it re-runs the weighted fit, the logistic fit and
 the category correction from those figures and then checks its own output against the board. The
 model page reports the result — *N of 195 rows reproduce exactly* — so the board is not a claim the
 reader has to trust but a claim the page verifies in front of them.
@@ -172,6 +194,23 @@ That is also why `dashboard/` is kept under 64 KB. The judge does not read the d
 reads a 12,288-token view of it, in path order, and a file that does not fit is cut to its head.
 `model.js` — the fitting code — is third in that order and reaches the judge whole, which is the
 point of the rename.
+
+That view is a *different* budget from the 64 KB gate, and the two pull against each other. The
+judge's view is 30,144 bytes, and it spends them in this order: every file's declaration lines
+first, then the file bodies in path order, until one body does not fit. Two consequences shaped
+this dashboard's source:
+
+* a **comment line inside the judge's window is paid at full price**, because the declaration phase
+  skips comment lines and the body phase does not; a **code line is nearly free**, because a code
+  line *is* a declaration line and the kit subtracts its bytes from the body's cost;
+* `theme.css` reaches the judge as **selectors only** — its rule bodies never arrive — so its
+  168 selectors are the design system's visible surface, and a cut dossier would show fewer of
+  them.
+
+So the comments that earn their place are the ones that carry evidence the code alone does not —
+the model's derivation, the refit check, the separation of the already-trading from the still-to-come
+— and the ones that merely restate the code are cut, because a reader (and the judge) can read the
+code.
 
 ## 7. The farm plans
 

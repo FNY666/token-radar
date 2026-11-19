@@ -108,13 +108,14 @@ launch odds  =  logistic(age band, TVL band, seven-day growth)
 ```
 
 The age bands come from the snapshot's own cohorts. Each band's observed rate of protocols that
-issued a token of their own:
+issued a token of their own. The 35 protocols with no first-tracked date are counted as one year
+old, which is what the fit assumes for them, so the column adds up to the fit's own 303:
 
 | Tracked for | Protocols | Issued a token | Rate |
 | --- | --- | --- | --- |
 | 0–182 days | 52 | 3 | 5.8% |
 | 182–365 days | 38 | 8 | 21.1% |
-| 365–730 days | 95 | 21 | 22.1% |
+| 365–730 days | 130 | 49 | 37.7% |
 | 730–1460 days | 63 | 33 | 52.4% |
 | 1460+ days | 20 | 15 | 75.0% |
 

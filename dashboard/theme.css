@@ -75,7 +75,7 @@ tbody tr.row:focus-visible{outline:2px solid var(--value);outline-offset:-2px}
 td{padding:var(--b) var(--c);vertical-align:middle}
 .pname{font-weight:600}
 .pname .slug{display:block;font-family:var(--mono);font-size:11px;color:var(--i3);font-weight:400}
-.cat,.sheet h4{font-size:12px;color:var(--i2)}
+.cat,.sheet h3{font-size:12px;color:var(--i2)}
 .tag{display:inline-block;font-size:11px;padding:1px var(--b);border-radius:3px;color:var(--i3)}
 .tag.early{border-color:var(--o40);color:var(--odds)}
 .up{color:var(--up)}
@@ -104,7 +104,7 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .plot .dot.wl{fill:var(--value);fill-opacity:0.75}
 .plot .dot:hover{fill-opacity:1;stroke:var(--ink);stroke-width:1.5}
 .plot .dot:focus-visible{fill-opacity:1;stroke:var(--value);stroke-width:2}
-.plot .q{fill:var(--ink);font-size:11px}
+.plot .q{fill:var(--ink);font-size:11px;pointer-events:none}
 .plot .axis-title{fill:var(--i3);font-size:11px}
 .plot-empty{font-size:13px;padding:var(--d) 0}
 .plot-legend{display:flex;gap:var(--d);font-size:12px;color:var(--i3);margin-top:var(--b)}
@@ -140,7 +140,7 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--b);margin:var(--d) 0}
 .bar-meta dt,.kpi .k{font-size:11px;color:var(--i3)}
 .kpi .v{font-family:var(--mono);font-size:18px;margin-top:2px}
-.sheet h4{margin:var(--e) 0 var(--c);padding-bottom:var(--b);border-bottom:var(--bl)}
+.sheet h3{margin:var(--e) 0 var(--c);padding-bottom:var(--b);border-bottom:var(--bl)}
 .steps{list-style:none;margin:0;padding:0;counter-reset:step}
 .steps li{position:relative;padding:var(--c) 0 var(--c) var(--f);counter-increment:step;border-bottom:var(--bl)}
 .steps li::before{content:counter(step);position:absolute;left:0;top:var(--c);font:11px/20px var(--mono);color:var(--value);border:1px solid var(--v40);border-radius:50%;width:22px;height:22px;text-align:center}
@@ -165,7 +165,5 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .missing h1{font-size:26px;margin-bottom:var(--c)}
 .chips{display:flex;flex-wrap:wrap;gap:var(--a);margin-top:var(--b)}
 .chip-static{background:var(--p2);color:var(--i2);border:var(--bl)}
-@media (max-width: 1000px){.hero-grid{grid-template-columns:1fr}
-.brand-tag{display:none}}
+@media (max-width: 1000px){.hero-grid{grid-template-columns:1fr}.brand-tag{display:none}}
 @media (max-width: 420px){.kpis{grid-template-columns:1fr}}
-

@@ -1,30 +1,34 @@
-// The radar's model, in the page's own hand: the model main.ts fits, written out here so the page
-// refits it from the figures it carries and shows the arithmetic, not a number to trust.
+// The radar's model, in the page's own hand: main.ts fits this, and the page refits it from the
+// figures it carries, so the arithmetic is shown rather than trusted.
 //
 //   value model   log10(mcap/tvl) ~ log10(tvl) + growth, Huber-weighted, with a shrunk category
 //                 correction. Fitted on the protocols whose tokens trade.
 //   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
 //                 product rows: rows with a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
-// Every coefficient comes out of the cohort in the data.
 //
-// A farm plan is eight steps, each with a cost and a time, every number read off the protocol's
-// own record: the capital is its own TVL, the gas the chain the plan names, the days its age.
+// Every coefficient comes out of the cohort in the data.
 (function (global) {
   'use strict';
 
   var DAY_MS = 86400000;
-  // The bands, as their edges: the first edge past the number is the band it falls in.
+  // The band edges: the first edge past the number is the band it falls in.
   var AGE_EDGES = [0, 182, 365, 730, 1460];
   var TVL_EDGES = [0, 1e7, 5e7, 2e8];
   function fit(data) {
     var beta = fitValue(data.cohort);
     var launch = fitLaunch(data.universe, data.as_of);
     var categories = fitCategories(data.cohort, beta);
+    // The error of the model the board PRICES with: the line plus the category correction.
+    // Measured on the line alone, the card contradicted the formula card beneath it.
     var errors = data.cohort.map(function (p) {
       var x = valueRow(p.tvl_usd, p.change_7d);
-      return Math.abs(Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - dot(beta, x));
+      var cat = categories[p.category || '(none)'];
+      if (cat === undefined) cat = categories.__default;
+      return Math.abs(Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - dot(beta, x) - cat);
     });
+    // With no cohort there is no error, and a median of nothing is not a number.
+    if (errors.length === 0) errors.push(0);
     return {
       value_beta: beta,
       launch_beta: launch.beta,
@@ -51,8 +55,7 @@
 
   global.RadarModel = { fit: fit, ageDays: ageDays, clampGrowth: clampGrowth };
 
-  // The dot product of a coefficient vector and a row of the design matrix. Every fit here
-  // scores a model by one of these, so it is written once.
+  // The dot product of a coefficient vector and a row of the design matrix.
   function dot(b, x) {
     var s = 0;
     for (var i = 0; i < b.length; i++) s += b[i] * x[i];
@@ -64,6 +67,9 @@
     var data = rows.map(function (p) {
       return { x: valueRow(p.tvl_usd, p.change_7d), y: Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) };
     });
+    // An empty cohort has no first row to read the design's width from, so the fit is given the
+    // width the design always has and a zero coefficient: the page still renders.
+    if (data.length === 0) return new Array(valueRow(1, 0).length).fill(0);
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
     for (var it = 0; it < 24; it++) {
@@ -88,11 +94,12 @@
   }
 
   function fitLaunch(rows, asOf) {
-    // A product row is neither an issuer nor a non-issuer, so it stays out of the fit.
+    // A product row is neither an issuer nor a non-issuer: it stays out of the fit.
     var data = rows.filter(function (p) { return !isTokenProduct(p); }).map(function (p) {
       var age = ageDays(asOf, p.listed_at);
       return { x: launchRow(p.tvl_usd, p.change_7d, age === null ? 365 : age), y: issuedOwn(p) ? 1 : 0 };
     });
+    if (data.length === 0) return { beta: new Array(launchRow(1, 0, 365).length).fill(0), auc: 0.5 };
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
     for (var it = 0; it < 400; it++) {
@@ -138,13 +145,12 @@
       var clipped = byCat[key].map(clip);
       out[key] = (clipped.length * median(clipped) + shrinkage * globalResidual) / (clipped.length + shrinkage);
     });
-    // A category the cohort never saw gets the shrinkage target, not a zero.
+    // A category the cohort never saw takes the shrinkage target, not a zero.
     out.__default = globalResidual;
     return out;
   }
 
-  // Fit the whole model from the snapshot figures, in the page, every time it loads. `data` is
-  // the dataset main.ts wrote: the cohort, the universe and the board.
+  // The design matrix of the value fit.
   function valueRow(tvl, growth) {
     return [1, Math.log10(Math.max(tvl, 1)), clampGrowth(growth) / 10];
   }
@@ -182,8 +188,7 @@
     return Math.max(-60, Math.min(120, g));
   }
 
-  // The band a number falls in: the first edge it has passed. A number past the last edge is in
-  // the last band.
+  // The band a number falls in: the first edge it has passed. Past the last edge is the last band.
   function bandOf(edges, v) {
     for (var i = 0; i < edges.length; i++) {
       if (v < edges[i + 1]) return i;

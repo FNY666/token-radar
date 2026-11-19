@@ -330,7 +330,7 @@ export interface Calibration {
  * and age squared 0.472. Growth earns its place; age does not, because age belongs in the launch
  * probability, not in the ratio.
  */
-function fitValueModel(cohort: SnapshotProtocol[]): { beta: number[]; mae: number } {
+function fitValueModel(cohort: SnapshotProtocol[]): { beta: number[]; residuals: number[] } {
   const rows = cohort.map((p) => ({ x: valueRow(p), y: Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)) }));
   const k = rows.length === 0 ? 3 : rows[0]!.x.length;
   let beta = new Array<number>(k).fill(0);
@@ -354,13 +354,16 @@ function fitValueModel(cohort: SnapshotProtocol[]): { beta: number[]; mae: numbe
     for (let a = 0; a < k; a++) matrix[a]![a]! += 1e-6;
     beta = solve(matrix, rhs);
   }
+  // The residuals are returned, not the median of them: the category correction is fitted AFTER
+  // this fit, and the error the board publishes must be the error of the model the board PRICES
+  // with -- the fitted line plus the category correction -- not of the line alone.
   const errors = cohort.map((p) => {
     const x = valueRow(p);
     let acc = 0;
     for (let j = 0; j < k; j++) acc += beta[j]! * x[j]!;
-    return Math.abs(Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)) - acc);
+    return Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)) - acc;
   });
-  return { beta, mae: median(errors) };
+  return { beta, residuals: errors };
 }
 
 /**
@@ -479,6 +482,14 @@ export function calibrate(snapshot: Snapshot): Calibration {
     categoryLog[key] = (clipped.length * median(clipped) + shrinkage * globalResidual) / (clipped.length + shrinkage);
   }
 
+  // The published error is the error of the model the page prices with: the fitted line PLUS the
+  // category correction. Measured before the correction, it described a model the page never uses.
+  const mae = median(cohort.map((p, i) => {
+    const key = p.category ?? '(none)';
+    const cat = categoryLog[key] ?? globalResidual;
+    return Math.abs(value.residuals[i]! - cat);
+  }));
+
   return {
     value_beta: value.beta,
     launch_beta: launch.beta,
@@ -487,7 +498,7 @@ export function calibrate(snapshot: Snapshot): Calibration {
     bands,
     untracked,
     cohort_size: cohort.length,
-    mae_log10: value.mae,
+    mae_log10: mae,
     launch_auc: launch.auc,
     universe_size: universe.length,
     product_rows: eligible.length - universe.length,
@@ -1141,14 +1152,14 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'This tab holds the other side of the line: the ' + live.length + ' largest of the ' + facts.live_candidates +
       ' protocols that <strong>do</strong> record a market cap of their own and are not an exchange venue, by market cap. ' +
       'Their value is the market\'s own, not a model\'s, so they are never mixed into the ranking — ' +
-      'they are what the model was calibrated on. ' +
+      'the ' + cal.cohort_size + ' of them that are in the model\'s calibration cohort are what it was calibrated on. ' +
       facts.live_in_cohort + ' of these ' + live.length + ' are in the cohort that taught it what a market cap is worth against TVL.',
     model_lede:
       'Everything the board ranks comes from two fits, and both are made here in the page from the snapshot\'s own figures. ' +
       'The <strong>value model</strong> asks what a market cap is worth against TVL and growth, and it is fitted on the ' +
       cal.cohort_size + ' protocols whose tokens already trade. The <strong>launch model</strong> asks how often a protocol of a given age and size issues one at all, ' +
-      'and it is fitted on the ' + cal.universe_size + ' eligible protocols, less the ' + cal.product_rows +
-      ' product rows — a ticker with no market cap of its own, which is evidence neither way. Neither model reads a name list: ' +
+      'and it is fitted on the ' + cal.universe_size + ' eligible protocols that are not a product of someone else\'s token — ' +
+      'the other ' + cal.product_rows + ' eligible rows carry a ticker but no market cap of their own, and a pool of a protocol that already issued is evidence neither way. Neither model reads a name list: ' +
       'both read the snapshot\'s own fields.',
     live_note:
       '<strong>These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
@@ -1191,7 +1202,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'Half land within a factor of ' + Math.pow(10, cal.mae_log10).toFixed(1) + ' of the model.',
     launch_odds_note:
       'How well the launch model separates the protocols that have issued a token of their own from those that have not, across the eligible universe less the ' +
-      cal.product_rows + ' product rows — rows that carry a ticker but no market cap of their own. ' +
+      cal.product_rows + ' product rows — rows that carry a ticker but no market cap of their own and no CoinGecko id either. ' +
       'Those are a pool of a protocol that already issued, so they are evidence neither way.',
     no_name_special:
       'Every row is scored by one function of <code>TVL</code>, <code>change_7d</code>, <code>listed_at</code> and <code>category</code>. ' +
@@ -1204,14 +1215,20 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       '\n' +
       'conditional value = tvl · 10^(that sum)          what it is worth if it issues\n' +
       'launch odds      = logistic(age band, tvl band, growth), then held to [0.05, 0.95]\n' +
-      'implied value    = conditional value · launch odds  ← the board ranks this',
+      'implied value    = conditional value · launch odds  ← the board ranks this\n' +
+      '\n' +
+      'The four coefficients are printed to four decimals here, and the category corrections are ' +
+      'printed to three, so the sum above lands on the conditional value to about one part in a ' +
+      'thousand rather than exactly: a reader who wants the exact arithmetic has it on every row ' +
+      'of the board, in the drawer, where each figure is printed at the precision the ' +
+      'multiplication needs.',
     refit_lead:
       'This page carries the raw snapshot figures for the ' + cal.cohort_size +
       ' protocols whose tokens already trade and for the whole eligible universe, and it refits the model from them ' +
       'with the code in <code>model.js</code> — the same procedure <code>main.ts</code> used, not the same numbers pasted in. ' +
       'It then recomputes every row of the board from those figures. ',
     curve_note:
-      'Counted across every eligible protocol in the snapshot. This is where the launch odds come from. ' +
+      'Counted across the ' + cal.universe_size + ' protocols the launch model was fitted on. This is where the launch odds come from. ' +
       'The ' + cal.untracked + ' with no first-tracked date are counted as one year old, which is what the fit assumes for them, so the column adds up to the fit\'s own universe.',
     category_note:
       'How far each category sits from the fitted line, in log10 dollars, shrunk toward the mean so a thin category cannot speak for itself.',
@@ -1227,10 +1244,13 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     live_size: live.length,
     universe_size: snapshot.protocols.length,
     calibration: {
-      value_beta: cal.value_beta.map((b) => Math.round(b * 1e6) / 1e6),
+      value_beta: cal.value_beta.map((b) => Math.round(b * 1e8) / 1e8),
       launch_beta: cal.launch_beta.map((b) => Math.round(b * 1e6) / 1e6),
-      category_log: Object.fromEntries(Object.entries(cal.category_log).map(([k, v]) => [k, Math.round(v * 10000) / 10000])),
-      category_default: Math.round(cal.category_default * 10000) / 10000,
+      // The category corrections are published at eight decimals, not four: the reader multiplies
+      // TVL by the fitted ratio and by this correction, and a correction rounded to four decimals
+      // moves a seven-figure conditional value by thousands of dollars.
+      category_log: Object.fromEntries(Object.entries(cal.category_log).map(([k, v]) => [k, Math.round(v * 1e8) / 1e8])),
+      category_default: Math.round(cal.category_default * 1e8) / 1e8,
       bands: cal.bands.map((b) => ({ lo: b.lo, hi: b.hi === Number.POSITIVE_INFINITY ? null : b.hi, n: b.n, issued: b.issued })),
       untracked: cal.untracked,
       cohort_size: cal.cohort_size,

@@ -5,6 +5,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.55 var(--fon
 h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-0.015em;text-wrap:balance}
 p{margin:0}
 button,input,select{font:inherit;color:inherit}
+/* The tap highlight is set deliberately rather than left to the browser's default blue: on a
+   dark panel the default reads as a flash of the wrong colour, and the ring below says
+   where the touch landed instead. `manipulation` drops the double-tap zoom delay. */
+button,tbody tr.row,.tab,.chip{-webkit-tap-highlight-color:var(--v07);touch-action:manipulation}
 button,tbody tr.row{cursor:pointer}
 :focus-visible{outline:2px solid var(--value);outline-offset:2px}
 .skip{position:absolute;left:-9999px;top:0;z-index:90;padding:var(--b) var(--d);background:var(--panel)}
@@ -135,7 +139,7 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .prose p{margin-bottom:var(--c)}
 .drawer{position:fixed;inset:0;z-index:60;display:flex;justify-content:flex-end;background:var(--veil)}
 .drawer[hidden]{display:none}
-.sheet{width:min(660px,94vw);background:var(--b2);overflow-y:auto;padding:var(--e);box-shadow:-24px 0 60px var(--shadow)}
+.sheet{width:min(660px,94vw);background:var(--b2);overflow-y:auto;overscroll-behavior:contain;padding:var(--e);box-shadow:-24px 0 60px var(--shadow)}
 .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--d)}
 .sheet h2{font-size:24px;line-height:1.2}
 .sheet .slug{color:var(--i3);margin-top:2px}

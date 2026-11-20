@@ -570,6 +570,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  CTL.search = el('input', {
  class: 'q', type: 'search', placeholder: L.search_placeholder,
  'aria-label': L.search_label,
+ // The name is what a form posts and what a password manager keys on; a search box that
+ // carries no name is a box no browser can restore, and no assistive technology can name.
+ name: 'q', autocomplete: 'off', spellcheck: false,
  oninput: function () { state.q = CTL.search.value; writeHash('refine'); renderControlsResult(); renderTabs(); renderTable(); renderPlot(); }
  });
  function filter(label, all, list, set) {

@@ -1,6 +1,5 @@
 // The radar's model, in the page's own hand: main.ts fits this, and the page refits it from the
 // figures it carries, so the arithmetic is shown rather than trusted.
-//
 //   value model   log10(mcap/tvl) ~ log10(tvl), redescending-weight, with a shrunk category
 //                 correction. Fitted on the protocols whose tokens trade.
 //   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
@@ -10,21 +9,18 @@
   'use strict';
 
   var DAY_MS = 86400000;
-  // The band edges: the first edge past the number is the band it falls in.
   var AGE_EDGES = [0, 182, 365, 730, 1460];
   var TVL_EDGES = [0, 1e7, 5e7, 2e8];
   function fit(data) {
     var beta = fitValue(data.cohort);
     var launch = fitLaunch(data.universe, data.as_of);
     var categories = fitCategories(data.cohort, beta);
-    // The error of the model the board PRICES with: the line plus the category correction.
     var errors = data.cohort.map(function (p) {
       var x = valueRow(p.tvl_usd);
       var cat = categories[p.category || '(none)'];
       if (cat === undefined) cat = categories.__default;
       return Math.abs(Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) - dot(beta, x) - cat);
     });
-    // With no cohort there is no error, and a median of nothing is not a number.
     if (errors.length === 0) errors.push(0);
     return {
       value_beta: beta,
@@ -32,19 +28,16 @@
       launch_auc: launch.auc,
       category_log: categories,
       mae_log10: median(errors),
-      /** The value if this protocol issues, from the fitted model alone. */
       conditional: function (tvl, growth, category) {
         var acc = dot(beta, valueRow(tvl));
         var cat = categories[category || '(none)'];
         acc += cat === undefined ? categories.__default : cat;
         return Math.round(tvl * Math.pow(10, acc));
       },
-      /** The chance it issues, from the fitted launch model alone. */
       launchP: function (tvl, growth, age) {
         var x = launchRow(tvl, growth, age === null ? 365 : age);
         var z = dot(launch.beta, x);
         var raw = Math.max(0.05, Math.min(0.95, 1 / (1 + Math.exp(-z))));
-        // The same six decimals the board publishes, so the two are one number.
         return Math.round(raw * 1e6) / 1e6;
       }
     };
@@ -52,7 +45,6 @@
 
   global.RadarModel = { fit: fit, ageDays: ageDays, clampGrowth: clampGrowth };
 
-  // The dot product of a coefficient vector and a row of the design matrix.
   function dot(b, x) {
     var s = 0;
     for (var i = 0; i < b.length; i++) s += b[i] * x[i];
@@ -65,8 +57,6 @@
     var data = rows.map(function (p) {
       return { x: valueRow(p.tvl_usd), y: Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) };
     });
-    // An empty cohort has no first row to read the design's width from, so the fit is given the
-    // width the design always has and a zero coefficient.
     if (data.length === 0) return new Array(valueRow(1).length).fill(0);
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
@@ -101,8 +91,7 @@
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
     // The fit runs until the gradient is flat. The design is rank-deficient -- the intercept and
-    // the band dummies span the same space -- so a fixed step count catches it mid-crawl and the
-    // board would be ranked on a half-finished fit.
+    // the band dummies span the same space -- so a fixed step count catches it mid-crawl.
     for (var it = 0; it < 50000; it++) {
       var gradient = new Array(k).fill(0);
       data.forEach(function (row) {
@@ -149,12 +138,10 @@
       var clipped = byCat[key].map(clip);
       out[key] = (clipped.length * median(clipped) + shrinkage * globalResidual) / (clipped.length + shrinkage);
     });
-    // A category the cohort never saw takes the shrinkage target, not a zero.
     out.__default = globalResidual;
     return out;
   }
 
-  // The design matrix of the value fit.
   function valueRow(tvl) {
     return [1, Math.log10(Math.max(tvl, 1))];
   }
@@ -169,7 +156,6 @@
     return x;
   }
 
-  // Whether a protocol issued a token of its own: its own market cap, or its own id.
   function issuedOwn(p) {
     return p.mcap_usd !== null || p.gecko_id !== null;
   }
@@ -191,7 +177,6 @@
     return Math.max(-60, Math.min(120, g));
   }
 
-  // The band a number falls in: the first edge it has passed. Past the last edge is the last.
   function bandOf(edges, v) {
     for (var i = 0; i < edges.length; i++) {
       if (v < edges[i + 1]) return i;

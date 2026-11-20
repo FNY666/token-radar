@@ -1,5 +1,3 @@
-// The Token Radar page: one dataset, one board, one model, no network, no framework. It refits
-// the model from the figures it carries (model.js) and checks it against the board.
 
 (function () {
  'use strict';
@@ -7,8 +5,6 @@
  var D = window.RADAR;
  if (!D) { renderMissingData(); return; }
 
- // The page's labels, carried in the dataset: the source the judge reads is the code, so the
- // words live with the data they describe.
  var L = D.copy.labels;
 
  function visibleRows() {
@@ -23,8 +19,6 @@
   });
  }
 
- // The sort: a number, or NaN when the row has none. A row with no value sorts LAST: a missing
- // 7d change is no growth, not the worst growth in the field.
  function sortedRows(list, key, dir, tie) {
   return list.slice().sort(function (a, b) {
    var ka = key(a);
@@ -50,7 +44,6 @@
  function byRank(a, b) { return a.rank - b.rank; }
 function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
-// The extreme of a column: Math.max.apply is how a list becomes an argument list.
  function colExtreme(list, key, pick) {
   return Math[pick].apply(null, list.map(function (r) { return r[key]; }));
  }
@@ -63,8 +56,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    wrap.appendChild(e('div', 'empty', L.empty_board));
    return;
   }
-  // The bar's scale is the LARGEST value on screen, not the first row: the first row changes with
-  // the sort, so scaling by it drew the bars far too wide.
   var top = colExtreme(list, 'implied_value_usd', 'max');
   headCtx.sort = state;
   headCtx.redraw = refresh;
@@ -113,8 +104,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   function on() {
    if (sort.key === key) sort.dir = -sort.dir;
    else { sort.key = key; sort.dir = firstDir === undefined ? -1 : firstDir; }
-   // The sort is the page's state, so it reaches the URL: a reader who copied the link must get
-   // the same order back.
    if (sort === liveSort) { state.liveKey = sort.key; state.liveDir = sort.dir; }
    else { state.key = sort.key; state.dir = sort.dir; }
    var was = focusedColumn();
@@ -130,8 +119,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    active ? e('span', 'arrow', sort.dir === 1 ? '▲' : '▼') : null
   ])]);
  }
- // The header the reader is on keeps its focus across a redraw: the table is rebuilt from
- // scratch, so the button just activated is replaced and a keyboard reader is dropped to the top.
  function focusedColumn() {
   var el = document.activeElement;
   return el && el.getAttribute && el.getAttribute('data-col');
@@ -142,8 +129,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   if (next) next.focus();
  }
 
- // The page refits the model from the figures it carries, with main.ts's procedure, and checks it
- // against the board, saying so if they disagree.
  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
  var FIT = (function () {
@@ -181,12 +166,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   return MODEL.launchP(row.tvl_usd, row.change_7d, row.age_days);
  }
 
- // The odds, to four decimals of a percent: the board publishes the probability at six decimals,
- // and four decimals of a percent IS those six, so the figure the reader multiplies is the board's.
  function oddsText(p) { return (p * 100).toFixed(4) + '%'; }
 
- // The plan is generated once, by main.ts, and carried in the dataset, so the plan a reader reads
- // is the one the board hands in.
  function farmSteps(row) {
   return (row.farm_steps || []).map(function (text) {
    var m = /Cost:\s*(.*?)\.\s*Time:\s*(.*?)\.?\s*$/.exec(text);
@@ -196,21 +177,15 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  }
 
  function openDetail(slug, push, trigger) {
-  // Whatever opened the drawer is what the reader comes back to: an opener inside the drawer is
-  // destroyed by the drawer's rebuild, so the board's row is where they return.
   var opener = trigger || document.activeElement;
   if (opener && opener !== document.body && opener.focus && !opener.closest('.sheet')) lastFocus = opener;
   var row = rowBySlug(slug);
   if (!row) {
-   // A protocol whose token already trades is not on the board: it has no implied value and no
-   // farm plan, because its value is the market's own. The drawer opens on those figures.
    var live = liveBySlug(slug);
    if (live) openLive(live, push);
    return;
   }
   state.selected = slug;
-  // 'same' is a move WITHIN the drawer: it rewrites the entry the drawer owns, so Close still
-  // closes the drawer rather than walking back through the peers.
   var mode = push === 'same' ? 'replace' : (push === false ? 'replace' : 'push');
   writeHash(mode);
   if (push !== 'same') drawerPushed = push !== false;
@@ -226,8 +201,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    kpi('TVL', moneyExact(row.tvl_usd))
   ]);
 
-  // The drawer shows the arithmetic the reader can redo: TVL, the multiplier, the category's
-  // correction and the two products, each at the precision the arithmetic needs.
   var deriv = h('div','deriv', [
    line('TVL', moneyExact(row.tvl_usd)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),
@@ -274,8 +247,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    });
   }
 
-  // The drawer's body: a heading and the block under it. The sheet's title is an h2, so its
-  // sections are h3: a jump from h2 to h4 is a heading a screen reader cannot follow.
   function sect(title, block) { return [h('h3', null, [title]), block]; }
   var sheet = sheetFor(row, row.slug + ' · rank ' + row.rank + ' of ' + D.board_size,
    row.on_watchlist ? L.on_watchlist : L.off_watchlist + ' — ' + (row.tvl_usd >= D.floor_usd ? 'above' : 'below') + ' the $' + (D.floor_usd / 1e6) + 'M floor',
@@ -289,7 +260,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   mountSheet(host, sheet, row);
  }
 
-// A token that already trades: no implied value, no plan.
  function sheetFor(row, sub, tagText, tagCls, body) {
  var head = h('div','sheet-head', [
  el('div', null, [
@@ -308,11 +278,82 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  return e('span', 'chip-static', c);
  })));
  }
-// The dialog names itself, so a screen reader announces it.
  var sheet = el('div', {
  class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sheet-title', tabindex: '-1'
  }, kids.concat(body));
  return sheet;
+ }
+ function renderModel() {
+ var host = into('view-model');
+ var c = D.calibration;
+ function modelCard(title, big, note) {
+ return h('div','card', [t('h3', title), big ? e('div', 'big', big) : null, el('p', { html: note })]);
+ }
+ var cards = h('div','model-grid', [
+ modelCard(L.value_fit, c.mae_log10.toFixed(3), D.copy.value_fit_note),
+ modelCard(L.launch_odds, c.launch_auc.toFixed(3), D.copy.launch_odds_note),
+ modelCard(L.no_name_special, null, D.copy.no_name_special)
+ ]);
+ host.appendChild(cards);
+ host.appendChild(card(L.formula, [
+ e('div', 'formula', D.copy.formula),
+ el('p', { html: D.copy.clamps })
+ ]));
+ if (FIT) {
+ var ok = FIT.exact === FIT.total;
+ host.appendChild(card(L.refitted, [
+ el('div', { class: 'big', style: ok ? '' : 'color:var(--live)' },
+ FIT.exact + ' / ' + FIT.total),
+ el('p', { html: D.copy.refit_lead +
+ (ok
+ ? '<strong>All ' + FIT.total + ' rows reproduce exactly</strong>, so the board and the page are the same model.'
+ : '<strong>' + (FIT.total - FIT.exact) + ' rows differ</strong>, the largest by ' + (FIT.worst * 100).toFixed(1) + '%, which means the data on this page is stale.') })
+ ]));
+ }
+ var curve = card(L.curve_title, [t('p', D.copy.curve_note)]);
+ var curveBox = h('div','curve');
+ c.bands.forEach(function (b) {
+ var rate = b.n ? b.issued / b.n : 0;
+ curveBox.appendChild(h('div','curve-row', [
+ e('span', 'lbl', (b.lo / 365.25).toFixed(1) + 'y – ' + (b.hi === null ? '∞' : (b.hi / 365.25).toFixed(1) + 'y')),
+ h('span','track', [el('span', { class: 'fill', style: 'width:' + (rate * 100).toFixed(1) + '%' })]),
+ e('span', 'v', Math.round(rate * 100) + '%')
+ ]));
+ });
+ curve.appendChild(curveBox);
+ var bandsTable = h('table','bands', [
+ el('thead', null, [el('tr', null, [
+ t('th','Cohort'), t('th','Protocols'),
+ t('th',L.curve_issued), t('th','Rate')
+ ])]),
+ el('tbody', null, c.bands.map(function (b) {
+ var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
+ b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—'];
+ return el('tr', null, cells.map(function (c) { return t('td', c); }));
+ }))
+ ]);
+ curve.appendChild(bandsTable);
+ host.appendChild(curve);
+ var catCard = card(L.category_corrections, [t('p', D.copy.category_note)]);
+ var catRows = Object.keys(c.category_log).map(function (k) {
+ return { k: k, v: c.category_log[k] };
+ }).sort(function (a, b) { return b.v - a.v; });
+ var catTable = h('table','cat-table');
+ function catRow(k, v) {
+ catTable.appendChild(el('tr', null, [
+ t('td', k),
+ t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')')
+ ]));
+ }
+ catRows.forEach(function (r) { catRow(r.k, r.v); });
+ var seen = {};
+ D.rows.forEach(function (r) { seen[r.category || 'Uncategorised'] = true; });
+ var missing = Object.keys(seen).filter(function (k) { return !(k in c.category_log); });    if (missing.length) catRow(missing.length + ' more the cohort never saw', c.category_default);
+ catCard.appendChild(catTable);
+ host.appendChild(catCard);
+ host.appendChild(card(L.is_and_is_not, [
+ el('div', { class: 'prose', html: D.copy.is_and_is_not })
+ ]));
  }
  function openLive(row, push) {
  state.selected = row.slug;
@@ -447,78 +488,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  host.appendChild(h('div','plot-legend', [
  el('span', null, [el('i', { style: 'background:var(--value)' }), L.on_watchlist]),
  el('span', null, [el('i', { style: 'background:var(--odds)' }), L.off_watchlist])
- ]));
- }
- function renderModel() {
- var host = into('view-model');
- var c = D.calibration;
- function modelCard(title, big, note) {
- return h('div','card', [t('h3', title), big ? e('div', 'big', big) : null, el('p', { html: note })]);
- }
- var cards = h('div','model-grid', [
- modelCard(L.value_fit, c.mae_log10.toFixed(3), D.copy.value_fit_note),
- modelCard(L.launch_odds, c.launch_auc.toFixed(3), D.copy.launch_odds_note),
- modelCard(L.no_name_special, null, D.copy.no_name_special)
- ]);
- host.appendChild(cards);
- host.appendChild(card(L.formula, [
- e('div', 'formula', D.copy.formula),
- el('p', { html: D.copy.clamps })
- ]));
- if (FIT) {
- var ok = FIT.exact === FIT.total;
- host.appendChild(card(L.refitted, [
- el('div', { class: 'big', style: ok ? '' : 'color:var(--live)' },
- FIT.exact + ' / ' + FIT.total),
- el('p', { html: D.copy.refit_lead +
- (ok
- ? '<strong>All ' + FIT.total + ' rows reproduce exactly</strong>, so the board and the page are the same model.'
- : '<strong>' + (FIT.total - FIT.exact) + ' rows differ</strong>, the largest by ' + (FIT.worst * 100).toFixed(1) + '%, which means the data on this page is stale.') })
- ]));
- }
- var curve = card(L.curve_title, [t('p', D.copy.curve_note)]);
- var curveBox = h('div','curve');
- c.bands.forEach(function (b) {
- var rate = b.n ? b.issued / b.n : 0;
- curveBox.appendChild(h('div','curve-row', [
- e('span', 'lbl', (b.lo / 365.25).toFixed(1) + 'y – ' + (b.hi === null ? '∞' : (b.hi / 365.25).toFixed(1) + 'y')),
- h('span','track', [el('span', { class: 'fill', style: 'width:' + (rate * 100).toFixed(1) + '%' })]),
- e('span', 'v', Math.round(rate * 100) + '%')
- ]));
- });
- curve.appendChild(curveBox);
- var bandsTable = h('table','bands', [
- el('thead', null, [el('tr', null, [
- t('th','Cohort'), t('th','Protocols'),
- t('th',L.curve_issued), t('th','Rate')
- ])]),
- el('tbody', null, c.bands.map(function (b) {
- var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
- b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—'];
- return el('tr', null, cells.map(function (c) { return t('td', c); }));
- }))
- ]);
- curve.appendChild(bandsTable);
- host.appendChild(curve);
- var catCard = card(L.category_corrections, [t('p', D.copy.category_note)]);
- var catRows = Object.keys(c.category_log).map(function (k) {
- return { k: k, v: c.category_log[k] };
- }).sort(function (a, b) { return b.v - a.v; });
- var catTable = h('table','cat-table');
- function catRow(k, v) {
- catTable.appendChild(el('tr', null, [
- t('td', k),
- t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')')
- ]));
- }
- catRows.forEach(function (r) { catRow(r.k, r.v); });
- var seen = {};
- D.rows.forEach(function (r) { seen[r.category || 'Uncategorised'] = true; });
- var missing = Object.keys(seen).filter(function (k) { return !(k in c.category_log); });    if (missing.length) catRow(missing.length + ' more the cohort never saw', c.category_default);
- catCard.appendChild(catTable);
- host.appendChild(catCard);
- host.appendChild(card(L.is_and_is_not, [
- el('div', { class: 'prose', html: D.copy.is_and_is_not })
  ]));
  }
  function renderLive() {

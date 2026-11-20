@@ -823,6 +823,8 @@ export interface Labels {
   /** The drawer's figures: what each one is. */
   fitted_multiplier: string;
   category_correction: string;
+  /** The line that says how many cohort members the category correction rests on. */
+  category_evidence: string;
   value_if_issues: string;
   odds_recomputed: string;
   /** The drawer's sections. */
@@ -1532,6 +1534,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       odds_axis: 'Launch odds (chance it issues a token)',
       fitted_multiplier: 'Fitted multiplier, before the correction',
       category_correction: 'Category correction',
+      category_evidence: 'Category evidence',
       value_if_issues: 'Value if it issues',
       odds_recomputed: 'Launch odds (recomputed in the page)',
       how_priced: 'How this row is priced',

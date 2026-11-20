@@ -222,10 +222,23 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    line('TVL', moneyExact(row.tvl_usd)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),
    line(L.category_correction, '×' + Math.pow(10, row.category_log).toPrecision(9)),
+   // How many cohort members this row's category correction rests on. A correction fitted on one
+   // row and one fitted on ten are different kinds of number, and the reader is being asked to
+   // weigh this one against the implied value below it.
+   line(L.category_evidence, categoryEvidence(row)),
    line(L.value_if_issues, moneyExact(calc.conditional)),
    line(L.odds_recomputed, oddsText(odds)),
    line(L.implied, moneyExact(calc.expected), true)
   ]);
+
+  // The category correction's evidence, in the page's own voice: how many cohort members the
+  // correction rests on, and whether that is thin enough to say so.
+  function categoryEvidence(r) {
+   var n = (D.calibration.category_sizes || {})[r.category];
+   if (n === undefined) return 'the cohort never saw this category';
+   if (n === 1) return 'fitted on 1 cohort member';
+   return 'fitted on ' + n + ' cohort members';
+  }
 
   var steps = h('ol','steps');
   farmSteps(row).forEach(function (s) {

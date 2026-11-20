@@ -249,7 +249,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
   function sect(title, block) { return [h('h3', null, [title]), block]; }
   var sheet = sheetFor(row, row.slug + ' · rank ' + row.rank + ' of ' + D.board_size,
-   row.on_watchlist ? L.on_watchlist : L.off_watchlist + ' — ' + (row.tvl_usd >= D.floor_usd ? 'above' : 'below') + ' the $' + (D.floor_usd / 1e6) + 'M floor',
+   (row.on_watchlist ? L.on_watchlist : L.off_watchlist) + ' — ' + (row.tvl_usd >= D.floor_usd ? 'above' : 'below') + ' the $' + (D.floor_usd / 1e6) + 'M floor',
    row.on_watchlist ? 'wl' : 'early', [kpis]
     .concat(sect(L.how_priced, deriv))
     .concat(sect(L.snapshot_record, record))

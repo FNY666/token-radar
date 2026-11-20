@@ -27,16 +27,18 @@ Node 22, standard library only. Nothing is installed before it runs.
 ## The model in one paragraph
 
 The snapshot holds protocols whose tokens already trade, each with a market cap and a TVL. That
-cohort — 75 protocols after the eligibility rules below — is the calibration set: a Huber-weighted
-least squares fits log(market cap over TVL) against log TVL and seven-day growth, with a
-per-category correction shrunk toward the global mean. The chosen form was picked by five-fold
-cross-validation on that cohort (0.420 median absolute error in log10 dollars). A second logistic
-fit, on the 303-protocol eligible universe that is left once the product rows are taken out, gives
-the chance a protocol of a given age and size issues a token of its own (AUC 0.753). The board ranks
+cohort — 75 protocols after the eligibility rules below — is the calibration set: a
+redescending-weight least squares fits log(market cap over TVL) against log TVL, with a
+per-category correction shrunk toward the global mean. The form was measured, not assumed: over 300
+random five-fold splits the growth term cannot be told from noise in this fit, so it is not in it
+(0.415 median absolute error in log10 dollars held out from the fit). A second logistic fit, on the
+303-protocol eligible universe that is left once the product rows are taken out, gives
+the chance a protocol of a given age and size issues a token of its own (AUC 0.753), and growth
+is strongly identified there. The board ranks
 the product: the value if it issues, times the chance it issues. No constant is typed in from outside
 and no protocol name is special-cased — the same function scores every row.
 
-The full write-up, including the cross-validation table and the launch curve, is in
+The full write-up, including the measurements behind each choice and the launch curve, is in
 [MODEL.md](MODEL.md).
 
 ## The dashboard

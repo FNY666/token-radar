@@ -1303,7 +1303,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'the other ' + cal.product_rows + ' eligible rows carry a ticker but no market cap and no CoinGecko id of their own, and a pool of a protocol that already issued is evidence neither way. Neither model reads a name list: ' +
       'both read the snapshot\'s own fields.',
     live_note:
-      '<strong>These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
+      '<strong class="lead">These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
       'The snapshot holds ' + facts.snapshot_protocols + ' protocols, ' + facts.snapshot_tokens + ' of which record a token of some kind; ' +
       facts.live_with_cap + ' carry a market cap of their own, and ' + facts.live_cex + ' of those are exchange venues, so they are set aside too. ' +
       'This table holds the ' + live.length + ' largest of the ' + facts.live_candidates + ' that are left, by market cap; the rest are further down the same list. ' +

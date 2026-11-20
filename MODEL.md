@@ -240,6 +240,23 @@ record and never from a hand-written list of names:
   protocol with no first-tracked date — seven of the 195 rows, all of them untracked in the
   snapshot — gets 60 days, the same as one first seen under a year. The age is unknown, and 60 is
   the middle of the rule rather than its most generous end.
+* **the gas the plan counts** is priced for the whole hold window, not for a month: the weekly
+  action is budgeted at the chain's own gas rate for each of the hold window's whole weeks, so a
+  90-day hold is budgeted for 13 weeks and a 30-day hold for 5. Before this was priced from the
+  window, every one of the 195 rows budgeted four weeks of gas and then held for five to thirteen —
+  an understatement of more than a factor of three on the longest holds.
+* **what the position earns** follows from the action, not from the category's name. A deposit
+  into a vault, a lending market, a pool or a strategy earns the protocol's own yield, and the
+  plan says so. A swap, a purchase, a bridge, a collateral lock, a margin position, a wrapper or
+  a card balance earns nothing by itself, and the plan says that instead — promising a yield on a
+  position that pays none is the one thing a farm plan must not do. The rule is a list of
+  *categories*, never of protocols, and a category the action table does not name falls back to a
+  deposit, which earns.
+* **the closing note** follows the age band the model itself uses. A protocol inside the model's
+  youngest band — 49 of the 188 dated rows, tracked for under 182 days — is described as early,
+  with the launch curve's own finding quoted back: protocols this young issue *least* often. The
+  other rows are described as slow ones. A protocol with no first-tracked date is told that the
+  house cannot tell how long it has run, and is not told anything it cannot support.
 
 The plan is generated **once**, by `lib/model.ts`, and travels with the row: the eight steps go into
 `board.json` and into the dataset the page reads. The detail view shows those same eight steps, so

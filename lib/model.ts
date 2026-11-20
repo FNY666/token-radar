@@ -1131,6 +1131,57 @@ const CATEGORY_ACTIONS: Record<string, string> = {
 /** The fallback line: the one action a category the table does not name still gets. */
 const FALLBACK_ACTION = "Deposit {cap} of USDC into {name}'s {cat} product on {chain} and hold the receipt it issues.";
 
+/**
+ * The categories whose step-2 action SPENDS the capital into something that earns nothing by
+ * itself: a swap, a purchase, a bridge, a lock posted as collateral, a margin position, a note
+ * held to term, an index token, a cover policy, a card balance or a market outcome share.
+ *
+ * Every other category's action is a DEPOSIT into the protocol's own product -- a vault, a
+ * lending market, a pool, a strategy, a farm, a staking pool -- and that product pays the holder.
+ * So the board promises a yield only where a yield exists, and says plainly where none does.
+ *
+ * The list is a list of categories, never of protocols: the same rule reaches every protocol in
+ * a category, and a protocol in a category the table does not name gets the fallback action,
+ * which is a deposit.
+ */
+const NON_YIELDING_CATEGORIES = new Set([
+  'Prediction Market',
+  'Chain',
+  'CDP',
+  'CDP Manager',
+  'Collateral Markets',
+  'Derivatives',
+  'Interest Rate Derivatives',
+  'Basis Trading',
+  'Leveraged Farming',
+  'Dual-Token Stablecoin',
+  'Indexes',
+  'Insurance',
+  'Payments',
+  'OTC Marketplace',
+  'Crypto Card Issuer',
+  'Stablecoin Wrapper',
+  'Synthetics',
+  'Algo-Stables',
+  'Stablecoin Issuer',
+  'Launchpad',
+  'Token Locker',
+  'NFT Marketplace',
+  'Decentralized AI',
+  'Options',
+  'Privacy',
+]);
+
+/** Whether the position a protocol's action opens earns the protocol's own yield. */
+function positionEarns(category: string | null): boolean {
+  const cat = category ?? '';
+  // A category the action table does not name gets the fallback action, which is a deposit into
+  // the protocol's own product -- so it earns. Every category the table names is judged by the
+  // list above.
+  if (!(cat in CATEGORY_ACTIONS)) return true;
+  return !NON_YIELDING_CATEGORIES.has(cat);
+}
+
 /** A name in the possessive: "Veda's", but "Plume Vaults'". */
 function possessive(name: string): string {
   return name.endsWith('s') ? `${name}'` : `${name}'s`;
@@ -1174,6 +1225,11 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const action = actionFor(p, capital, chain);
   const dated = p.listed_at !== null;
   const tracked = dated ? `since ${p.listed_at}` : 'on an unknown date';
+  // The weekly gas is priced for the whole hold window, in whole weeks.
+  const weeks = Math.ceil(hold / 7);
+  // Whether the position earns the protocol's own yield: a deposit into a vault, a market or a
+  // pool does, and a swap, a purchase or a bridged position does not.
+  const earns = positionEarns(p.category ?? null);
   return [
     {
       text: `Open a fresh wallet for ${p.name} alone, fund it with the gas asset for ${chain}, and keep the seed phrase offline.`,
@@ -1187,14 +1243,27 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
     },
     {
       text: `Make one qualifying action every week: a deposit, a swap, a borrow or a vote, so the wallet shows activity in every weekly snapshot.`,
-      // The weekly action costs what any transaction on that chain costs. What makes the weeks
-      // cheaper than a month of them is the count, not a discount on the price.
-      cost: `about $${gas} of gas a week, so $${gas * 4} across the four weeks of a month`,
+      // The weekly action costs what any transaction on that chain costs, and the plan holds the
+      // position for the whole window step 4 sets -- so the gas is priced for THOSE weeks, not for
+      // four of them. A plan that budgeted four weeks of gas and then held for thirteen was
+      // understated by more than a factor of three.
+      cost: `about $${gas} of gas a week, so $${gas * weeks} across the ${weeks} weeks of the hold window`,
       time: '10 minutes a week',
     },
     {
-      text: `Hold the position for at least ${hold} days, keeping the balance deposited rather than idle, so the streak covers more than one snapshot.`,
-      cost: `the $${capital} stays deposited, and the yield it earns is yours`,
+      // What "hold" means follows the position: a deposit stays deposited, and a position that
+      // was bought or swapped into is simply held. And what the position earns follows the same
+      // line: a deposit into the protocol's own product earns that product's yield, and a swap
+      // into an asset or an outcome share earns nothing but the asset itself.
+      text: earns
+        ? `Hold the position for at least ${hold} days, keeping the balance deposited rather than idle, so the streak covers more than one snapshot.`
+        : `Hold the position for at least ${hold} days, keeping it open rather than closed out, so the streak covers more than one snapshot.`,
+      // What the position earns depends on what the step-2 action did: a deposit into a vault or
+      // a market earns the protocol's own yield, but a swap, a purchase or a bridged position does
+      // not, and promising a yield there would be promising something the protocol never pays.
+      cost: earns
+        ? `the $${capital} stays deposited, and the yield it earns is yours`
+        : `the $${capital} stays where the protocol keeps it, and what it earns, if anything, is yours`,
       time: `${hold} days`,
     },
     {
@@ -1214,9 +1283,13 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
     },
     {
       // A protocol with no first-tracked date has no age, so the plan must not claim it has run
-      // long: the record says nothing about how long it has run, and the plan says so.
+      // long: the record says nothing about how long it has run, and the plan says so. And a
+      // protocol tracked for a few weeks has NOT run long, whatever the launch curve says about
+      // its odds -- "this long" would contradict the entry's own model.
       text: dated
-        ? `Note the whole record: ${p.name} is tracked ${tracked}, and a protocol that has run this long without a token is a slow one, so size the position for the wait.`
+        ? (age !== null && age < AGE_BANDS[0].hi
+          ? `Note the whole record: ${p.name} is tracked ${tracked}, so it is still early — the launch curve says protocols this young issue least often, so size the position for the wait, not for the launch.`
+          : `Note the whole record: ${p.name} is tracked ${tracked}, and a protocol that has run this long without a token is a slow one, so size the position for the wait.`)
         : `Note the whole record: ${p.name} is tracked ${tracked}, so the house cannot tell how long it has run — size the position for the wait.`,
       cost: 'nothing but the note',
       time: '5 minutes',

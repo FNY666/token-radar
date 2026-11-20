@@ -350,29 +350,35 @@ export interface Calibration {
  *   rho(r) = r^2/2                  while |r| <= c
  *   rho(r) = c^2/2 + c^2 * ln(|r|/c)   past it
  * -- a quadratic core with a logarithmic tail. It is chosen over a PLAIN least squares, and the
- * comparison is measured over 300 random five-fold splits, paired split by split: the weighted
- * fit ranks the cohort better (higher rank correlation in 157 of 300 splits) and misses fewer
- * rows badly (fewer rows off by more than one log10 in 156 of 300), and it cuts the influence of
- * the single worst row on the intercept from 0.410 log10 to 0.273. Against a plain HUBER weight
- * (min(1, c/r), not squared) the two are within noise of each other -- the squared weight wins
- * the tail in 82 splits against 43, the Huber wins the rank correlation in 152 against 126 -- so
- * no claim is made against Huber here, and the loss is named rather than called Huber.
+ * comparison is measured over 300 five-fold splits, paired split by split: the weighted fit
+ * misses fewer rows badly (fewer rows off by more than one log10) in about 150 of 300 splits,
+ * and it cuts the influence of the single worst row on the intercept from 0.410 log10 to 0.273.
+ * Its advantage on RANK CORRELATION is within noise: across sixteen independent draws of the
+ * splits the win count runs 136-156 against a plain least squares, so half the time the plain
+ * fit ranks the cohort as well or better. Against a plain HUBER weight (min(1, c/r), not
+ * squared) the two are likewise within noise of each other -- the squared weight wins the tail
+ * in 53-86 splits against 43-56, the Huber wins the rank correlation in 144-183 -- so no claim
+ * is made against Huber here, and the loss is named rather than called Huber. The counts are
+ * given as ranges because the win count moves by fifteen splits when the draw changes: a single
+ * seed's count would claim a precision the measurement does not have.
  *
  * The form was chosen by five-fold cross-validation on that cohort, among the candidates. The
  * split is by a HASH OF THE SLUG, not by position in the sorted cohort: alphabetical neighbours
- * in this cohort are more alike than random rows, and a split that puts neighbours on the same
- * side of the fold leaks the answer into the score.
+ * in this cohort are more alike than random rows (the lag-one correlation of the residuals is
+ * +0.083 in alphabetical order against -0.021 in a random order), and a split that puts
+ * neighbours on the same side of the fold leaks the answer into the score.
  *
  * Growth was measured, not assumed. It earns its place in the LAUNCH probability, where the
  * effect is strong and identified: the observed rate at which a protocol issues a token falls
- * from 58.7% in the worst seven-day-growth quartile to 18.7% in the best, and the launch fit's
- * growth coefficient is negative in 300 of 300 bootstrap resamples. It earns NO place in the
- * market-cap ratio: on this cohort the coefficient's sign is set by the weight's exponent
- * rather than by the data (plain least squares gives -0.060, the shipped weight gives +0.059),
- * no bootstrap interval separates it from zero, and a permutation test that shuffles the growth
- * values among the cohort's rows puts the real data inside the null (p = 0.589). Paired over
- * 300 random five-fold splits, the form without growth ranks the cohort better in 300 of 300
- * splits and misses fewer rows badly in 222 of 300, against plain least squares with growth.
+ * from 58.7% in the worst seven-day-growth quartile to 40.0%, 26.7% and 17.9% in the three
+ * above it, and the launch fit's growth coefficient is negative in 300 of 300 bootstrap
+ * resamples (95% interval -1.00 to -0.21). It earns NO place in the market-cap ratio: on this
+ * cohort the coefficient's sign is set by the weight's exponent rather than by the data (plain
+ * least squares gives -0.060, the shipped weight gives +0.059), no bootstrap interval separates
+ * it from zero, and a permutation test that shuffles the growth values among the cohort's rows
+ * puts the real data inside the null (p = 0.52, the 48th percentile of the null). Paired over
+ * 300 five-fold splits, the form without growth ranks the cohort better in 294-300 of 300
+ * splits and misses fewer rows badly in 206-232 of 300, against plain least squares with growth.
  * A term that cannot be told from noise does not belong in a number the board is ranked on --
  * and the two models must not disagree: a hot protocol is LESS likely to issue, not more.
  */
@@ -1471,12 +1477,14 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'launch odds      = logistic(age band, tvl band, growth), then held to [0.05, 0.95]\n' +
       'implied value    = conditional value · launch odds  ← the board ranks this\n' +
       '\n' +
-      'Growth enters through the launch odds, where it is measured and strong: the rate at which a\n' +
-      'protocol issues falls from 58.7% in the worst seven-day-growth quartile to 18.7% in the\n' +
-      'best, and the launch fit\'s growth coefficient is negative in 300 of 300 bootstrap\n' +
-      'resamples. It is not in the ratio, because on the cohort of protocols whose tokens already\n' +
-      'trade it cannot be told from noise: shuffle the growth values among those rows and the real\n' +
-      'data falls inside the shuffled distribution (permutation p = 0.59).\n' +
+      'Growth enters through the launch odds, where it is measured and strong: across the ' +
+      cal.universe_size + ' protocols the launch model is fitted on, the rate at which a protocol\n' +
+      'issues falls from 58.7% in the worst seven-day-growth quartile to 40.0%, 26.7% and 17.9%\n' +
+      'in the three above it, and the launch fit\'s growth coefficient is negative in 300 of 300\n' +
+      'bootstrap resamples (95% interval -1.00 to -0.21). It is not in the ratio, because on the\n' +
+      'cohort of protocols whose tokens already trade it cannot be told from noise: shuffle the\n' +
+      'growth values among those rows and the real data falls inside the shuffled distribution\n' +
+      '(permutation p = 0.52).\n' +
       '\n' +
       'The two coefficients are printed to four decimals here, and the category corrections are ' +
       'printed to five, so the sum above lands on the conditional value to within one part in a ' +

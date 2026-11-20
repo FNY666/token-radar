@@ -67,14 +67,23 @@ rho(r) = r²/2                    while |r| ≤ c
 rho(r) = c²/2 + c²·ln(|r|/c)     past it
 ```
 
-— and it is chosen over a plain least squares, and the comparison is measured over 300 random
-five-fold splits, paired split by split: the weighted fit ranks the cohort better (higher rank
-correlation in 157 of 300) and misses fewer rows badly (fewer rows off by more than one log10 in
-156 of 300), and it cuts the influence of the single worst row on the intercept from 0.410 log10 to
-0.273. Against a plain Huber weight (`min(1, c/r)`, *not* squared) the two are within noise of
-each other — the squared weight wins the tail in 82 splits against 43, the Huber wins the rank
-correlation in 152 against 126 — so no claim is made against Huber, and the loss is named for what
-it is.
+— and it is chosen over a plain least squares, and the comparison is measured over 300 five-fold
+splits, paired split by split. The weighted fit misses fewer rows badly (fewer rows off by more
+than one log10) in about 150 of 300 splits, and it cuts the influence of the single worst row on
+the intercept from 0.410 log10 to 0.273. Its advantage on *rank correlation* is **within noise**:
+across sixteen independent draws of the 300 splits the win count runs 136–156 against a plain
+least squares and 130–166 under a hash-of-slug folding, so half the time the plain fit ranks the
+cohort as well or better. Against a plain Huber weight (`min(1, c/r)`, *not* squared) the two are
+likewise within noise of each other — the squared weight wins the tail in 53–86 splits against
+43–56, the Huber wins the rank correlation in 144–183 — so no claim is made against Huber, and
+the loss is named for what it is.
+
+Those ranges are the honest form of the number, because the win count is seed-sensitive: the same
+300-split comparison redrawn with a different seed moves the rank-correlation count by fifteen
+splits. A single figure quoted to the split would claim a precision the measurement does not have.
+The one claim that does survive redrawing is the tail: the form *without* growth misses fewer
+rows badly than the form with it in 206–232 of 300 splits, under every fold scheme tried, and
+ranks the cohort better in 294–300 of 300.
 
 ```
 log10(mcap / tvl)  =  a  +  b · log10(tvl)  +  category_log
@@ -89,18 +98,27 @@ conditional value  =  tvl · 10^(that sum)
 The fitted coefficients are `a = 4.4042` and `b = −0.6443`: a power law in TVL. The median protocol
 trades at a small and shrinking fraction of the deposits behind it, and the fit reproduces that.
 
-**Growth was measured, and it earns its place in the launch odds, not in the ratio.** On this
-cohort the growth term's *sign* is set by the weight's exponent rather than by the data: plain
-least squares gives −0.060, the shipped weight gives +0.059, and no bootstrap interval separates
-the coefficient from zero. A permutation test that shuffles the growth values among the cohort's
-rows puts the real data inside the null (p = 0.589). Paired over 300 random five-fold splits, the
-form *without* growth ranks the cohort better in 300 of 300 splits and misses fewer rows badly in
-222 of 300. A term that cannot be told from noise does not belong in a number the board is ranked
-on — and the two models must not disagree: a hot protocol is *less* likely to issue, not more.
+**Growth was measured, and it earns its place in the launch odds, not in the ratio.** In the launch
+model it is strong and identified: across the 303 protocols the launch fit is fitted on, the rate
+at which a protocol issues falls from **58.7% in the worst seven-day-growth quartile to 40.0%,
+26.7% and 17.9%** in the three above it, and the growth coefficient is negative in 300 of 300
+bootstrap resamples (95% interval −1.00 to −0.21). In the value model it is not identified at
+all. On this cohort the growth term's *sign* is set by the weight's exponent rather than by the
+data: plain least squares gives −0.060, the shipped weight gives +0.059, and no bootstrap interval
+separates the coefficient from zero. A permutation test that shuffles the growth values among the
+cohort's rows puts the real data inside the null (p = 0.52; the real coefficient sits at the 48th
+percentile of the null). Paired over 300 five-fold splits, the form *without* growth ranks the
+cohort better in 294–300 of 300 splits and misses fewer rows badly in 206–232 of 300. A term
+that cannot be told from noise does not belong in a number the board is ranked on — and the two
+models must not disagree: a hot protocol is *less* likely to issue, not more.
 
 The folds are by a **hash of the slug**, not by position in the sorted cohort. Alphabetical
-neighbours in this cohort are more alike than random rows, and a split that puts neighbours on the
-same side of the fold leaks the answer into the score.
+neighbours in this cohort are more alike than random rows — the lag-one correlation of the
+residuals is +0.083 in alphabetical order against −0.021 in a random order — so a split that puts
+neighbours on the same side of the fold leaks the answer into the score. Every count above is
+given as a range over sixteen independent draws of the folds, because the win count moves by
+fifteen splits when the draw changes; the entry does not quote a single seed's count as if it
+were a constant.
 
 **The error the board publishes is measured, and it flatters the model.** In-sample, the median
 absolute error of the model the board prices with is **0.337 log10** — a factor of 2.2 on the

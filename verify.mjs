@@ -54,6 +54,55 @@ check('every implied_value_usd is a positive whole number <= 1e14', valueBad ===
 check('every farm_steps holds 3..12 strings', stepCountBad === 0, `${stepCountBad} bad`);
 check('every farm step is 20..600 characters trimmed', stepTextBad === 0, `${stepTextBad} bad`);
 
+// the live rows travel in the dataset the page reads, not in board.json
+function liveRows(outDir) {
+  const src = fs.readFileSync(path.join(outDir, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  return data.live || [];
+}
+
+// ---------------------------------------------------------------- the live table's Cap/TVL// The "Already trading" table prints the market cap, the TVL and the multiple between them. A
+// reader divides the two they can see and must land on the third -- so the published multiple
+// has to be the quotient of the PUBLISHED operands, at the precision it is shown.
+//
+// The precision the page prints the operands at is read from the page's own source, so this
+// check cannot be passed by editing the check: if the page's precision changes, the check
+// follows it. And the check runs on the RENDERED cells, so it measures what a reader sees.
+{
+  const pageSrc = fs.readFileSync(path.join(out, 'dashboard', 'page.js'), 'utf8');
+  const cellMatch = /money\(r\.mcap_usd,\s*(\d+)\)/.exec(pageSrc);
+  const tvlMatch = /money\(r\.tvl_usd,\s*(\d+)\)/.exec(pageSrc);
+  const osig = cellMatch ? Number(cellMatch[1]) : 0;
+  const tsig = tvlMatch ? Number(tvlMatch[1]) : 0;
+  // the page's own money(): the unit from the magnitude, then the mantissa to `sig` figures
+  const shown = (n, sig) => {
+    if (n === null || n === undefined) return null;
+    const a = Math.abs(n);
+    if (a >= 1e9) return Number((n / 1e9).toPrecision(sig)) * 1e9;
+    if (a >= 1e6) return Number((n / 1e6).toPrecision(sig)) * 1e6;
+    if (a >= 1e3) return Number((n / 1e3).toPrecision(sig)) * 1e3;
+    return Math.round(n);
+  };
+  const live = liveRows(out);
+  let liveBad = 0;
+  let liveNoRows = live.length === 0;
+  const ex = [];
+  for (const r of live) {
+    if (typeof r.ratio !== 'number') { liveBad++; continue; }
+    const mv = shown(r.mcap_usd, osig);
+    const tv = shown(r.tvl_usd, tsig);
+    if (mv === null || tv === null || tv === 0) { liveBad++; continue; }
+    const readerGets = Number((mv / tv).toFixed(2));
+    if (readerGets !== Number(r.ratio.toFixed(2))) {
+      liveBad++;
+      if (ex.length < 4) ex.push(`${r.name}: reader gets ${readerGets}, page shows ${Number(r.ratio.toFixed(2))}`);
+    }
+  }
+  check('the live table publishes a Cap/TVL a reader can divide out of the printed operands',
+    !liveNoRows && liveBad === 0,
+    liveNoRows ? 'no live rows in board.json' : `${live.length - liveBad}/${live.length} reproduce` + (ex.length ? ' | ' + ex.join(' | ') : ''));
+}
+
 // ---------------------------------------------------------------- sorted_by_value
 const ranks = rows.map((r) => r.rank).sort((a, b) => a - b);
 let rankSeq = true;

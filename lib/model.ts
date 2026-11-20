@@ -1020,7 +1020,12 @@ export function liveRows(snapshot: Snapshot): LiveRow[] {
       tvl_usd: p.tvl_usd,
       mcap_usd: p.mcap_usd,
       change_7d: p.change_7d,
-      ratio: p.tvl_usd > 0 ? Math.round(((p.mcap_usd ?? 0) / p.tvl_usd) * 1000) / 1000 : null,
+      // The market cap over TVL, at nine decimals -- and NOT rounded to the three the page used
+      // to publish. The page shows this number to two decimals, so a quotient rounded to three
+      // first could be pushed over a two-decimal boundary by that first rounding: Api3's
+      // 2.9747247 became 2.975 and then displayed as 2.98, where the exact division gives 2.97.
+      // The page rounds once, at the precision it shows, and so must the data that feeds it.
+      ratio: p.tvl_usd > 0 ? Math.round(((p.mcap_usd ?? 0) / p.tvl_usd) * 1e9) / 1e9 : null,
       not_in_cohort: cohortGap(p),
     }));
 }

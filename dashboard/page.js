@@ -382,13 +382,13 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var gap = row.not_in_cohort || null;
  var kpis = h('div','kpis', [
  kpi(L.market_cap, moneyExact(row.mcap_usd), 'gold'),
- kpi('TVL', money(row.tvl_usd)),
+ kpi('TVL', moneyExact(row.tvl_usd)),
  kpi(L.cap_over_tvl, row.ratio === null ? '—' : row.ratio.toFixed(2), 'cyan'),
  kpi('7d change', pct(row.change_7d))
  ]);
  var record = h('div','deriv', [
  line(L.market_cap, moneyExact(row.mcap_usd)),
- line('TVL', money(row.tvl_usd)),
+ line('TVL', moneyExact(row.tvl_usd)),
  line(L.cap_over_tvl, row.ratio === null ? L.not_recorded : row.ratio.toFixed(4)),
  line(L.seven_day, pct(row.change_7d)),
  line('Category', row.category || 'Uncategorised'),
@@ -535,8 +535,12 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  ])
  ]),
  e('td', 'cat', r.category || 'Uncategorised'),
- e('td', 'right num', money(r.mcap_usd)),
- e('td', 'right num', money(r.tvl_usd)),
+ // The market cap and the TVL print at SIX significant figures, not the three the board uses.
+ // The multiple beside them is shown to two decimals, and a two-decimal multiple is not
+ // determined by a three-figure figure: at three figures a reader's own division missed the
+ // printed multiple on 13 of the 30 rows, at five on 2, at six on none.
+ e('td', 'right num', money(r.mcap_usd, 6)),
+ e('td', 'right num', money(r.tvl_usd, 6)),
  h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : r.ratio.toFixed(2))]),
  chg(r)
  ]));

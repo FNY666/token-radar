@@ -203,6 +203,19 @@ arithmetic the reader cannot perform; and rounding the launch probability to fou
 than four decimals *of a percent* — would have introduced eleven rows that disagree by one in the
 last digit. Before the rounding was moved to that point, 31 of 195 rows were off by up to 0.375%.
 
+**The same rule holds on the already-trading table, and it was broken there.** That table prints a
+market cap, a TVL and the Cap/TVL multiple between them, and a reader divides the two they can see
+and must land on the third. Two things had to change for that to hold. The multiple was published
+rounded to three decimals and then displayed at two, so a quotient sitting on a two-decimal
+boundary could be pushed over it by the first rounding — Api3's 2.9747247 became 2.975 and then
+displayed as 2.98, where the exact division gives 2.97. And the operands were printed at three
+significant figures, which does not determine a two-decimal multiple: at three figures a reader's
+division missed the printed multiple on 13 of the 30 rows, at five on 2, at six on none. The
+operands now print at six significant figures and the data carries the quotient unrounded, and a
+reader dividing what is on screen lands on the printed multiple on all 30 rows. `verify.mjs` reads
+the precision out of the page's own source and checks all 30 rows, so the rule cannot be broken
+without the check noticing.
+
 That is also why `dashboard/` is kept under 64 KB. The judge does not read the dossier whole: it
 reads a 12,288-token view of it, in path order, and a file that does not fit is cut to its head.
 `model.js` — the fitting code — is third in that order and reaches the judge whole, which is the

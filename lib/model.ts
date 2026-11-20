@@ -358,7 +358,8 @@ export interface Calibration {
  * -- a quadratic core with a logarithmic tail. It is chosen over a PLAIN least squares, and the
  * comparison is measured over 300 five-fold splits, paired split by split: the weighted fit
  * misses fewer rows badly (fewer rows off by more than one log10) in about 150 of 300 splits,
- * and it cuts the influence of the single worst row on the intercept from 0.410 log10 to 0.273.
+ * and it cuts the worst single row's influence on the intercept from 0.410 log10 to 0.273 -- and
+ * the row a plain fit leans on hardest moves the model's own fit by only 0.084, a fifth as much.
  * Its advantage on RANK CORRELATION is within noise: across sixteen independent draws of the
  * splits the win count runs 136-156 against a plain least squares, so half the time the plain
  * fit ranks the cohort as well or better. Against a plain HUBER weight (min(1, c/r), not
@@ -1475,8 +1476,10 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'That is measured on the rows the model was fitted on, so it flatters it: held out from the ' +
       'fit, the same form scores ' + '0.415' + ' on a median row — within a factor of ' +
       Math.pow(10, 0.415).toFixed(1) + '. The fit is a redescending-weight least squares, so no ' +
-      'single row can drag it: the worst row in the cohort moves the intercept by 0.273 log10 ' +
-      'under the weight the model uses, against 0.410 under a plain least squares.',
+      'single row can drag it: the worst single row moves the intercept by 0.410 log10 under a ' +
+      'plain least squares, and by 0.273 log10 under the weight the model uses. The row that moves ' +
+      'a plain fit most — the one priced at four hundred times its deposits — moves the ' +
+      'model\'s own fit by 0.084, a fifth as much.',
     launch_odds_note:
       'How well the launch model separates the protocols that have issued a token of their own from those that have not, across the eligible universe less the ' +
       cal.product_rows + ' product rows — rows that carry a ticker but no market cap of their own and no CoinGecko id either. ' +

@@ -200,6 +200,89 @@ for (const name of shots) {
     st.size >= 300 * 1024 && st.size <= 350 * 1024, `${st.size} bytes`);
 }
 
+// ---------------------------------------------------------------- the influence claim
+// The page says no single row can drag the value fit: the worst single row moves the intercept
+// by 0.410 log10 under a plain least squares and by 0.273 under the model's own weight. Both
+// numbers are MAXIMA over that fit's own worst row, and no single row carries both -- so this
+// check computes both maxima the same way the claim states them, and refuses to let the copy
+// quote a number the measurement does not produce.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const median = (v) => { if (!v.length) return 0; const s = [...v].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const solve = (matrix, rhs) => {
+    const n = rhs.length;
+    const m = matrix.map((row, i) => row.concat([rhs[i]]));
+    for (let c = 0; c < n; c++) {
+      let pivot = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(m[r][c]) > Math.abs(m[pivot][c])) pivot = r;
+      [m[c], m[pivot]] = [m[pivot], m[c]];
+      if (Math.abs(m[c][c]) < 1e-10) continue;
+      for (let rr = 0; rr < n; rr++) {
+        if (rr === c) continue;
+        const f = m[rr][c] / m[c][c];
+        for (let k = c; k <= n; k++) m[rr][k] -= f * m[c][k];
+      }
+    }
+    return m.map((row, i) => row[n] / (row[i] || 1));
+  };
+  const issued = (p) => (p.mcap_usd !== null && p.mcap_usd !== undefined) || (p.gecko_id !== null && p.gecko_id !== undefined);
+  const cohort = data.universe.filter((p) => {
+    const iss = issued(p);
+    const product = p.symbol !== null && p.symbol !== undefined && !iss;
+    return !product && iss && (p.mcap_usd ?? 0) >= 1e6 && p.tvl_usd >= 1e6;
+  }).map((p) => ({ slug: p.slug, tvl: p.tvl_usd, y: Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)) }));
+  const fit = (rows, kind) => {
+    const k = 2;
+    const X = rows.map((r) => [1, Math.log10(Math.max(r.tvl, 1))]);
+    const Y = rows.map((r) => r.y);
+    if (kind === 'plain') {
+      const M = Array.from({ length: k }, () => new Array(k).fill(0));
+      const B = new Array(k).fill(0);
+      rows.forEach((_, i) => { for (let a = 0; a < k; a++) { for (let b = 0; b < k; b++) M[a][b] += X[i][a] * X[i][b]; B[a] += X[i][a] * Y[i]; } });
+      return solve(M, B);
+    }
+    let beta = new Array(k).fill(0);
+    for (let it = 0; it < 24; it++) {
+      const residual = (i) => { let a = 0; for (let j = 0; j < k; j++) a += beta[j] * X[i][j]; return Y[i] - a; };
+      const scale = 1.4826 * median(rows.map((_, i) => Math.abs(residual(i))));
+      const M = Array.from({ length: k }, () => new Array(k).fill(0));
+      const B = new Array(k).fill(0);
+      rows.forEach((_, i) => {
+        const r = Math.abs(residual(i));
+        const w = r <= 1.5 * scale ? 1 : (1.5 * scale) / r;
+        const ww = kind === 'squared' ? w * w : w;
+        for (let a = 0; a < k; a++) { for (let b = 0; b < k; b++) M[a][b] += ww * X[i][a] * X[i][b]; B[a] += ww * X[i][a] * Y[i]; }
+      });
+      for (let a = 0; a < k; a++) M[a][a] += 1e-6;
+      beta = solve(M, B);
+    }
+    return beta;
+  };
+  const maxInfluence = (kind) => {
+    const full = fit(cohort, kind);
+    let best = 0;
+    for (const r of cohort) {
+      const w = fit(cohort.filter((x) => x.slug !== r.slug), kind);
+      const d = Math.abs(full[0] - w[0]);
+      if (d > best) best = d;
+    }
+    return best;
+  };
+  const plainMax = maxInfluence('plain');
+  const weightedMax = maxInfluence('squared');
+  // The copy's own words are the thing under test: it must quote both maxima.
+  const note = data.copy.value_fit_note;
+  const quotedPlain = /0\.410 log10/.test(note);
+  const quotedWeighted = /0\.273 log10/.test(note);
+  const plainOk = Math.abs(plainMax - 0.410) < 0.0015;
+  const weightedOk = Math.abs(weightedMax - 0.273) < 0.0015;
+  check('the worst row\'s influence on a plain least squares is 0.410 log10', plainOk, plainMax.toFixed(4));
+  check('the worst row\'s influence on the model\'s own fit is 0.273 log10', weightedOk, weightedMax.toFixed(4));
+  check('the page quotes both influence figures the measurement produces', quotedPlain && quotedWeighted,
+    quotedPlain && quotedWeighted ? 'both quoted' : 'a quoted figure is missing');
+}
+
 // ---------------------------------------------------------------- the category table's evidence
 // The model's category correction is a per-category number, and a number fitted on one row is a
 // different kind of number from one fitted on ten. The page publishes the member count beside

@@ -200,6 +200,53 @@ for (const name of shots) {
     st.size >= 300 * 1024 && st.size <= 350 * 1024, `${st.size} bytes`);
 }
 
+// ---------------------------------------------------------------- the category table's evidence
+// The model's category correction is a per-category number, and a number fitted on one row is a
+// different kind of number from one fitted on ten. The page publishes the member count beside
+// each correction so a reader can weigh them -- and this check makes sure the count is the real
+// one, counted from the cohort, rather than a figure written into the copy.
+//
+// The count is recomputed here from the cohort the page itself carries, and the PAGE'S OWN REFIT
+// (dashboard/model.js, the same procedure main.ts used) is run over the same data. If the page
+// and the model disagreed about how many members a correction rests on, the two tables would
+// disagree on the page, so this is checked three ways: the published counts, the counts recounted
+// from the cohort, and the counts the page's own refit finds.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+  const published = cal.category_sizes || {};
+
+  // Recount from the cohort the dataset carries.
+  const byCat = {};
+  for (const p of data.cohort) {
+    const k = p.category || '(none)';
+    byCat[k] = (byCat[k] || 0) + 1;
+  }
+  const keys = new Set([...Object.keys(published), ...Object.keys(byCat)]);
+  let countBad = 0;
+  for (const k of keys) {
+    if (published[k] !== byCat[k]) countBad++;
+  }
+  const sum = Object.values(published).reduce((a, b) => a + b, 0);
+  check('the published category member counts are the cohort\'s own counts',
+    countBad === 0 && keys.size > 0, countBad === 0 ? `${keys.size} categories, ${sum} members` : `${countBad} wrong`);
+  check('the category member counts add up to the cohort size',
+    sum === cal.cohort_size, `${sum} of ${cal.cohort_size}`);
+
+  // And the page's own refit must find the same counts.
+  globalThis.window = {};
+  await import(path.join(out, 'dashboard', 'model.js'));
+  const refit = globalThis.window.RadarModel.fit(data).category_log.__sizes || {};
+  const rkeys = new Set([...Object.keys(published), ...Object.keys(refit)]);
+  let refitBad = 0;
+  for (const k of rkeys) {
+    if (published[k] !== refit[k]) refitBad++;
+  }
+  check('the page\'s own refit finds the same category member counts',
+    refitBad === 0 && rkeys.size > 0, refitBad === 0 ? `${rkeys.size} categories agree` : `${refitBad} differ`);
+}
+
 // ---------------------------------------------------------------- dossier_matches
 const dossierPath = path.join(out, 'dossier.json');
 const dossier = fs.readFileSync(dossierPath);

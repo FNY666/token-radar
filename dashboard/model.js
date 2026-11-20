@@ -134,11 +134,14 @@
     var globalResidual = median(all.map(clip));
     var shrinkage = 4;
     var out = {};
+    var sizes = {};
     Object.keys(byCat).forEach(function (key) {
       var clipped = byCat[key].map(clip);
       out[key] = (clipped.length * median(clipped) + shrinkage * globalResidual) / (clipped.length + shrinkage);
+      sizes[key] = clipped.length;
     });
     out.__default = globalResidual;
+    out.__sizes = sizes;
     return out;
   }
 

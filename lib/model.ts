@@ -311,6 +311,12 @@ export interface Calibration {
   /** The per-category correction in log10 space, shrunk toward the global mean. */
   category_log: Record<string, number>;
   /**
+   * How many cohort members each category's correction rests on. A correction fitted on one row is
+   * a different kind of number from one fitted on ten, and the page shows both side by side so a
+   * reader can weigh them.
+   */
+  category_sizes: Record<string, number>;
+  /**
    * The correction a category with no cohort member gets: the shrinkage target, the global
    * residual. A category the cohort never saw is not evidence that a category trades at the
    * global average -- but it is not evidence against it either, so it gets the target and not a
@@ -541,9 +547,11 @@ export function calibrate(snapshot: Snapshot): Calibration {
   const globalResidual = median(allResiduals.map(clip));
   const shrinkage = 4;
   const categoryLog: Record<string, number> = {};
+  const categorySizes: Record<string, number> = {};
   for (const [key, list] of byCategory) {
     const clipped = list.map(clip);
     categoryLog[key] = (clipped.length * median(clipped) + shrinkage * globalResidual) / (clipped.length + shrinkage);
+    categorySizes[key] = clipped.length;
   }
 
   // The published error is the error of the model the page prices with: the fitted line PLUS the
@@ -558,6 +566,7 @@ export function calibrate(snapshot: Snapshot): Calibration {
     value_beta: value.beta,
     launch_beta: launch.beta,
     category_log: categoryLog,
+    category_sizes: categorySizes,
     category_default: globalResidual,
     bands,
     untracked,
@@ -1387,6 +1396,12 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     versioned: 'versioned pools', wrapped: 'wrapped or staked names',
   };
   const offText = Object.keys(facts.off_by_reason).map((k) => `${facts.off_by_reason[k]} ${reasonNames[k] ?? k}`).join(', ');
+  // The two numbers the category note quotes, counted from the cohort rather than written down:
+  // a hard-coded count would go stale the moment the cohort or the fit changed, and a stale
+  // count in a note about thin evidence is the one kind of stale that misleads.
+  const categorySizes = cal.category_sizes;
+  const categoryCount = Object.keys(categorySizes).length;
+  const thinCategories = Object.keys(categorySizes).filter((k) => categorySizes[k] <= 3).length;
   const copy: Copy = {
     // The hero states what the tab under it actually shows, so the headline is never the
     // opposite of the table beside it.
@@ -1500,7 +1515,9 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'Counted across the ' + cal.universe_size + ' protocols the launch model was fitted on. This is where the launch odds come from. ' +
       'The ' + cal.untracked + ' with no first-tracked date are counted as one year old, which is what the fit assumes for them, so the column adds up to the fit\'s own universe.',
     category_note:
-      'How far each category sits from the fitted line, in log10 dollars, shrunk toward the mean so a thin category cannot speak for itself.',
+      'How far each category sits from the fitted line, in log10 dollars, shrunk toward the mean so a thin category cannot speak for itself. ' +
+      'The last column is how many of the cohort\'s ' + cal.cohort_size + ' protocols the correction rests on: ' +
+      thinCategories + ' of the ' + categoryCount + ' rest on three or fewer, which is why the shrinkage pulls them so far back toward the mean.',
     // The page's labels. They are here because the page's source is what the judge reads: a
     // label carried in the dataset costs the judge's source nothing, while a label written in
     // the page is a line of the page's own code the judge must read twice.
@@ -1592,6 +1609,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       // moves a seven-figure conditional value by thousands of dollars. Twelve decimals is what it
       // takes for every one of the 195 rows to reproduce exactly from the published fields.
       category_log: Object.fromEntries(Object.entries(cal.category_log).map(([k, v]) => [k, Math.round(v * 1e12) / 1e12])),
+      category_sizes: cal.category_sizes,
       category_default: Math.round(cal.category_default * 1e12) / 1e12,
       bands: cal.bands.map((b) => ({ lo: b.lo, hi: b.hi === Number.POSITIVE_INFINITY ? null : b.hi, n: b.n, issued: b.issued })),
       untracked: cal.untracked,

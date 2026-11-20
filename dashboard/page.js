@@ -353,19 +353,23 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  host.appendChild(curve);
  var catCard = card(L.category_corrections, [t('p', D.copy.category_note)]);
  var catRows = Object.keys(c.category_log).map(function (k) {
- return { k: k, v: c.category_log[k] };
+ return { k: k, v: c.category_log[k], n: (c.category_sizes || {})[k] };
  }).sort(function (a, b) { return b.v - a.v; });
  var catTable = h('table','cat-table');
- function catRow(k, v) {
+ function catRow(k, v, n) {
  catTable.appendChild(el('tr', null, [
  t('td', k),
- t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')')
+ t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')'),
+ // How many cohort members the correction rests on. A correction fitted on one row and one
+ // fitted on ten are different kinds of number, and a reader can only weigh them if the count
+ // is in front of them.
+ e('td', 'num', n === undefined ? '—' : String(n))
  ]));
  }
- catRows.forEach(function (r) { catRow(r.k, r.v); });
+ catRows.forEach(function (r) { catRow(r.k, r.v, r.n); });
  var seen = {};
  D.rows.forEach(function (r) { seen[r.category || 'Uncategorised'] = true; });
- var missing = Object.keys(seen).filter(function (k) { return !(k in c.category_log); });    if (missing.length) catRow(missing.length + ' more the cohort never saw', c.category_default);
+ var missing = Object.keys(seen).filter(function (k) { return !(k in c.category_log); });    if (missing.length) catRow(missing.length + ' more categories the cohort never saw', c.category_default, 0);
  catCard.appendChild(catTable);
  host.appendChild(catCard);
  host.appendChild(card(L.is_and_is_not, [

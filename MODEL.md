@@ -133,7 +133,16 @@ category with one live protocol from speaking for the whole category:
    market at 400× its TVL) sets its category's number, and that number then reorders the board.
 2. **Shrinkage.** The category's median residual is pulled toward the global median with a prior
    weight of 4: a category with one live member gets roughly a fifth of its own residual and four
-   fifths of the cohort's.
+   fifths of the cohort's. The formula reproduces every published correction to within 3·10⁻¹².
+
+   The guards matter because the evidence is thin: **21 of the 26 categories have three cohort
+   members or fewer**, and 11 have exactly one. A correction fitted on one row is a different kind
+   of number from one fitted on ten, so the page's category table now carries the member count
+   beside each correction rather than leaving the reader to assume the two are the same. The
+   shrinkage bounds what a one-member category can do: the largest gap between such a category's
+   own residual and the global is 0.889 log10, and after being pulled four fifths of the way back
+   its published correction sits at most 0.178 from the global — a factor between 0.648 and 1.312
+   on the conditional value.
 3. **A floor.** A category the cohort has never seen takes the shrinkage target — the cohort's own
    median residual, −0.0599, a factor of 0.871 on the conditional value. It does not contribute
    nothing; it contributes what every category contributes when the cohort says nothing better, and

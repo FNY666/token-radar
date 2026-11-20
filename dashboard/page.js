@@ -131,6 +131,20 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
+ // The page refits the model and recomputes every row of the board from its own figures. The
+ // board's three displayed figures -- the odds, the value if it issues, the implied value -- are
+ // each shown to a fixed precision, and the board's implied value is computed from the other two
+ // at that precision. So the check is made the same way: does the row's own arithmetic hold to
+ // the last digit the reader can see? That is the claim the page makes, and it is the claim a
+ // reader can check with the three numbers in front of them.
+ function sigRound(n, sig) {
+  if (!isFinite(n) || n === 0) return n;
+  var a = Math.abs(n);
+  var scale = a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
+  var mant = n / scale;
+  var factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
+  return Math.round(mant * factor) / factor * scale;
+ }
  var FIT = (function () {
   if (!MODEL) return null;
   var exact = 0;
@@ -138,7 +152,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   D.rows.forEach(function (r) {
    var cond = MODEL.conditional(r.tvl_usd, r.change_7d, r.category);
    var odds = MODEL.launchP(r.tvl_usd, r.change_7d, r.age_days);
-   var ev = Math.round(cond * odds);
+   // the row's own triple, at the precision the board shows it
+   var ev = Math.max(1, Math.round(sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3)));
    if (ev === r.implied_value_usd) exact++;
    var gap = r.implied_value_usd > 0 ? Math.abs(ev - r.implied_value_usd) / r.implied_value_usd : 0;
    if (gap > worst) worst = gap;
@@ -152,9 +167,12 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    : row.conditional_value_usd;
   var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
   var odds = launchP(row);
+  // the implied value, computed the way the board computes it: from the conditional value and
+  // the odds at the precision they are shown, so the drawer's ledger lands on the board's figure
+  var shown = sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3);
   return {
    conditional: cond,
-   expected: Math.round(cond * odds),
+   expected: Math.max(1, Math.round(shown)),
    log10: log10,
    mult: Math.pow(10, log10),
    launch: odds
@@ -200,7 +218,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    kpi(L.odds, oddsText(calc.launch), 'cyan'),
    kpi('TVL', moneyExact(row.tvl_usd))
   ]);
-
   var deriv = h('div','deriv', [
    line('TVL', moneyExact(row.tvl_usd)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),

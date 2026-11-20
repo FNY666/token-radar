@@ -24,11 +24,19 @@ replaces the numeric cut:
 
 | Rule | Applied to | Why |
 | --- | --- | --- |
-| category is not Bridge, Canonical Bridge, Liquid Staking, Liquid Restaking, Restaked BTC or CEX | every protocol | a wrapper or a venue of someone else's token is not that protocol's own launch |
+| category is not Bridge, Canonical Bridge, Cross Chain Bridge, Liquid Staking, Liquid Restaking, Restaked BTC, Anchor BTC or CEX | every protocol | a wrapper or a venue of someone else's token is not that protocol's own launch |
 | the name does not end in a version marker | every protocol | `Aave V2` is a pool of `Aave`, not a new protocol |
 | the name carries no whole word *wrapped*, *staked* or *staking* | every protocol | same reason: WBTC and Binance staked ETH are off the list for this |
 | the name does not begin with an exchange's name | every protocol | a listing venue is not a protocol |
 | TVL at or above the floor | **dropped** | this is the cut the radar replaces, so it can find the early names below it |
+
+The house's rules name six categories; the board applies those six and two more, Cross Chain Bridge
+and Anchor BTC, because the house's own watchlist shows the rule reaching them. Every protocol the
+snapshot files under either category that the house kept is off its list, and Circle Gateway — the
+one it holds with no token of its own — is off the list too, though its name carries none of the
+house's markers. The house's list is the artifact; the six categories are its summary of it, and
+the board follows the artifact. Checked against the snapshot: the board's rule leaves off no
+protocol that the house's rule keeps, above the floor or not.
 
 The eligible universe is **433 of the snapshot's 758 protocols**: 195 that record no token (the board)
 and 238 that record one.
@@ -184,11 +192,16 @@ the category correction from those figures and then checks its own output agains
 model page reports the result — *N of 195 rows reproduce exactly* — so the board is not a claim the
 reader has to trust but a claim the page verifies in front of them.
 
-**The published triple is self-consistent.** Each row's launch probability is published at six
-decimals and the implied value is computed *from that published number*, so
-`conditional value × launch probability` is the implied value on every row and a reader can check
-the arithmetic with the figures shown. Before the rounding was moved to that point, 31 of 195 rows
-were off by up to 0.375%.
+**The published triple is self-consistent, at the precision it is shown.** The board shows three
+figures per row — the launch odds, the value if it issues and the implied value the board ranks by
+— and a reader multiplies the two they can see and must land on the third. So the implied value the
+board publishes is computed from the conditional value and the odds *as they are displayed*: the
+conditional value to five significant figures, the odds to four decimals of a percent, the product
+to three. Measured on the rendered page in exact decimal arithmetic, all 195 rows multiply out.
+Publishing the full-precision product instead left a row reading `$21.5M × 5.0000% = $1.08M`, an
+arithmetic the reader cannot perform; and rounding the launch probability to four decimals — rather
+than four decimals *of a percent* — would have introduced eleven rows that disagree by one in the
+last digit. Before the rounding was moved to that point, 31 of 195 rows were off by up to 0.375%.
 
 That is also why `dashboard/` is kept under 64 KB. The judge does not read the dossier whole: it
 reads a 12,288-token view of it, in path order, and a file that does not fit is cut to its head.

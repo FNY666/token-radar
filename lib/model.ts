@@ -53,15 +53,25 @@ const DAY_MS = 86_400_000;
 
 // ---------------------------------------------------------------- the universe
 
-/** Categories whose protocols are a wrapper, a stake or a venue of someone else's token. */
+/**
+ * Categories whose protocols are a wrapper, a stake or a venue of someone else's token.
+ *
+ * The house's rule lists six of these: Bridge, Canonical Bridge, Liquid Staking, Liquid
+ * Restaking, Restaked BTC and CEX. The board applies those six and two more -- Cross Chain
+ * Bridge and Anchor BTC -- because the house's own watchlist shows the rule reaching them: every
+ * protocol the snapshot files under those two categories that the house kept is off its list,
+ * and Circle Gateway, the one it holds with no token of its own, is off the list too, though its
+ * name carries none of the house's markers. The house's list is the artifact; the six categories
+ * are its summary of it, and the board follows the artifact.
+ */
 const DERIVATIVE_CATEGORIES = new Set([
   'CEX',
   'Bridge',
   'Canonical Bridge',
-  'Cross Chain Bridge',
   'Liquid Staking',
   'Liquid Restaking',
   'Restaked BTC',
+  'Cross Chain Bridge',
   'Anchor BTC',
 ]);
 
@@ -586,19 +596,39 @@ export function scoreProtocol(p: SnapshotProtocol, asOf: string, cal: Calibratio
   let z = 0;
   for (let j = 0; j < cal.launch_beta.length; j++) z += cal.launch_beta[j]! * lx[j]!;
   const raw = Math.max(cal.launch_floor, Math.min(0.95, 1 / (1 + Math.exp(-z))));
-  // The probability the model reports, at six decimals, and the implied value is computed FROM it.
-  // So the published triple is self-consistent: conditional value x launch probability is the
-  // implied value, on every row, and a reader can check the arithmetic with the numbers shown.
+  // The probability the model reports, at six decimals.
   const launchP = Math.round(raw * 1e6) / 1e6;
+
+  // The page shows the conditional value to five significant figures and the odds to four
+  // decimals of a percent, and the implied value to three. So the implied value the board
+  // publishes is computed from the two figures as they are DISPLAYED, and a reader's own
+  // multiplication lands on it. Publishing the full-precision product instead would leave a row
+  // reading "$21.5M x 5.0000% = $1.08M", which is an arithmetic the reader cannot perform.
+  const shownConditional = roundToSig(conditional, 5);
+  const shownProbability = Math.round(launchP * 1e6) / 1e6; // four decimals of a percent
+  const shownImplied = Math.max(1, Math.round(roundToSig(shownConditional * shownProbability, 3)));
 
   return {
     conditional_usd: conditional,
     launch_p: launchP,
-    expected_usd: Math.max(1, Math.round(conditional * launchP)),
+    expected_usd: shownImplied,
     age_days: age,
     growth_pct: clampGrowth(p.change_7d),
     category_log: categoryLog,
   };
+}
+
+/**
+ * A number to `sig` significant figures, rounded the way the page rounds it: the unit is chosen
+ * from the magnitude first, then the mantissa carries the significant figures.
+ */
+export function roundToSig(n: number, sig: number): number {
+  if (!Number.isFinite(n) || n === 0) return n;
+  const a = Math.abs(n);
+  const scale = a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
+  const mant = n / scale;
+  const factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
+  return Math.round(mant * factor) / factor * scale;
 }
 
 // ---------------------------------------------------------------- the board

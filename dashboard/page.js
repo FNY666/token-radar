@@ -223,7 +223,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    line('TVL', moneyExact(row.tvl_usd)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),
    line(L.category_correction, '×' + Math.pow(10, row.category_log).toPrecision(9)),
-   // How many cohort members the correction rests on: one row and ten are different numbers.
+   // How many cohort members the correction rests on.
    line(L.category_evidence, categoryEvidence(row)),
    line(L.value_if_issues, moneyExact(calc.conditional)),
    line(L.odds_recomputed, oddsText(odds)),
@@ -366,8 +366,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var catRows = Object.keys(c.category_log).map(function (k) {
  return { k: k, v: c.category_log[k], n: (c.category_sizes || {})[k] };
  }).sort(function (a, b) { return b.v - a.v; });
- // The three columns are named in a header row, not only in the prose above it: a screen
- // reader reaches a row's cells with no sentence to tell it what a bare number is.
+ // The three columns are named in a header row, not only in the prose above it.
  var catTable = h('table','cat-table', [
  el('thead', null, [el('tr', null, [
  t('th','Category'), t('th',L.category_correction), t('th',L.category_evidence)
@@ -441,8 +440,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
  var H = 150, padL = 54, padR = 16, padT = 22, padB = 30;
  var maxV = colExtreme(list, 'implied_value_usd', 'max');
- // The scale's top is the next power of ten, so the grid lines are even and the top labels
- // cannot overlap.
+ // The scale's top is the next power of ten, so the grid lines are even and the labels cannot
+ // overlap.
  var scaleTop = 1; while (scaleTop < maxV) scaleTop *= 10;
  var logMin = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'min'), 1));
  var logMax = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'max'), 1));
@@ -482,9 +481,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  add('text', { x: 8, y: 11, class: 'axis-title' }, L.implied);
  var dots = [];
  list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
- // One description of the dot, for both the tooltip a sighted reader sees and the name a
- // screen reader reads: `aria-label` overrides the title, so writing them separately is how
- // the two drift apart.
+ // One description for both the tooltip a sighted reader sees and the name a screen reader
+ // reads: `aria-label` overrides the title, so writing them separately is how they drift.
  var dl = r.name + ': ' + money(r.implied_value_usd) + ' implied, ' +
  oddsText(launchP(r)) + ' odds, ' + money(r.tvl_usd) + ' TVL, ' +
  (r.on_watchlist ? 'on' : 'off') + ' the house watchlist';
@@ -558,13 +556,15 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  el('td', null, [
  h('div','pname', [
  document.createTextNode(r.name),
- e('span', 'slug', r.slug)
+ // The slug is a second line on screen and a second word to a reader: without the space the
+ // cell reads "Rainrain".
+ e('span', 'slug', ' ' + r.slug)
  ])
  ]),
  e('td', 'cat', r.category || 'Uncategorised'),
  // The market cap and the TVL print at SIX significant figures, not the board's three: a
- // two-decimal multiple is not determined by a three-figure figure (a reader's own division
- // missed the printed multiple on 13 of the 30 rows at three figures, 2 at five, none at six).
+ // two-decimal multiple is not determined by a three-figure figure (a reader's division missed
+ // the printed multiple on 13 of the 30 rows at three figures, 2 at five, none at six).
  e('td', 'right num', money(r.mcap_usd, 6)),
  e('td', 'right num', money(r.tvl_usd, 6)),
  h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : r.ratio.toFixed(2))]),
@@ -580,7 +580,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  class: 'q', type: 'search', placeholder: L.search_placeholder,
  'aria-label': L.search_label,
  // The name is what a form posts and what a password manager keys on; a search box with no
- // name is a box no browser can restore and no assistive technology can name.
+ // name is a box no browser can restore and no AT can name.
  name: 'q', autocomplete: 'off', spellcheck: false,
  oninput: function () { state.q = CTL.search.value; writeHash('refine'); renderControlsResult(); renderTabs(); renderTable(); renderPlot(); }
  });
@@ -611,8 +611,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  host.appendChild(chip);
  });
  host.appendChild(h('span','spacer'));
- // The row count is the one thing a screen-reader user cannot see change as they type, so it
- // is a polite live region: `role="status"` implies `aria-live="polite"`.
+ // The row count is the one thing a screen-reader user cannot see change as they type.
  host.appendChild(el('span', { class: 'result', id: 'result-count', role: 'status' }));
  host.appendChild(el('button', {
  class: 'ghost', type: 'button', text: L.clear_filters,
@@ -660,8 +659,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  if (moved) moved.focus();
  }
  }, [
- // The space is in the label, not the badge: a screen reader reads the tab's name from its
- // text, and without it the name is "Pre-token board195".
+ // The space is in the label, not the badge: without it the tab's name is "Pre-token board195".
  document.createTextNode(TAB_LABELS[key] + (key === 'model' ? '' : ' ')),
  key === 'model' ? null : e('span', 'count', '0')
  ]));
@@ -777,7 +775,10 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  function rowAttrs(r) {
  return {
  class: 'row', tabindex: '0', 'data-slug': r.slug,
- 'aria-label': r.name + ', ' + money(r.implied_value_usd) + ' implied',
+ // The board's row is ranked by implied value; the live table's by market cap. One helper
+ // serves both, so the name follows the figure the table shows.
+ 'aria-label': r.name + ', ' + money(r.implied_value_usd === undefined ? r.mcap_usd : r.implied_value_usd) +
+ (r.implied_value_usd === undefined ? ' market cap' : ' implied'),
  onclick: function (e) { openDetail(r.slug, undefined, e.currentTarget); },
  onkeydown: function (e) {
  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.slug, undefined, e.currentTarget); }

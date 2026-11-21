@@ -954,6 +954,56 @@ for (const name of shots) {
     thin.length === 0 ? `${d.dots.length} dots carry all three` : JSON.stringify(thin.slice(0, 2)));
 }
 
+// ---------------------------------------------------------------- every row names its own figures
+// One helper builds the board's rows and the live table's rows, and the two tables rank by
+// different things: the board by implied value, the live table by market cap. A name written
+// for one is a name that names nothing in the other -- the live row was called "Rain, --
+// implied", an em dash standing in for a figure the table does not show.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  const tabs = await page.$$('[role=tab]');
+  const board = await page.evaluate(() => Array.from(document.querySelectorAll('#view-board tbody tr.row')).slice(0, 8).map((tr) => tr.getAttribute('aria-label')));
+  if (tabs[1]) { await tabs[1].click(); await new Promise((r) => setTimeout(r, 400)); }
+  const live = await page.evaluate(() => Array.from(document.querySelectorAll('#view-live tbody tr.row')).slice(0, 8).map((tr) => tr.getAttribute('aria-label')));
+  await browser.close();
+
+  // a name must not stand a dash in for a figure
+  const dash = board.concat(live).filter((n) => /\u2014|--/.test(n));
+  check('no row is named with a dash in place of a figure', dash.length === 0,
+    dash.length === 0 ? board.concat(live).slice(0, 3).join(' | ') : JSON.stringify(dash));
+  // the live row names its market cap; the board row names its implied value
+  const liveOk = live.length > 0 && live.every((n) => /market cap/.test(n) && /\$/.test(n));
+  check('the live table\'s rows name their market cap', liveOk, live.slice(0, 2).join(' | '));
+  const boardOk = board.length > 0 && board.every((n) => /implied/.test(n) && /\$/.test(n));
+  check('the board\'s rows name their implied value', boardOk, board.slice(0, 2).join(' | '));
+  // the name cell must not run the protocol name into its slug
+  const cell = await (async () => {
+    const b2 = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--hide-scrollbars', '--allow-file-access-from-files'] });
+    const p2 = await b2.newPage();
+    await p2.setViewport({ width: 1440, height: 900 });
+    await p2.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+    await p2.waitForSelector('tbody tr');
+    const t2 = await p2.$$('[role=tab]');
+    if (t2[1]) { await t2[1].click(); await new Promise((r) => setTimeout(r, 400)); }
+    const c = await p2.evaluate(() => {
+      const n = document.querySelector('#view-live tbody tr.row .pname');
+      return { text: n.textContent, html: n.innerHTML };
+    });
+    await b2.close();
+    return c;
+  })();
+  check('the name cell does not run the protocol name into its slug',
+    !/[a-z][A-Z]/.test(cell.text) && / /.test(cell.text), JSON.stringify(cell));
+}
+
 // ---------------------------------------------------------------- dossier_matches
 const dossierPath = path.join(out, 'dossier.json');
 const dossier = fs.readFileSync(dossierPath);

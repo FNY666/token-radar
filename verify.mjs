@@ -861,6 +861,41 @@ for (const name of shots) {
     `placeholder ${d2.placeholder.color} vs text ${d2.placeholder.bodyColor}`);
 }
 
+// ---------------------------------------------------------------- every table names its columns
+// A table's header row is what tells a reader what a bare number in a cell is. The board and
+// the live table have one; the model view's category-corrections table had none, so its three
+// columns were named only in the prose above it, and a screen reader reached the cells with
+// nothing to attach them to.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  const tabs = await page.$$('[role=tab]');
+  const seen = [];
+  for (const i of [0, 1, 2]) {
+    if (tabs[i]) { await tabs[i].click(); await new Promise((r) => setTimeout(r, 350)); }
+    seen.push(await page.evaluate(() => Array.from(document.querySelectorAll('main table')).map((t) => ({
+      cls: t.className || '(the board)',
+      headers: Array.from(t.querySelectorAll('thead th')).map((h) => h.textContent.trim()),
+      rows: t.querySelectorAll('tbody tr').length
+    }))));
+  }
+  await browser.close();
+  const every = seen.flat();
+  const noHeader = every.filter((t) => t.headers.length === 0);
+  check('every table on the page names its columns in a header row', noHeader.length === 0,
+    noHeader.length === 0 ? every.map((t) => t.cls + ': ' + t.headers.join('/')).join(' | ') : JSON.stringify(noHeader));
+  const mismatch = every.filter((t) => t.headers.length > 0 && t.rows === 0);
+  check('every headed table has rows under its header', mismatch.length === 0,
+    mismatch.length === 0 ? 'all have rows' : JSON.stringify(mismatch));
+}
+
 // ---------------------------------------------------------------- dossier_matches
 const dossierPath = path.join(out, 'dossier.json');
 const dossier = fs.readFileSync(dossierPath);

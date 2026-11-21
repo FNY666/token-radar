@@ -366,9 +366,16 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var catRows = Object.keys(c.category_log).map(function (k) {
  return { k: k, v: c.category_log[k], n: (c.category_sizes || {})[k] };
  }).sort(function (a, b) { return b.v - a.v; });
- var catTable = h('table','cat-table');
+ // The three columns are named in a header row, not only in the prose above it: a screen
+ // reader reaches a row's cells with no sentence to tell it what a bare number is.
+ var catTable = h('table','cat-table', [
+ el('thead', null, [el('tr', null, [
+ t('th','Category'), t('th',L.category_correction), t('th',L.category_evidence)
+ ])]),
+ el('tbody')
+ ]);
  function catRow(k, v, n) {
- catTable.appendChild(el('tr', null, [
+ catTable.lastChild.appendChild(el('tr', null, [
  t('td', k),
  t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')'),
  // How many cohort members the correction rests on: one row and ten are different numbers.
@@ -943,7 +950,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  main.appendChild(h('section','card prose missing', [
  h('h1', null, [L.no_board_title]),
  t('p',L.no_board_body),
- e('p', 'muted', 'Run the entry (node main.ts) and open the dashboard it writes: the board, the protocol details and the farm plans are all in that file.')
+ e('p', 'muted', L.no_board_hint)
  ]));
  var bar = document.getElementById('bar-meta');
  if (bar) clear(bar);

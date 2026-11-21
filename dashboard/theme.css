@@ -6,8 +6,8 @@ h1,h2,h3{margin:0;font-weight:600;letter-spacing:-0.015em;text-wrap:balance}
 p{margin:0}
 button,input,select{font:inherit;color:inherit}
 /* The tap highlight is set deliberately rather than left to the browser's default blue: on a
-   dark panel the default reads as a flash of the wrong colour, and the ring below says
-   where the touch landed instead. `manipulation` drops the double-tap zoom delay. */
+   dark panel the default reads as a flash of the wrong colour, and the ring below says where
+   the touch landed instead. `manipulation` drops the double-tap zoom delay. */
 button,tbody tr.row,.tab,.chip{-webkit-tap-highlight-color:var(--v07);touch-action:manipulation}
 button,tbody tr.row{cursor:pointer}
 :focus-visible{outline:2px solid var(--value);outline-offset:2px}
@@ -36,7 +36,7 @@ main{padding:0 var(--e) var(--g)}
 .hero{padding:var(--d) 0 var(--c);border-bottom:var(--bl)}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,0.5fr);gap:var(--e)}
 .hero h1{font-size:28px;line-height:1.12;letter-spacing:-0.025em;color:var(--ink)}
-.hero h1 + .lede::first-line,.kpi .v.gold,.peer .pv,.tag.wl{color:var(--value)}
+.hero h1+.lede::first-line,.kpi .v.gold,.peer .pv,.tag.wl{color:var(--value)}
 .tag.wl{border-color:var(--v45)}
 thead th .arrow{color:var(--value);margin-left:var(--a)}
 .hero p.lede{margin-top:var(--b);color:var(--i2);max-width:74ch;font-size:14px}
@@ -75,8 +75,8 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 .controls button.ghost:hover{color:var(--ink);border-color:var(--i3)}
 /* The board is nine columns wide and cannot fit a narrow phone. A scroll the reader cannot see
    is a scroll the reader does not know to make, so the wrapper paints a shadow on whichever
-   edge still has table beyond it: the shadows are fixed to the wrapper, and the two opaque
-   covers scroll with the content, uncovering the shadow. */
+   edge still has table beyond it: the shadows are fixed to the wrapper, and two opaque covers
+   scroll with the content, uncovering them. */
 .table-wrap{overflow-x:auto;overflow-y:clip;background-image:linear-gradient(var(--panel),var(--panel)),linear-gradient(var(--panel),var(--panel)),linear-gradient(to right,var(--shadow),transparent),linear-gradient(to left,var(--shadow),transparent);background-position:0 50%,100% 50%,0 50%,100% 50%;background-repeat:no-repeat;background-size:16px;background-attachment:local,local,scroll,scroll}
 table{width:100%;border-collapse:collapse}
 thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--c);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
@@ -133,14 +133,14 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .formula{font-size:12.5px;color:var(--ink);border:var(--bl);border-radius:var(--rs);padding:var(--c);margin-top:var(--c);overflow-x:auto;white-space:pre;line-height:1.6}
 .bands{display:block;overflow-x:auto}
 .bands,.bands td,.cat-table td{padding:var(--b) 0;border-top:var(--bl)}
-.bands th{text-align:left;color:var(--i2);font-weight:500;font-size:12px;padding-bottom:var(--b)}
+.bands th,.cat-table th{text-align:left;color:var(--i2);font-weight:500;font-size:12px;padding-bottom:var(--b)}
 .bands td:first-child{font-family:var(--font)}
 .curve{margin-top:var(--c)}
 .curve-row{display:flex;align-items:center;gap:var(--c);margin-bottom:var(--b);font-size:13px}
 .curve-row .lbl{width:132px;color:var(--i2);flex:none}
 .curve-row .fill{height:100%;background:var(--odds)}
 .curve-row .v{color:var(--i2);width:58px;text-align:right;flex:none}
-.cat-table{width:100%;margin-top:var(--c);border-collapse:collapse;font-size:13px}
+.cat-table{width:100%;margin-top:var(--c);font-size:13px}
 .cat-table td{padding:var(--a) 0}
 .cat-table td:last-child{text-align:right;color:var(--i2)}
 .prose{max-width:72ch;color:var(--i2);font-size:14.5px}
@@ -181,8 +181,8 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .chips{display:flex;flex-wrap:wrap;gap:var(--a);margin-top:var(--b)}
 .chip-static{background:var(--p2);color:var(--i2);border:var(--bl)}
 @media (max-width: 1000px){.hero-grid{grid-template-columns:1fr}.brand-tag{display:none}}
-/* iOS Safari zooms the whole viewport when a focused input's text is under 16px, and it never
-   zooms back out, so the text fields hold 16px on the narrow viewports where the zoom happens
-   and drop back to the page's own 14px above them, where no zoom occurs. */
+/* iOS Safari zooms the viewport when a focused input's text is under 16px and never zooms back
+   out, so the fields hold 16px on the narrow viewports where the zoom happens and drop back to
+   the page's own 14px above them, where no zoom occurs. */
 @media (max-width: 1000px){.controls .q,.controls select{font-size:16px}}
 @media (max-width: 420px){.kpis{grid-template-columns:1fr}}

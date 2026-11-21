@@ -840,6 +840,8 @@ export interface Labels {
   others_here: string;
   /** The drawer's close control. */
   close: string;
+  /** What to do when the board file is missing. */
+  no_board_hint: string;
   /** The live table's columns. */
   market_cap: string;
   cap_over_tvl: string;
@@ -1616,6 +1618,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       live_not_here_short: 'That protocol already trades a token, so it is not on this board.',
       no_such_protocol: 'No protocol with that name is on this board.',
       no_board_title: 'This page has no board yet',
+      no_board_hint:
+        'Run the entry (node main.ts) and open the dashboard it writes: the board, the protocol details and the farm plans are all in that file.',
       no_board_body: 'The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.',
     },
   };

@@ -114,13 +114,25 @@ cohort better in 294–300 of 300 splits and misses fewer rows badly in 206–23
 that cannot be told from noise does not belong in a number the board is ranked on — and the two
 models must not disagree: a hot protocol is *less* likely to issue, not more.
 
-The folds are by a **hash of the slug**, not by position in the sorted cohort. Alphabetical
-neighbours in this cohort are more alike than random rows — the lag-one correlation of the
-residuals is +0.083 in alphabetical order against −0.021 in a random order — so a split that puts
-neighbours on the same side of the fold leaks the answer into the score. Every count above is
-given as a range over sixteen independent draws of the folds, because the win count moves by
-fifteen splits when the draw changes; the entry does not quote a single seed's count as if it
-were a constant.
+**How the folds are drawn matters, so both schemes are reported.** The counts above come from a
+random assignment of rows to folds — not from position in the sorted cohort, and not from a hash
+of the slug. The reason the position matters is that alphabetical neighbours in this cohort are
+more alike than random rows — the lag-one correlation of the residuals is +0.083 in alphabetical
+order against −0.021 in a random order — so a split that puts neighbours on the same side of the
+fold leaks the answer into the score. A **hash of the slug** avoids that particular leak, because
+the hash scatters the alphabetical neighbours across the folds. The entry therefore reports the
+comparison under **both** schemes, because the scheme moves the numbers and a count quoted under
+one scheme alone would claim a precision the other does not have.
+
+Every count above is given as a **range over sixteen independent draws** of the folds, because
+the win count moves by fifteen splits when the draw changes; the entry does not quote a single
+seed's count as if it were a constant. Under the random scheme the rank-correlation count runs
+136–156 against a plain least squares, and 130–166 under the hash scheme; the squared weight
+beats a plain Huber weight on the tail in 53–77 splits under the random scheme and 55–86 under
+the hash scheme, and the Huber wins the rank correlation in 144–172 and 141–183 respectively.
+The one claim that holds under every scheme and every draw is the tail of the growth term: the
+form without growth misses fewer rows badly than the form with it, in 206–232 of 300 splits
+under the random scheme and 214–231 under the hash scheme.
 
 **The error the board publishes is measured, and it flatters the model.** In-sample, the median
 absolute error of the model the board prices with is **0.337 log10** — a factor of 2.2 on the

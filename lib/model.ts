@@ -370,10 +370,13 @@ export interface Calibration {
  * seed's count would claim a precision the measurement does not have.
  *
  * The form was chosen by five-fold cross-validation on that cohort, among the candidates. The
- * split is by a HASH OF THE SLUG, not by position in the sorted cohort: alphabetical neighbours
- * in this cohort are more alike than random rows (the lag-one correlation of the residuals is
- * +0.083 in alphabetical order against -0.021 in a random order), and a split that puts
- * neighbours on the same side of the fold leaks the answer into the score.
+ * split must NOT be by position in the sorted cohort: alphabetical neighbours in this cohort are
+ * more alike than random rows (the lag-one correlation of the residuals is +0.083 in alphabetical
+ * order against -0.021 in a random order), and a split that puts neighbours on the same side of
+ * the fold leaks the answer into the score. The counts above come from a RANDOM assignment of
+ * rows to folds, and the comparison was re-run under a HASH OF THE SLUG as well, because the
+ * scheme moves the counts and a count quoted under one scheme alone would claim a precision the
+ * other does not have.
  *
  * Growth was measured, not assumed. It earns its place in the LAUNCH probability, where the
  * effect is strong and identified: the observed rate at which a protocol issues a token falls

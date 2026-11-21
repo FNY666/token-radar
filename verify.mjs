@@ -1461,6 +1461,86 @@ for (const name of shots) {
     libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
 }
 
+// ---------------------------------------------------------------- the base rate and the shrinkage are measured
+// MODEL.md claims three things about the category correction that were never re-derived:
+//   "the base rate falls from 55.0% to 35.6%" (a 19.3-point gap)
+//   "the largest gap between a one-member category's own residual and the global is 0.889 log10"
+//   "its published correction sits at most 0.178 from the global", and the eleven one-member
+//   categories' published corrections run "from 0.648 to 1.312 on the conditional value"
+// This check re-measures all of them from the snapshot and the published calibration.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+  const VERSIONED = constOf('VERSIONED');
+  const WRAPPED_WORD = constOf('WRAPPED_WORD');
+  const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+  const eligibleRows = snapshot.protocols.filter((p) =>
+    !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+    !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name));
+  const issued = (p) => p.mcap_usd !== null || p.gecko_id !== null;
+  const isProduct = (p) => p.symbol !== null && !issued(p);
+  const universe = eligibleRows.filter((p) => !isProduct(p));
+
+  // The OLD labelling: y = isPreToken(p) ? 0 : 1 over the WHOLE eligible universe.
+  const oldPositives = eligibleRows.filter((p) => !(p.mcap_usd === null && p.gecko_id === null && p.symbol === null)).length;
+  const oldRate = oldPositives / eligibleRows.length;
+  // The NEW labelling: y = issuedOwnToken(p) ? 1 : 0 over eligible LESS the product rows.
+  const newPositives = universe.filter(issued).length;
+  const newRate = newPositives / universe.length;
+  const gapPoints = (oldRate - newRate) * 100;
+
+  check('the eligible universe is 433 rows', eligibleRows.length === 433, `${eligibleRows.length}`);
+  check('the launch universe is 303 rows', universe.length === 303, `${universe.length}`);
+  check('the old base rate is 55.0%', Math.abs(oldRate * 100 - 55.0) < 0.05, oldRate.toFixed(4) + '%');
+  check('the corrected base rate is 35.6%', Math.abs(newRate * 100 - 35.6) < 0.05, newRate.toFixed(4) + '%');
+  check('the base-rate gap is 19.3 points', Math.abs(gapPoints - 19.3) < 0.05, gapPoints.toFixed(4) + ' points');
+
+  // The shrinkage: the target, the one-member categories' own gaps, and their published factors.
+  const default_ = cal.category_default;
+  check('the shrinkage target is -0.0599', Math.abs(default_ + 0.0599) < 0.0001, default_.toFixed(6));
+  check('the shrinkage target is a factor of 0.871', Math.abs(Math.pow(10, default_) - 0.871) < 0.001,
+    Math.pow(10, default_).toFixed(3));
+
+  const oneMember = Object.entries(cal.category_sizes).filter(([, n]) => n === 1).map(([k]) => k);
+  check('eleven categories have exactly one cohort member', oneMember.length === 11, `${oneMember.length}`);
+
+  // the largest gap between a one-member category's OWN residual and the global:
+  // the category's own residual is what the shrinkage pulls back, so it is the published
+  // correction put back through the shrinkage in reverse.
+  const PRIOR = 4;
+  const ownOf = (k) => (cal.category_log[k] * (1 + PRIOR) - default_ * PRIOR);
+  let maxOwnGap = 0, maxPublished = 0;
+  for (const k of oneMember) {
+    maxOwnGap = Math.max(maxOwnGap, Math.abs(ownOf(k) - default_));
+    maxPublished = Math.max(maxPublished, Math.abs(cal.category_log[k] - default_));
+  }
+  check("the largest one-member category's own gap is 0.889 log10", Math.abs(maxOwnGap - 0.889) < 0.001,
+    maxOwnGap.toFixed(4));
+  check("a one-member category's published correction sits at most 0.178 from the global",
+    Math.abs(maxPublished - 0.178) < 0.001, maxPublished.toFixed(4));
+
+  const factors = oneMember.map((k) => Math.pow(10, cal.category_log[k]));
+  const lo = Math.min(...factors), hi = Math.max(...factors);
+  check('the one-member corrections run from 0.648 to 1.312 on the conditional value',
+    Math.abs(lo - 0.648) < 0.001 && Math.abs(hi - 1.312) < 0.001, `${lo.toFixed(3)} to ${hi.toFixed(3)}`);
+
+  // and the sentence that states them must say them the way the measurement reads.
+  const modelMd = fs.readFileSync(path.join(process.cwd(), 'MODEL.md'), 'utf8');
+  check('MODEL.md states the base-rate gap as 19.3 points', modelMd.includes('19.3 points of base rate'), 'stated');
+  check('MODEL.md states the one-member factor band as 0.648 and 1.312',
+    modelMd.includes('0.648') && modelMd.includes('1.312'), 'stated');
+  check('MODEL.md names the factor band as the published corrections, not a deviation from the global',
+    modelMd.includes('published corrections') && modelMd.includes('run from 0.648 to 1.312'), 'stated');
+}
+
 // ---------------------------------------------------------------- dossier_matches
 const dossierPath = path.join(out, 'dossier.json');
 const dossier = fs.readFileSync(dossierPath);

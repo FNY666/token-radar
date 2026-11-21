@@ -157,8 +157,9 @@ category with one live protocol from speaking for the whole category:
    beside each correction rather than leaving the reader to assume the two are the same. The
    shrinkage bounds what a one-member category can do: the largest gap between such a category's
    own residual and the global is 0.889 log10, and after being pulled four fifths of the way back
-   its published correction sits at most 0.178 from the global — a factor between 0.648 and 1.312
-   on the conditional value.
+   its published correction sits at most 0.178 from the global. The published corrections
+   themselves — the multipliers the board applies — run from 0.648 to 1.312 on the conditional
+   value across the eleven one-member categories.
 3. **A floor.** A category the cohort has never seen takes the shrinkage target — the cohort's own
    median residual, −0.0599, a factor of 0.871 on the conditional value. It does not contribute
    nothing; it contributes what every category contributes when the cohort says nothing better, and

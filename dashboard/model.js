@@ -1,9 +1,9 @@
 // The radar's model, in the page's own hand: main.ts fits this, and the page refits it from the
 // figures it carries, so the arithmetic is shown rather than trusted.
 //   value model   log10(mcap/tvl) ~ log10(tvl), redescending-weight, with a shrunk category
-//                 correction. Fitted on the protocols whose tokens trade.
-//   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less the
-//                 product rows: a ticker but no market cap of their own.
+//                 correction, fitted on the protocols whose tokens trade.
+//   launch model  logistic(age band, TVL band, growth), fitted on the eligible universe less
+//                 the product rows: a ticker but no market cap of their own.
 //   ranking       implied value = value if it issues x the chance it issues.
 (function (global) {
   'use strict';

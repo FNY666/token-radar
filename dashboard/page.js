@@ -61,7 +61,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   headCtx.redraw = refresh;
   var head = el('thead', null, [
    el('tr', null, [
-    sortHeader('rank', '#', false, 1),
+    // The rank column shows "#", but a screen reader reads the header's text, so the button
+    // carries the name and the glyph is only its visible half.
+    sortHeader('rank', '#', false, 1, L.rank),
     sortHeader('name', 'Protocol', false, -1),
     el('th', { scope: 'col', text: 'Scope' }),
     el('th', { scope: 'col', text: 'Category' }),
@@ -97,7 +99,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   });
   wrap.appendChild(el('table', null, [head, body]));
  }
- function sortHeader(key, label, right, firstDir) {
+ function sortHeader(key, label, right, firstDir, name) {
   var sort = headCtx.sort;
   var redraw = headCtx.redraw;
   var active = sort.key === key;
@@ -114,10 +116,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   return el('th', {
    class: right ? 'right' : null, scope: 'col',
    'aria-sort': active ? (sort.dir === 1 ? 'ascending' : 'descending') : null
-  }, [el('button', { type: 'button', onclick: on, 'data-col': key }, [
+  }, [el('button', { type: 'button', onclick: on, 'data-col': key, 'aria-label': name || null }, [
    document.createTextNode(label),
-   // `aria-sort` on the header says the direction to a reader, so the arrow is hidden from
-   // the accessibility tree: otherwise the rank button is called "#▲".
+   // `aria-sort` on the header says the direction, so the arrow is hidden from the tree.
    active ? el('span', { class: 'arrow', 'aria-hidden': 'true', text: sort.dir === 1 ? '▲' : '▼' }) : null
   ])]);
  }
@@ -133,10 +134,10 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
- // The page refits the model and recomputes every row from its own figures. The board's three
- // displayed figures are each shown to a fixed precision and the implied value is computed from
- // the other two at that precision, so the check is made the same way: does the row's own
- // arithmetic hold to the last digit the reader can see? That is the claim the page makes.
+ // The page refits the model and recomputes every row from its own figures. The three displayed
+ // figures are each shown to a fixed precision and the implied value is computed from the other
+ // two at that precision, so the check is made the same way: does the row's arithmetic hold to
+ // the last digit the reader can see?
  function sigRound(n, sig) {
   if (!isFinite(n) || n === 0) return n;
   var a = Math.abs(n);
@@ -222,15 +223,14 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    line('TVL', moneyExact(row.tvl_usd)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),
    line(L.category_correction, '×' + Math.pow(10, row.category_log).toPrecision(9)),
-   // How many cohort members this row's category correction rests on: one row and ten are
-   // different numbers, and the reader is asked to weigh this one against the implied value.
+   // How many cohort members the correction rests on: one row and ten are different numbers.
    line(L.category_evidence, categoryEvidence(row)),
    line(L.value_if_issues, moneyExact(calc.conditional)),
    line(L.odds_recomputed, oddsText(odds)),
    line(L.implied, moneyExact(calc.expected), true)
   ]);
 
-  // The correction's evidence in the page's own voice: how many cohort members it rests on.
+  // The correction's evidence: how many cohort members it rests on.
   function categoryEvidence(r) {
    var n = (D.calibration.category_sizes || {})[r.category];
    if (n === undefined) return 'the cohort never saw this category';
@@ -385,7 +385,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  catRows.forEach(function (r) { catRow(r.k, r.v, r.n); });
  var seen = {};
  D.rows.forEach(function (r) { seen[r.category || 'Uncategorised'] = true; });
- var missing = Object.keys(seen).filter(function (k) { return !(k in c.category_log); });    if (missing.length) catRow(missing.length + ' more categories the cohort never saw', c.category_default, 0);
+ var missing = Object.keys(seen).filter(function (k) { return !(k in c.category_log); });
+ if (missing.length) catRow(missing.length + ' more categories the cohort never saw', c.category_default, 0);
  catCard.appendChild(catTable);
  host.appendChild(catCard);
  host.appendChild(card(L.is_and_is_not, [
@@ -481,20 +482,24 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  add('text', { x: 8, y: 11, class: 'axis-title' }, L.implied);
  var dots = [];
  list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
+ // One description of the dot, for both the tooltip a sighted reader sees and the name a
+ // screen reader reads: `aria-label` overrides the title, so writing them separately is how
+ // the two drift apart.
+ var dl = r.name + ': ' + money(r.implied_value_usd) + ' implied, ' +
+ oddsText(launchP(r)) + ' odds, ' + money(r.tvl_usd) + ' TVL, ' +
+ (r.on_watchlist ? 'on' : 'off') + ' the house watchlist';
  var c = add('circle', {
  cx: xOf(launchP(r)), cy: yOf(r.implied_value_usd), r: rOf(r.tvl_usd),
  class: 'dot' + (r.on_watchlist ? ' wl' : ''), 'data-slug': r.slug,
  tabindex: '-1', role: 'button',
- 'aria-label': r.name + ': ' + money(r.implied_value_usd) + ' implied, ' +
- (r.on_watchlist ? 'on the house watchlist' : 'off the house watchlist')
+ 'aria-label': dl
  });
  c.addEventListener('click', function () { openDetail(r.slug, undefined, c); });
  c.addEventListener('keydown', function (e) {
  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.slug, undefined, c); }
  });
  var t = document.createElementNS(ns, 'title');
- t.textContent = r.name + ' — ' + money(r.implied_value_usd) + ' implied, ' +
- oddsText(launchP(r)) + ' odds, ' + money(r.tvl_usd) + ' TVL';
+ t.textContent = dl;
  c.appendChild(t);
  dots.push(c);
  });

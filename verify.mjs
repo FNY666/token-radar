@@ -896,6 +896,64 @@ for (const name of shots) {
     mismatch.length === 0 ? 'all have rows' : JSON.stringify(mismatch));
 }
 
+// ---------------------------------------------------------------- every control says what it is
+// Three names a reader gets wrong, each of them a name that names nothing:
+//  1. the rank column shows "#", and a screen reader reads the header's text;
+//  2. the plot's dot had an aria-label AND a <title>, and aria-label wins -- so the screen
+//     reader heard less than the sighted reader's tooltip showed;
+//  3. the dot's description said "off the house watchlist" where the row said the same thing
+//     twice, and the two could drift apart.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  const d = await page.evaluate(() => {
+    const accName = (el) => {
+      const al = el.getAttribute('aria-label');
+      if (al) return al;
+      let out = '';
+      const walk = (n) => {
+        if (n.nodeType === 3) { out += n.textContent; return; }
+        if (n.nodeType !== 1) return;
+        if (n.getAttribute('aria-hidden') === 'true') return;
+        Array.from(n.childNodes).forEach(walk);
+      };
+      walk(el);
+      return out.replace(/\s+/g, ' ').trim();
+    };
+    const buttons = Array.from(document.querySelectorAll('thead th button')).map((b) => ({
+      text: b.textContent.trim(), name: accName(b)
+    }));
+    const dots = Array.from(document.querySelectorAll('.plot .dot')).slice(0, 40).map((c) => ({
+      name: c.getAttribute('aria-label'),
+      title: (c.querySelector('title') || {}).textContent
+    }));
+    return { buttons, dots };
+  });
+  await browser.close();
+
+  // 1. no button may be named by a bare glyph
+  const glyph = d.buttons.filter((b) => !/[A-Za-z]/.test(b.name));
+  check('no sort button is named by a bare glyph', glyph.length === 0,
+    glyph.length === 0 ? d.buttons.map((b) => '"' + b.name + '"').join(' ') : JSON.stringify(glyph));
+
+  // 2. the dot's name and its tooltip must be the same words
+  const drift = d.dots.filter((x) => x.name !== x.title);
+  check('every plot dot reads the same to a screen reader and to the eye', drift.length === 0,
+    drift.length === 0 ? `${d.dots.length} dots agree` : JSON.stringify(drift.slice(0, 2)));
+
+  // 3. the dot's name must carry the figures the plot encodes: value, odds and TVL
+  const thin = d.dots.filter((x) => !/implied/.test(x.name) || !/odds/.test(x.name) || !/TVL/.test(x.name));
+  check('every plot dot names its value, its odds and its TVL', thin.length === 0,
+    thin.length === 0 ? `${d.dots.length} dots carry all three` : JSON.stringify(thin.slice(0, 2)));
+}
+
 // ---------------------------------------------------------------- dossier_matches
 const dossierPath = path.join(out, 'dossier.json');
 const dossier = fs.readFileSync(dossierPath);

@@ -1461,6 +1461,61 @@ for (const name of shots) {
     libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
 }
 
+// ---------------------------------------------------------------- the two narrative claims
+// The page names a row: "the row that moves a plain fit most -- the one priced at four hundred
+// times its deposits". And it claims a precision: "the coefficients are printed to four decimals
+// here, and the category corrections to five, so the sum above lands on the conditional value to
+// within one part in a thousand rather than exactly".
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+  const copy = data.copy ?? {};
+
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+  const VERSIONED = constOf('VERSIONED');
+  const WRAPPED_WORD = constOf('WRAPPED_WORD');
+  const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+  const cohort = snapshot.protocols.filter((p) =>
+    !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+    !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name) &&
+    !(p.mcap_usd === null && p.gecko_id === null && p.symbol === null) &&
+    (p.mcap_usd ?? 0) >= 1_000_000 && p.tvl_usd >= 1_000_000);
+
+  // the row priced at four hundred times its deposits
+  const worst = cohort.reduce((a, b) => ((b.mcap_usd ?? 1) / Math.max(b.tvl_usd, 1) >
+    (a.mcap_usd ?? 1) / Math.max(a.tvl_usd, 1) ? b : a));
+  const worstRatio = (worst.mcap_usd ?? 1) / Math.max(worst.tvl_usd, 1);
+  check("the row a plain fit leans on hardest is priced at 400 times its deposits",
+    Math.abs(worstRatio - 400) < 5, `${worst.slug} at ${worstRatio.toFixed(1)}x`);
+  check('the copy names that row as four hundred times its deposits',
+    copy.value_fit_note.includes('four hundred times its deposits'), 'stated');
+
+  // the precision claim: the printed coefficients and corrections against the exact ones
+  const a = Math.round(cal.value_beta[0] * 1e4) / 1e4;
+  const b = Math.round(cal.value_beta[1] * 1e4) / 1e4;
+  let worstRel = 0;
+  for (const p of cohort) {
+    const cat = p.category ?? '(none)';
+    const exactCat = cal.category_log[cat] ?? cal.category_default;
+    const printedCat = Math.round(exactCat * 1e5) / 1e5;
+    const t = Math.log10(Math.max(p.tvl_usd, 1));
+    const exact = cal.value_beta[0] + cal.value_beta[1] * t + exactCat;
+    const printed = a + b * t + printedCat;
+    const rel = Math.abs(Math.pow(10, printed) - Math.pow(10, exact)) / Math.pow(10, exact);
+    if (rel > worstRel) worstRel = rel;
+  }
+  check("the printed sum lands on the conditional value to within one part in a thousand",
+    worstRel < 1e-3, worstRel.toExponential(3));
+  check('the copy says the printed sum lands to within one part in a thousand',
+    copy.formula.includes('one part in a thousand'), 'stated');
+}
+
 // ---------------------------------------------------------------- the page's own figures are the data's
 // The page's ledes state counts -- 195 board rows, 40 on the watchlist, 155 off it, 19 above
 // the floor and 136 below, 119 live candidates, 128 with a market cap, 9 exchange venues,

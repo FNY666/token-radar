@@ -42,7 +42,7 @@
  };
 
  function byRank(a, b) { return a.rank - b.rank; }
-function byName(a, b) { return a.name < b.name ? -1 : 1; }
+ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
  function colExtreme(list, key, pick) {
   return Math[pick].apply(null, list.map(function (r) { return r[key]; }));

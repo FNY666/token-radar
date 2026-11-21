@@ -404,6 +404,56 @@ for (const name of shots) {
     seen.map((s) => `${s.w}px:${s.overflow ? 'OVERFLOW' : 'ok'}`).join(' '));
 }
 
+// ---------------------------------------------------------------- nothing is clipped at any width
+// The bar's brand, the page's headings and every cell have to fit their own box at every
+// viewport, with no scrollable ancestor to hide behind. This checks the rendered geometry at
+// nine widths from a phone to a wide desktop.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  const seen = [];
+  for (const w of [320, 375, 480, 640, 768, 1024, 1280, 1440, 1920]) {
+    await page.setViewport({ width: w, height: 900 });
+    await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+    await page.waitForSelector('tbody tr');
+    const d = await page.evaluate(() => {
+      const clipped = [];
+      document.querySelectorAll('body *').forEach((el) => {
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return;
+        if (el.scrollWidth > el.clientWidth + 1 && cs.overflowX === 'visible') {
+          let a = el.parentElement, scrollable = false;
+          while (a) { const s = getComputedStyle(a); if (s.overflowX === 'auto' || s.overflowX === 'scroll') { scrollable = true; break; } a = a.parentElement; }
+          if (!scrollable) clipped.push(el.tagName + '.' + String(el.className).slice(0, 20));
+        }
+      });
+      // the brand must be whole: its name is one line and it is not squeezed by its neighbour
+      const bn = document.querySelector('.brand-name');
+      const range = document.createRange();
+      range.selectNodeContents(bn);
+      const lines = Array.from(range.getClientRects()).length;
+      const brand = document.querySelector('.brand');
+      return {
+        clipped,
+        brandLines: lines,
+        brandClipped: brand.scrollWidth > brand.clientWidth + 1
+      };
+    });
+    seen.push({ w, ...d });
+  }
+  await browser.close();
+  const clipped = seen.flatMap((s) => s.clipped.map((c) => `${s.w}px ${c}`));
+  check('no element is clipped with no scrollable ancestor, at any width', clipped.length === 0,
+    clipped.length === 0 ? 'clear at 9 widths' : clipped.join('; '));
+  const brandOk = seen.every((s) => s.brandLines === 1 && !s.brandClipped);
+  check('the brand name is one whole line, not squeezed, at any width', brandOk,
+    seen.map((s) => `${s.w}px:${s.brandLines}line${s.brandClipped ? '-CLIPPED' : ''}`).join(' '));
+}
+
 // ---------------------------------------------------------------- the influence claim
 // The page says no single row can drag the value fit: the worst single row moves the intercept
 // by 0.410 log10 under a plain least squares and by 0.273 under the model's own weight. Both

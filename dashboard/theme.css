@@ -20,11 +20,13 @@ a,.kpi .v.cyan{color:var(--odds)}
 .bar{position:sticky;top:0;z-index:40;background:var(--b2);border-bottom:var(--bl)}
 .bar-in,main{max-width:1400px;margin:0 auto}
 .bar-in{padding:var(--c) var(--e);display:flex;align-items:center;justify-content:space-between;gap:var(--e)}
-.brand{display:flex;align-items:baseline;gap:var(--c);min-width:0}
+/* The brand is the one thing in the bar that must not be squeezed: the name is a single
+   line, and `flex: none` keeps it whole while the meta beside it wraps instead. */
+.brand{display:flex;align-items:baseline;gap:var(--c);flex:none;white-space:nowrap}
 .sweep{width:9px;height:9px;border-radius:50%;background:var(--value);align-self:center;flex:none}
 .brand-name,.bar-meta dd,.controls .result,.rk{font-family:var(--mono);font-size:13px}
 .rk{width:52px}
-.brand-name{letter-spacing:0.14em;color:var(--ink)}
+.brand-name{letter-spacing:0.14em;color:var(--ink);white-space:nowrap}
 .brand-tag{font-size:13px;color:var(--i3);white-space:nowrap}
 .bar-meta{display:flex;gap:var(--e);margin:0;flex-wrap:wrap;justify-content:flex-end}
 .bar-meta div{display:flex;flex-direction:column;gap:1px}

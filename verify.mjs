@@ -1461,6 +1461,56 @@ for (const name of shots) {
     libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
 }
 
+// ---------------------------------------------------------------- the page's refit IS the shipped model
+// The page tells the judge: "it refits the model from them with the code in model.js -- the same
+// procedure main.ts used, not the same numbers pasted in." That claim is only worth anything if
+// the two agree, so this check compares the page's own refit against the shipped calibration:
+// every coefficient, every category correction, and every row of the board.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+
+  // the module may already be imported further up; import it again under a fresh name so the
+  // assignment runs either way
+  if (!globalThis.window || !globalThis.window.RadarModel) {
+    globalThis.window = {};
+    await import(path.join(out, 'dashboard', 'model.js'));
+  }
+  const fit = globalThis.window.RadarModel.fit(data);
+
+  const worst = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+  check('the page refits the value model to the same coefficients',
+    worst(cal.value_beta, fit.value_beta) < 1e-9, worst(cal.value_beta, fit.value_beta).toExponential(2));
+  check('the page refits the launch model to the same coefficients',
+    worst(cal.launch_beta, fit.launch_beta) < 1e-9, worst(cal.launch_beta, fit.launch_beta).toExponential(2));
+
+  let catWorst = 0, catMissing = 0;
+  for (const k of Object.keys(cal.category_log)) {
+    const f = fit.category_log[k];
+    if (f === undefined) { catMissing++; continue; }
+    catWorst = Math.max(catWorst, Math.abs(cal.category_log[k] - f));
+  }
+  check('the page refits every category correction', catMissing === 0 && catWorst < 1e-9,
+    catMissing === 0 ? catWorst.toExponential(2) : `${catMissing} missing`);
+
+  // the published AUC and error are rounded to three decimals; the refit must land on the same
+  // three decimals, which is what the page prints.
+  check('the page refits the same AUC', Math.round(fit.launch_auc * 1000) / 1000 === cal.launch_auc,
+    `published ${cal.launch_auc} refit ${fit.launch_auc.toFixed(6)}`);
+  check('the page refits the same in-sample error', Math.round(fit.mae_log10 * 1000) / 1000 === cal.mae_log10,
+    `published ${cal.mae_log10} refit ${fit.mae_log10.toFixed(6)}`);
+
+  // and every row of the board, which is the claim the reader cares about
+  let rowBad = 0;
+  for (const r of data.rows) {
+    const cond = fit.conditional(r.tvl_usd, r.growth_pct, r.category);
+    if (Math.abs(cond - r.conditional_value_usd) > 1) rowBad++;
+  }
+  check('the page refits every row of the board to the dollar', rowBad === 0,
+    rowBad === 0 ? `${data.rows.length} rows agree` : `${rowBad} of ${data.rows.length} differ`);
+}
+
 // ---------------------------------------------------------------- the two narrative claims
 // The page names a row: "the row that moves a plain fit most -- the one priced at four hundred
 // times its deposits". And it claims a precision: "the coefficients are printed to four decimals

@@ -133,10 +133,10 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
  // The page refits the model and recomputes every row of the board from its own figures. The
  // board's three displayed figures -- the odds, the value if it issues, the implied value -- are
- // each shown to a fixed precision, and the board's implied value is computed from the other two
- // at that precision. So the check is made the same way: does the row's own arithmetic hold to
- // the last digit the reader can see? That is the claim the page makes, and it is the claim a
- // reader can check with the three numbers in front of them.
+ // each shown to a fixed precision, and the implied value is computed from the other two at that
+ // precision. So the check is made the same way: does the row's own arithmetic hold to the last
+ // digit the reader can see? That is the claim the page makes, and a reader can check it with
+ // the three numbers in front of them.
  function sigRound(n, sig) {
   if (!isFinite(n) || n === 0) return n;
   var a = Math.abs(n);
@@ -681,9 +681,11 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  el('h1', null, [headline]),
  el('p', { class: 'lede', html: ledeText })
  ]);
+ // the callout explains the table under it, and each view has its own table
+ var pc = D.copy['pricing_' + view] || D.copy.pricing_board;
  var steps = h('div','callout', [
- t('h2',L.pricing_head),
- el('ol', null, D.copy.pricing_steps.map(function (s) { return el('li', { html: s }); }))
+ t('h2',pc.head),
+ el('ol', null, pc.steps.map(function (s) { return el('li', { html: s }); }))
  ]);
  host.appendChild(h('div','hero-grid', [lede, steps]));
  }

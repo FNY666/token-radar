@@ -587,6 +587,45 @@ for (const name of shots) {
     d.outside === 0 ? d.dotCount + ' dots, all inside' : d.outside + ' of ' + d.dotCount + ' dots are outside');
 }
 
+// ---------------------------------------------------------------- each view explains its own table
+// The callout sits above all three tabs, but each tab's table is priced differently: the board
+// by the model, the live table by the market, the model tab by neither. A callout that
+// describes one table while sitting above another is a callout that misleads.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1000 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('.callout');
+  const seen = {};
+  for (const [view, tab] of [['board', 'tab-board'], ['live', 'tab-live'], ['model', 'tab-model']]) {
+    await page.evaluate((t) => document.getElementById(t).click(), tab);
+    await new Promise((r) => setTimeout(r, 300));
+    seen[view] = await page.evaluate(() => {
+      const cal = document.querySelector('.callout');
+      const heads = Array.from(document.querySelectorAll('#view-' + (document.querySelector('[role=tabpanel]:not([hidden])') || {}).id.split('-')[1] + ' thead th')).map((h) => h.textContent.trim());
+      return {
+        title: cal.querySelector('h2').textContent.trim(),
+        items: Array.from(cal.querySelectorAll('li')).map((li) => li.textContent.trim().split('.')[0]),
+        headers: heads
+      };
+    });
+  }
+  await browser.close();
+  // the board's steps name the model's own quantities; the live table's steps name the market's
+  const boardOk = seen.board.items.join('|') === 'Conditional value|Launch odds|Implied value';
+  const liveOk = seen.live.items.join('|') === 'Market cap|Cap / TVL|7d';
+  const modelOk = seen.model.items.join('|') === 'Value model|Launch model|Implied value';
+  const titlesDiffer = seen.board.title !== seen.live.title && seen.model.title !== seen.live.title && seen.model.title !== seen.board.title;
+  check('the callout describes the table under it, on every view',
+    boardOk && liveOk && modelOk && titlesDiffer,
+    Object.entries(seen).map(([k, v]) => `${k}: "${v.title}" ${v.items.join('/')}`).join(' | '));
+}
+
 // ---------------------------------------------------------------- the influence claim
 // The page says no single row can drag the value fit: the worst single row moves the intercept
 // by 0.410 log10 under a plain least squares and by 0.273 under the model's own weight. Both

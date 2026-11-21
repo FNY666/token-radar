@@ -794,7 +794,9 @@ export interface Copy {
   /** The drawer's note on a protocol outside the cohort, and why it is outside. */
   live_gap_note: string;
   /** The hero's callout: the three steps a row is priced by. */
-  pricing_steps: string[];
+  pricing_board: { head: string; steps: string[] };
+  pricing_live: { head: string; steps: string[] };
+  pricing_model: { head: string; steps: string[] };
   /** The model page's three cards, each a line of prose under its figure. */
   value_fit_note: string;
   launch_odds_note: string;
@@ -874,7 +876,6 @@ export interface Labels {
   tab_live: string;
   tab_model: string;
   /** The hero's callout head. */
-  pricing_head: string;
   /** The scope tags. */
   on_watchlist: string;
   off_watchlist: string;
@@ -1466,11 +1467,32 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'This token already trades, so its value is the market\'s own, not a model\'s estimate: there is no implied value and no farm plan for it here. ' +
       'It is not among the ' + cal.cohort_size + ' protocols that fitted the value model — it is here as the contrast the board is looking for. ' +
       'It was left out of the cohort because of its record: ',
-    pricing_steps: [
-      '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size and category.',
-      '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols its age and size have issued.',
-      '<strong>Implied value.</strong> The two multiplied. This is what the board ranks.',
-    ],
+    pricing_board: {
+      head: 'How a row is priced',
+      steps: [
+        '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size and category.',
+        '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols its age and size have issued.',
+        '<strong>Implied value.</strong> The two multiplied. This is what the board ranks.',
+      ],
+    },
+    // The live table is priced by the market, not by the model, so it needs its own steps:
+    // the board's steps above it would describe a different table.
+    pricing_live: {
+      head: 'How this row is priced',
+      steps: [
+        '<strong>Market cap.</strong> The market\'s own value for the token, read from the snapshot.',
+        '<strong>Cap / TVL.</strong> What the market pays per dollar of the protocol\'s TVL.',
+        '<strong>7d.</strong> The price\'s move over the snapshot\'s last week. This is a ranking by market cap, not by the board\'s model.',
+      ],
+    },
+    pricing_model: {
+      head: 'How the model works',
+      steps: [
+        '<strong>Value model.</strong> What a market cap is worth against TVL, for a protocol of that size and category.',
+        '<strong>Launch model.</strong> How often a protocol of that age and size issues a token at all.',
+        '<strong>Implied value.</strong> The two multiplied, which is what the board ranks.',
+      ],
+    },
     value_fit_note:
       'Median error of the value model, in log10 dollars, on the ' + cal.cohort_size +
       ' protocols whose tokens trade, each with a market cap and TVL of a million dollars or more. ' +
@@ -1575,7 +1597,6 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       tab_board: 'Pre-token board',
       tab_live: 'Already trading',
       tab_model: 'The model',
-      pricing_head: 'How a row is priced',
       on_watchlist: 'On the house watchlist',
       off_watchlist: 'Off the house watchlist',
       first_tracked: 'First tracked',

@@ -20,8 +20,7 @@ a,.kpi .v.cyan{color:var(--odds)}
 .bar{position:sticky;top:0;z-index:40;background:var(--b2);border-bottom:var(--bl)}
 .bar-in,main{max-width:1400px;margin:0 auto}
 .bar-in{padding:var(--c) var(--e);display:flex;align-items:center;justify-content:space-between;gap:var(--e)}
-/* The brand must not be squeezed: the name is one line, and `flex: none` keeps it whole while
-   the meta beside it wraps instead. */
+/* The brand must not be squeezed: `flex: none` keeps the name whole while the meta wraps. */
 .brand{display:flex;align-items:baseline;gap:var(--c);flex:none}
 .sweep{width:9px;height:9px;border-radius:50%;background:var(--value);align-self:center;flex:none}
 .brand-name,.bar-meta dd,.controls .result,.rk{font-family:var(--mono);font-size:13px}
@@ -74,7 +73,7 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 /* The board is nine columns wide and cannot fit a narrow phone. A scroll the reader cannot see
    is a scroll the reader does not know to make, so the wrapper paints a shadow on whichever
    edge still has table beyond it: the shadows are fixed to the wrapper, and the two opaque
-   covers scroll with the content, uncovering the shadow as it slides away. */
+   covers scroll with the content, uncovering the shadow. */
 .table-wrap{overflow-x:auto;overflow-y:clip;background-image:linear-gradient(var(--panel),var(--panel)),linear-gradient(var(--panel),var(--panel)),linear-gradient(to right,var(--shadow),transparent),linear-gradient(to left,var(--shadow),transparent);background-position:0 50%,100% 50%,0 50%,100% 50%;background-repeat:no-repeat;background-size:16px;background-attachment:local,local,scroll,scroll}
 table{width:100%;border-collapse:collapse}
 thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--c);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}

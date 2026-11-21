@@ -60,13 +60,13 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 .tab .count{margin-left:var(--b)}
 .controls{display:flex;gap:var(--b);align-items:center;flex-wrap:wrap;padding:var(--b) var(--d);border-radius:var(--rm);margin-bottom:var(--c)}
 .controls label{font-size:12px;color:var(--i3)}
-.controls .q,.controls select,.formula{background:var(--bg)}
+.controls .q,.controls select,.formula,.chip{background:var(--bg)}
 .controls .q,.controls select,.chip,.controls button.ghost,.sheet .close,.skip,.tag{border:var(--bv)}
 .controls .q,.controls select{border-color:var(--i3);color:var(--ink);padding:var(--a) var(--c)}
 .controls .q{min-width:200px}
 .controls .q::placeholder,.controls select{min-width:140px}
 .chip,.controls button.ghost{border-radius:var(--rs);font-size:13px}
-.chip{background:var(--bg);color:var(--i2);padding:var(--a) var(--c)}
+.chip{color:var(--i2);padding:var(--a) var(--c)}
 .chip[aria-pressed="true"]{border-color:var(--value);color:var(--value);background:var(--v08)}
 .controls .spacer{flex:1 1 auto}
 .controls button.ghost{background:transparent;color:var(--i2);padding:var(--b) var(--c)}
@@ -75,7 +75,7 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
    is a scroll the reader does not know to make, so the wrapper paints a shadow on whichever
    edge still has table beyond it: the shadows are fixed to the wrapper, and the two opaque
    covers scroll with the content, uncovering the shadow as it slides away. */
-.table-wrap{overflow-x:auto;overflow-y:clip;background-image:linear-gradient(to right,var(--panel),var(--panel)),linear-gradient(to left,var(--panel),var(--panel)),linear-gradient(to right,var(--shadow),transparent),linear-gradient(to left,var(--shadow),transparent);background-position:left center,right center,left center,right center;background-repeat:no-repeat;background-size:16px 100%,16px 100%,16px 100%,16px 100%;background-attachment:local,local,scroll,scroll}
+.table-wrap{overflow-x:auto;overflow-y:clip;background-image:linear-gradient(var(--panel),var(--panel)),linear-gradient(var(--panel),var(--panel)),linear-gradient(to right,var(--shadow),transparent),linear-gradient(to left,var(--shadow),transparent);background-position:0 50%,100% 50%,0 50%,100% 50%;background-repeat:no-repeat;background-size:16px;background-attachment:local,local,scroll,scroll}
 table{width:100%;border-collapse:collapse}
 thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--c);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
 thead th button{background:none;border:none;padding:0;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit}

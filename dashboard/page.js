@@ -437,11 +437,14 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
  var H = 150, padL = 54, padR = 16, padT = 22, padB = 30;
  var maxV = colExtreme(list, 'implied_value_usd', 'max');
+ // The scale's top is the power of ten at or above the board's largest value, so the grid
+ // lines are evenly spaced and the top two labels do not overlap.
+ var scaleTop = 1; while (scaleTop < maxV) scaleTop *= 10;
  var logMin = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'min'), 1));
  var logMax = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'max'), 1));
  function xOf(p) { return padL + (p - 0.05) / 0.9 * (W - padL - padR); }
- function yOf(v) { return padT + (1 - Math.log10(Math.max(v, 1)) / Math.log10(maxV)) * (H - padT - padB); }
- function rOf(tvl) {
+ function yOf(v) { return padT + (1 - Math.log10(Math.max(v, 1)) / Math.log10(scaleTop)) * (H - padT - padB); }
+  function rOf(tvl) {
  if (logMax <= logMin) return 5;
  return 3.5 + (Math.log10(Math.max(tvl, 1)) - logMin) / (logMax - logMin) * 8.5;
  }
@@ -460,7 +463,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  svg.appendChild(n);
  return n;
  }
- for (var v = 1; v <= maxV; v *= 10) {
+ for (var v = 1; v <= scaleTop; v *= 10) {
  var y = yOf(v);
  add('line', { x1: padL, y1: y, x2: W - padR, y2: y, class: 'grid' });
  add('text', { x: padL - 8, y: y + 3.5, class: 'tick', 'text-anchor': 'end' }, money(v));
@@ -603,7 +606,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  host.appendChild(h('span','spacer'));
  // The row count is the one thing a screen-reader user cannot see change as they type, so it
  // is a polite live region: `role="status"` implies `aria-live="polite"`.
- host.appendChild(el('span', { class: 'result', id: 'result-count', role: 'status', 'aria-atomic': 'true' }));
+ host.appendChild(el('span', { class: 'result', id: 'result-count', role: 'status' }));
  host.appendChild(el('button', {
  class: 'ghost', type: 'button', text: L.clear_filters,
  onclick: function () {

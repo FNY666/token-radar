@@ -533,6 +533,60 @@ for (const name of shots) {
     bad.length === 0 ? tabs.map((t) => '"' + t.name + '"').join(' ') : JSON.stringify(bad));
 }
 
+// ---------------------------------------------------------------- the plot's axis can be read
+// The board's largest implied value is usually not a power of ten, so the plot's scale has to
+// reach past it. Two things must hold: every grid line is a power of ten, so the lines are
+// evenly spaced and none of their labels overlap; and every dot sits inside the grid.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1000 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('.plot svg circle');
+  const d = await page.evaluate(() => {
+    const svg = document.querySelector('.plot svg');
+    // the HORIZONTAL grid lines are the ones that run across the plot; the vertical ones run
+    // down it, and counting them would put a false top edge on the plot
+    const ys = Array.from(svg.querySelectorAll('line.grid'))
+      .filter((l) => l.getAttribute('y1') === l.getAttribute('y2') && l.getAttribute('x1') !== l.getAttribute('x2'))
+      .map((l) => +l.getAttribute('y1'));
+    // the y-axis labels are the ones ending in K, M or B, or a bare $; the dot's own label
+    // is the protocol's name and is not one of them
+    const yLabels = Array.from(svg.querySelectorAll('text')).filter((t) => t.getAttribute('text-anchor') === 'end' && /^\$[\d.]+[KMB]?$/.test(t.textContent));
+    const boxes = yLabels.map((t) => { const r = t.getBoundingClientRect(); return { text: t.textContent, top: r.top, bottom: r.bottom }; }).sort((a, b) => a.top - b.top);
+    const clashes = [];
+    for (let i = 1; i < boxes.length; i++) if (boxes[i].top < boxes[i - 1].bottom) clashes.push(boxes[i - 1].text + '/' + boxes[i].text);
+    const dots = Array.from(svg.querySelectorAll('circle')).map((c) => +c.getAttribute('cy'));
+    const topLine = Math.min(...ys), botLine = Math.max(...ys);
+    const yTicks = ys.slice().sort((a, b) => a - b);
+    return {
+      labels: boxes.map((x) => x.text),
+      clashes,
+      outside: dots.filter((cy) => cy < topLine - 1 || cy > botLine + 1).length,
+      dotCount: dots.length,
+      gridLines: yTicks.length
+    };
+  });
+  await browser.close();
+  // The scale's top has to be a power of ten, not the board's largest value: the largest value
+  // is usually not one, and a top line at an arbitrary place is a line the reader cannot place
+  // against the others. So the topmost label must itself be a power of ten.
+  // the top label must be the power of ten at or above the board's largest value, which is
+  // what makes every grid line a power of ten and every gap between them the same size
+  const pow10 = (t) => /^\$(1|10|100|1\.00K|10\.0K|100K|1\.00M|10\.0M|100M|1\.00B|10\.0B|100B)$/.test(t);
+  const topIsPow10 = d.labels.length > 0 && pow10(d.labels[0]);
+  const allPow10 = d.labels.every(pow10);
+  check('the plot\'s grid lines are all powers of ten, so none of their labels overlap',
+    d.clashes.length === 0 && d.labels.length >= 6 && topIsPow10 && allPow10,
+    d.labels.join(' ') + (d.clashes.length ? ' OVERLAP: ' + d.clashes.join(', ') : '') + (topIsPow10 ? '' : ' -- the top line is not a power of ten'));
+  check('every dot on the plot sits inside the grid', d.outside === 0,
+    d.outside === 0 ? d.dotCount + ' dots, all inside' : d.outside + ' of ' + d.dotCount + ' dots are outside');
+}
+
 // ---------------------------------------------------------------- the influence claim
 // The page says no single row can drag the value fit: the worst single row moves the intercept
 // by 0.410 log10 under a plain least squares and by 0.273 under the model's own weight. Both

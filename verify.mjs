@@ -509,6 +509,30 @@ for (const name of shots) {
     d.emptyText);
 }
 
+// ---------------------------------------------------------------- every tab names itself properly
+// A screen reader reads a tab's name from its text, and the count badge is a separate span with
+// no space of its own, so the name needs the space or it reads "Pre-token board195".
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('[role=tab]');
+  const tabs = await page.evaluate(() => Array.from(document.querySelectorAll('[role=tab]')).map((t) => ({
+    name: (t.getAttribute('aria-label') || t.textContent).replace(/\s+/g, ' ').trim(),
+    count: t.querySelector('.count') ? t.querySelector('.count').textContent : null
+  })));
+  await browser.close();
+  // a name that runs a number onto a word is the defect; "board 195" is right, "board195" is not
+  const bad = tabs.filter((t) => /[a-z]\d/.test(t.name));
+  check('every tab\'s accessible name does not run its count onto its label', bad.length === 0,
+    bad.length === 0 ? tabs.map((t) => '"' + t.name + '"').join(' ') : JSON.stringify(bad));
+}
+
 // ---------------------------------------------------------------- the influence claim
 // The page says no single row can drag the value fit: the worst single row moves the intercept
 // by 0.410 log10 under a plain least squares and by 0.273 under the model's own weight. Both

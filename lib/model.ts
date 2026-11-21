@@ -845,7 +845,6 @@ export interface Labels {
   /** The plot's axis and its legend. */
   plot_title: string;
   plot_hint: string;
-  plot_legend: string;
   plot_help: string;
   odds_axis: string;
   /** The model's three cards. */
@@ -1553,7 +1552,6 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       seven_day: 'Seven-day TVL change',
       plot_title: 'The board, plotted',
       plot_hint: 'Implied value against launch odds · dot size is TVL · click a dot for its detail',
-      plot_legend: 'Implied value against launch odds for the filtered rows',
       plot_help: 'The board plotted: implied value against launch odds. Use the arrow keys to walk the rows.',
       value_fit: 'Value fit',
       launch_odds: 'Launch odds',

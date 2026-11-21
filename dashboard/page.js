@@ -453,7 +453,6 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 // The SVG holds the dots, and each dot is a control, so the SVG is a GROUP: an image
  // holding buttons is a contradiction no screen reader can resolve.
  svg.setAttribute('role', 'group');
- svg.setAttribute('aria-label', L.plot_legend);
  function add(tag, attrs, text) {
  var n = document.createElementNS(ns, tag);
  Object.keys(attrs).forEach(function (k) { n.setAttribute(k, String(attrs[k])); });
@@ -651,7 +650,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  if (moved) moved.focus();
  }
  }, [
- document.createTextNode(TAB_LABELS[key]),
+ // The space is in the label, not the badge: a screen reader reads the tab's name from its
+ // text, and without it the name is "Pre-token board195".
+ document.createTextNode(TAB_LABELS[key] + (key === 'model' ? '' : ' ')),
  key === 'model' ? null : e('span', 'count', '0')
  ]));
  });

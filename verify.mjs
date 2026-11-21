@@ -1461,6 +1461,70 @@ for (const name of shots) {
     libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
 }
 
+// ---------------------------------------------------------------- the page's own figures are the data's
+// The page's ledes state counts -- 195 board rows, 40 on the watchlist, 155 off it, 19 above
+// the floor and 136 below, 119 live candidates, 128 with a market cap, 9 exchange venues,
+// 21 live rows in the cohort, 4 rows on the growth clamp, 26 on the 5% odds floor. They are
+// computed by the library into `facts` and rendered from there, so they cannot disagree with
+// the data; this check re-derives them from the snapshot so they cannot disagree with the
+// library either.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const rows = data.rows ?? [];
+  const facts = data.facts ?? {};
+  const copy = data.copy ?? {};
+
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+  const VERSIONED = constOf('VERSIONED');
+  const WRAPPED_WORD = constOf('WRAPPED_WORD');
+  const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+  const eligible = snapshot.protocols.filter((p) =>
+    !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+    !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name));
+  const isPre = (p) => p.mcap_usd === null && p.gecko_id === null && p.symbol === null;
+  const watchlist = new Set(snapshot.watchlist);
+  const board = eligible.filter(isPre);
+  const offList = board.filter((p) => !watchlist.has(p.slug));
+  const above = offList.filter((p) => p.tvl_usd >= 50_000_000);
+  const below = offList.filter((p) => p.tvl_usd < 50_000_000);
+
+  check('the board lede says 195 rows', copy.board_lede.includes('195 protocols'), 'stated');
+  check('the board lede says 40 on the watchlist and 155 off it',
+    copy.board_lede.includes('40 on the house watchlist and 155 off the list'), 'stated');
+  check('19 board rows sit above the floor and off the list', above.length === 19, `${above.length}`);
+  check('136 board rows sit below the floor and off the list', below.length === 136, `${below.length}`);
+  check('59 board rows clear the $50M floor', watchlist.size + above.length === 59,
+    `${watchlist.size + above.length}`);
+
+  // the live tab, under the library's own rules
+  const liveCandidates = snapshot.protocols
+    .filter((p) => !isPre(p) && (p.mcap_usd ?? 0) > 0 && p.category !== 'CEX');
+  const withCap = snapshot.protocols.filter((p) => (p.mcap_usd ?? 0) > 0);
+  const cex = withCap.filter((p) => p.category === 'CEX');
+  check('119 protocols could sit in the live table', liveCandidates.length === 119, `${liveCandidates.length}`);
+  check('128 protocols carry a market cap of their own', withCap.length === 128, `${withCap.length}`);
+  check('9 of those are exchange venues', cex.length === 9, `${cex.length}`);
+  check('the live tab holds 30 rows', (data.live ?? []).length === 30, `${(data.live ?? []).length}`);
+  check('21 live rows are in the calibration cohort', facts.live_in_cohort === 21, `${facts.live_in_cohort}`);
+  check('the nine live rows outside the cohort are named by reason',
+    facts.live_out_reasons === '1 versioned pool, 6 bridges, 1 staking wrapper, 1 wrapped or staked name',
+    facts.live_out_reasons);
+
+  // the clamps
+  const clamped = rows.filter((r) => r.change_7d !== null && (r.change_7d < -60 || r.change_7d > 120)).length;
+  const floored = rows.filter((r) => r.launch_probability <= 0.05).length;
+  check('4 board rows sit on the growth clamp', clamped === 4, `${clamped}`);
+  check('26 board rows sit on the 5% odds floor', floored === 26, `${floored}`);
+  check('the clamps note quotes both counts',
+    copy.clamps.includes('4 of the board') && copy.clamps.includes('26 rows sit on the 5% floor'), 'stated');
+}
+
 // ---------------------------------------------------------------- the universe's counts, and the board's
 // MODEL.md states the shape of the snapshot: 758 protocols, 433 eligible, 195 on the board,
 // 40 of them the house's watchlist, 26 categories in the cohort's correction table, 21 of them

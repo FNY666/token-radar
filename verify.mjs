@@ -1461,6 +1461,98 @@ for (const name of shots) {
     libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
 }
 
+// ---------------------------------------------------------------- the farm plans agree with their rows
+// Every board row carries eight farm steps, and each step's figures come from that row's own
+// record: the capital from its TVL, the gas from the chain the plan names, the hold window from
+// its age, the streak from the hold window, and the tracked-since date from its own listing.
+// This check re-derives all of them from the snapshot and the built rows.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const rows = data.rows ?? [];
+  const listedOf = new Map(snapshot.protocols.map((p) => [p.slug, p.listed_at]));
+  const protoOf = new Map(snapshot.protocols.map((p) => [p.slug, p]));
+
+  // the library's own rules, read out of lib/model.ts so the check cannot drift from them
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const bodyOf = (name) => {
+    const m = libSrc.match(new RegExp('function ' + name + '\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}'));
+    return m ? m[1] : '';
+  };
+  const capitalFor = (p) => {
+    if (p.tvl_usd >= 1_000_000_000) return 400;
+    if (p.tvl_usd >= 250_000_000) return 250;
+    if (p.tvl_usd >= 100_000_000) return 150;
+    if (p.tvl_usd >= 50_000_000) return 100;
+    return 50;
+  };
+  const holdDaysFor = (age) => {
+    if (age === null) return 60;
+    if (age < 180) return 90;
+    if (age < 365) return 60;
+    if (age < 730) return 45;
+    return 30;
+  };
+
+  let nameBad = 0, dateBad = 0, capBad = 0, holdBad = 0, streakBad = 0, gasBad = 0;
+  for (const r of rows) {
+    const s = r.farm_steps.join(' | ');
+    if (!s.includes(r.name)) nameBad++;
+    // the tracked-since date
+    const dm = s.match(/tracked since (\d{4}-\d{2}-\d{2})/);
+    if (dm) {
+      const listed = listedOf.get(r.slug);
+      if (dm[1] !== (listed ?? '')) dateBad++;
+    }
+    // the capital
+    const cm = s.match(/Fund \$(\d+) of USDC/);
+    if (cm) {
+      const want = capitalFor(protoOf.get(r.slug));
+      if (Number(cm[1]) !== want) capBad++;
+    }
+    // the hold window, from the row's age
+    const hm = s.match(/for at least (\d+) days/);
+    if (hm) {
+      const age = r.age_days === null || r.age_days === undefined ? null : r.age_days;
+      if (Number(hm[1]) !== holdDaysFor(age)) holdBad++;
+    }
+    // the streak, from the hold window
+    const wm = s.match(/across the (\d+) weeks of the hold window/);
+    if (wm && hm) {
+      if (Number(wm[1]) !== Math.ceil(Number(hm[1]) / 7)) streakBad++;
+    }
+    // the weekly gas, priced for the whole window
+    const gm = s.match(/about \$(\d+) of gas a week, so \$(\d+) across the (\d+) weeks/);
+    if (gm && hm) {
+      const perWeek = Number(gm[1]), total = Number(gm[2]), weeks = Number(gm[3]);
+      if (perWeek * weeks !== total || weeks !== Math.ceil(Number(hm[1]) / 7)) gasBad++;
+    }
+  }
+
+  check('every farm plan names its own protocol', nameBad === 0, `${rows.length - nameBad} of ${rows.length}`);
+  check('every farm plan tracked-since date is the protocol\'s own listing date', dateBad === 0,
+    dateBad === 0 ? 'all agree' : `${dateBad} differ`);
+  check('every farm plan\'s capital is the one its TVL band gives', capBad === 0,
+    capBad === 0 ? 'all agree' : `${capBad} differ`);
+  check('every farm plan\'s hold window is the one its age gives', holdBad === 0,
+    holdBad === 0 ? 'all agree' : `${holdBad} differ`);
+  check('every farm plan\'s weekly streak is the hold window in whole weeks', streakBad === 0,
+    streakBad === 0 ? 'all agree' : `${streakBad} differ`);
+  check('every farm plan\'s weekly gas is priced for the whole hold window', gasBad === 0,
+    gasBad === 0 ? 'all agree' : `${gasBad} differ`);
+
+  // and every step names an action, a cost and a time, which is what the page parses out of them
+  let shaped = 0;
+  for (const r of rows) {
+    for (const step of r.farm_steps) {
+      if (/\. Cost: /.test(step) && /\. Time: /.test(step)) shaped++;
+    }
+  }
+  check('every farm step carries a cost and a time',
+    shaped === rows.reduce((n, r) => n + r.farm_steps.length, 0),
+    `${shaped} steps`);
+}
+
 // ---------------------------------------------------------------- the page's refit IS the shipped model
 // The page tells the judge: "it refits the model from them with the code in model.js -- the same
 // procedure main.ts used, not the same numbers pasted in." That claim is only worth anything if

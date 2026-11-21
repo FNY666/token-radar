@@ -1603,6 +1603,55 @@ for (const name of shots) {
     rowBad === 0 ? `${data.rows.length} rows agree` : `${rowBad} of ${data.rows.length} differ`);
 }
 
+// ---------------------------------------------------------------- a phone's width, end to end
+// The clipping block above already checks nine widths for elements cut off inside a box. This
+// checks the two things it does not: that the PAGE itself does not scroll sideways, and that the
+// text stays big enough to read. The board is nine columns wide, so the table has to scroll
+// inside its own wrapper rather than push the page wide.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  const phoneErrors = [];
+  page.on('pageerror', (e) => phoneErrors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') phoneErrors.push('console: ' + m.text()); });
+  await page.setViewport({ width: 390, height: 844 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  await new Promise((r) => setTimeout(r, 400));
+  const st = await page.evaluate(() => {
+    const out = { overflow: document.documentElement.scrollWidth > window.innerWidth + 1 };
+    const wrap = document.querySelector('.table-wrap');
+    out.tableScrolls = wrap ? wrap.scrollWidth > wrap.clientWidth + 1 : false;
+    out.tableOverflowX = wrap ? getComputedStyle(wrap).overflowX : 'none';
+    out.small = [];
+    for (const el of document.querySelectorAll('p, td, th, dd, dt, span, button, li')) {
+      if (!el.textContent || !el.textContent.trim()) continue;
+      const fs = parseFloat(getComputedStyle(el).fontSize);
+      if (fs && fs < 11) out.small.push(el.tagName + '.' + String(el.className).slice(0, 16) + ' ' + fs + 'px');
+    }
+    out.small = [...new Set(out.small)];
+    out.rows = document.querySelectorAll('tbody tr').length;
+    // where the table starts: how far down a phone has to scroll to reach the board
+    const t = document.querySelector('.table-wrap');
+    out.tableTop = t ? Math.round(t.getBoundingClientRect().top + window.scrollY) : null;
+    return out;
+  });
+  await browser.close();
+  check("the page does not scroll sideways at a phone's width", !st.overflow, st.overflow ? 'it does' : 'no');
+  check('the nine-column table scrolls inside its own wrapper on a phone',
+    st.tableScrolls && (st.tableOverflowX === 'auto' || st.tableOverflowX === 'scroll'),
+    `scrolls=${st.tableScrolls} overflow-x=${st.tableOverflowX}`);
+  check("no text at a phone's width is under 11px", st.small.length === 0, st.small.slice(0, 3).join(' | '));
+  check('every board row renders at a phone\'s width', st.rows === 195, `${st.rows} rows`);
+  check("the page runs clean at a phone's width", phoneErrors.length === 0, phoneErrors.slice(0, 2).join(' | '));
+  check('the board starts within two screens of a phone', st.tableTop !== null && st.tableTop < 1700,
+    `${st.tableTop}px down`);
+}
+
 // ---------------------------------------------------------------- the two narrative claims
 // The page names a row: "the row that moves a plain fit most -- the one priced at four hundred
 // times its deposits". And it claims a precision: "the coefficients are printed to four decimals

@@ -428,6 +428,85 @@ function heldOutError(cohort: SnapshotProtocol[], splits: number): number {
 }
 
 /**
+ * The worst single row's influence on the value fit's intercept: the largest move the intercept
+ * makes when one row is taken out of the fit, under a plain least squares and under the weight
+ * the model uses.
+ *
+ * The page claims no single row can drag the fit, and this is the measurement behind that claim.
+ * The two numbers are MAXIMA over the fit's own worst row and no single row carries both, so the
+ * third figure is the row the plain fit leans on hardest, measured on the model's own fit: the
+ * point is that the row which can most distort a plain fit is a fifth as able to distort this one.
+ */
+function influenceOfOneRow(cohort: SnapshotProtocol[]): {
+  plain: number;
+  weighted: number;
+  worstRowOnWeighted: number;
+} {
+  if (cohort.length === 0) return { plain: 0, weighted: 0, worstRowOnWeighted: 0 };
+  // The intercept of a fit with one row left out, under each of the two weights.
+  const interceptOf = (rows: SnapshotProtocol[], weighted: boolean): number => {
+    const design = rows.map((p) => valueRow(p));
+    const target = rows.map((p) => Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)));
+    const k = design[0]!.length;
+    if (!weighted) {
+      const matrix: number[][] = Array.from({ length: k }, () => new Array<number>(k).fill(0));
+      const rhs: number[] = new Array<number>(k).fill(0);
+      design.forEach((x, i) => {
+        for (let a = 0; a < k; a++) {
+          for (let b = 0; b < k; b++) matrix[a]![b]! += x[a]! * x[b]!;
+          rhs[a]! += x[a]! * target[i]!;
+        }
+      });
+      return solve(matrix, rhs)[0]!;
+    }
+    let beta = new Array<number>(k).fill(0);
+    for (let iteration = 0; iteration < 24; iteration++) {
+      const residual = (i: number): number => {
+        let acc = 0;
+        for (let j = 0; j < k; j++) acc += beta[j]! * design[i]![j]!;
+        return target[i]! - acc;
+      };
+      const scale = 1.4826 * median(design.map((_, i) => Math.abs(residual(i))));
+      const matrix: number[][] = Array.from({ length: k }, () => new Array<number>(k).fill(0));
+      const rhs: number[] = new Array<number>(k).fill(0);
+      design.forEach((x, i) => {
+        const r = Math.abs(residual(i));
+        const w = r <= 1.5 * scale ? 1 : (1.5 * scale) / r;
+        for (let a = 0; a < k; a++) {
+          for (let b = 0; b < k; b++) matrix[a]![b]! += w * w * x[a]! * x[b]!;
+          rhs[a]! += w * w * x[a]! * target[i]!;
+        }
+      });
+      for (let a = 0; a < k; a++) matrix[a]![a]! += 1e-6;
+      beta = solve(matrix, rhs);
+    }
+    return beta[0]!;
+  };
+  const plainFull = interceptOf(cohort, false);
+  const weightedFull = interceptOf(cohort, true);
+  let plainMax = 0;
+  let worstSlug: string | null = null;
+  let weightedOfWorst = 0;
+  for (const row of cohort) {
+    const rest = cohort.filter((p) => p.slug !== row.slug);
+    const plainMove = Math.abs(plainFull - interceptOf(rest, false));
+    if (plainMove > plainMax) {
+      plainMax = plainMove;
+      worstSlug = row.slug;
+      weightedOfWorst = Math.abs(weightedFull - interceptOf(rest, true));
+    }
+  }
+  let weightedMax = 0;
+  for (const row of cohort) {
+    const rest = cohort.filter((p) => p.slug !== row.slug);
+    const move = Math.abs(weightedFull - interceptOf(rest, true));
+    if (move > weightedMax) weightedMax = move;
+  }
+  void worstSlug;
+  return { plain: plainMax, weighted: weightedMax, worstRowOnWeighted: weightedOfWorst };
+}
+
+/**
  * The permutation test for the growth term in the VALUE model: the growth values are shuffled
  * among the cohort's rows, the model is refitted, and the real growth coefficient is located in
  * the resulting null distribution.
@@ -628,6 +707,14 @@ export interface Calibration {
    */
   growth_permutation_p: number;
   /**
+   * The worst single row's influence on the value fit's intercept, in log10 dollars: under a
+   * plain least squares, under the weight the model uses, and the plain fit's worst row measured
+   * on the model's own fit.
+   */
+  influence_plain: number;
+  influence_weighted: number;
+  influence_worst_row_weighted: number;
+  /**
    * The launch model's growth coefficient under resampling: how many of the resamples left it
    * negative, out of how many, and the 95% interval the resamples put it in.
    */
@@ -658,6 +745,8 @@ export interface Calibration {
  * misses fewer rows badly (fewer rows off by more than one log10) in about 150 of 300 splits,
  * and it cuts the worst single row's influence on the intercept from 0.410 log10 to 0.273 -- and
  * the row a plain fit leans on hardest moves the model's own fit by only 0.084, a fifth as much.
+ * Those three figures are measured by the calibration and published with it, so the page's claim
+ * that no single row can drag the fit is a fact about this snapshot rather than a sentence.
  * Its advantage on RANK CORRELATION is within noise: across sixteen independent draws of the
  * splits the win count runs 136-156 against a plain least squares, so half the time the plain
  * fit ranks the cohort as well or better. Against a plain HUBER weight (min(1, c/r), not
@@ -823,6 +912,9 @@ export function calibrate(snapshot: Snapshot): Calibration {
   }
 
   const value = fitValueModel(cohort);
+  // How far the worst single row can move the value fit's intercept, under a plain least squares
+  // and under the weight the model uses. The page's "no single row can drag it" claim is this.
+  const influence = influenceOfOneRow(cohort);
   const launch = fitLaunchModel(universe, asOf);
   // The launch model's growth coefficient, resampled 300 times. This is what the page's claim
   // about growth in the launch odds is made of, so it is measured rather than asserted.
@@ -895,6 +987,9 @@ export function calibrate(snapshot: Snapshot): Calibration {
     launch_growth_hi: launchBootstrap.hi,
     held_out_mae_log10: heldOutError(cohort, 300),
     growth_permutation_p: growthPermutationP(cohort, 2000, 12345),
+    influence_plain: influence.plain,
+    influence_weighted: influence.weighted,
+    influence_worst_row_weighted: influence.worstRowOnWeighted,
     launch_floor: 0.05,
   };
 }
@@ -1074,6 +1169,10 @@ export interface RadarData {
     held_out_mae_log10: number;
     /** The permutation p for the growth term in the value model. */
     growth_permutation_p: number;
+    /** The worst single row's influence on the value fit's intercept, in log10 dollars. */
+    influence_plain: number;
+    influence_weighted: number;
+    influence_worst_row_weighted: number;
     /** How many of the launch model's growth-coefficient resamples came out negative, and the interval. */
     launch_growth_negative: number;
     launch_growth_resamples: number;
@@ -1829,10 +1928,10 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'That is measured on the rows the model was fitted on, so it flatters it: held out from the ' +
       'fit over 300 random five-fold splits, the same form scores ' + cal.held_out_mae_log10.toFixed(3) + ' on a median row — within a factor of ' +
       Math.pow(10, cal.held_out_mae_log10).toFixed(1) + '. The fit is a redescending-weight least squares, so no ' +
-      'single row can drag it: the worst single row moves the intercept by 0.410 log10 under a ' +
-      'plain least squares, and by 0.273 log10 under the weight the model uses. The row that moves ' +
+      'single row can drag it: the worst single row moves the intercept by ' + cal.influence_plain.toFixed(3) + ' log10 under a ' +
+      'plain least squares, and by ' + cal.influence_weighted.toFixed(3) + ' log10 under the weight the model uses. The row that moves ' +
       'a plain fit most — the one priced at four hundred times its deposits — moves the ' +
-      'model\'s own fit by 0.084, a fifth as much.',
+      'model\'s own fit by ' + cal.influence_worst_row_weighted.toFixed(3) + ', a fifth as much.',
     launch_odds_note:
       'How well the launch model separates the protocols that have issued a token of their own from those that have not, across the eligible universe less the ' +
       cal.product_rows + ' product rows — rows that carry a ticker but no market cap of their own and no CoinGecko id either. ' +
@@ -1986,6 +2085,9 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       mae_log10: Math.round(cal.mae_log10 * 1000) / 1000,
       held_out_mae_log10: Math.round(cal.held_out_mae_log10 * 1000) / 1000,
       growth_permutation_p: Math.round(cal.growth_permutation_p * 1000) / 1000,
+      influence_plain: Math.round(cal.influence_plain * 1000) / 1000,
+      influence_weighted: Math.round(cal.influence_weighted * 1000) / 1000,
+      influence_worst_row_weighted: Math.round(cal.influence_worst_row_weighted * 1000) / 1000,
       launch_auc: Math.round(cal.launch_auc * 1000) / 1000,
     },
     rows: board.map((r) => ({

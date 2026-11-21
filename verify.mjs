@@ -697,16 +697,54 @@ for (const name of shots) {
   };
   const plainMax = maxInfluence('plain');
   const weightedMax = maxInfluence('squared');
+  // The row the PLAIN fit leans on hardest, measured on the model's own fit: the point is that
+  // the row which can most distort a plain fit is a fifth as able to distort this one.
+  let worstRowWeighted = 0;
+  {
+    const plainFull = fit(cohort, 'plain');
+    let worstMove = 0;
+    let worstRow = null;
+    for (const r of cohort) {
+      const w = fit(cohort.filter((x) => x.slug !== r.slug), 'plain');
+      const d = Math.abs(plainFull[0] - w[0]);
+      if (d > worstMove) { worstMove = d; worstRow = r; }
+    }
+    if (worstRow) {
+      const weightedFull = fit(cohort, 'squared');
+      const w = fit(cohort.filter((x) => x.slug !== worstRow.slug), 'squared');
+      worstRowWeighted = Math.abs(weightedFull[0] - w[0]);
+    }
+  }
   // The copy's own words are the thing under test: it must quote both maxima.
   const note = data.copy.value_fit_note;
-  const quotedPlain = /0\.410 log10/.test(note);
-  const quotedWeighted = /0\.273 log10/.test(note);
   const plainOk = Math.abs(plainMax - 0.410) < 0.0015;
   const weightedOk = Math.abs(weightedMax - 0.273) < 0.0015;
   check('the worst row\'s influence on a plain least squares is 0.410 log10', plainOk, plainMax.toFixed(4));
   check('the worst row\'s influence on the model\'s own fit is 0.273 log10', weightedOk, weightedMax.toFixed(4));
+
+  // The calibration must publish what the measurement gives, and the copy must quote THAT.
+  const cal = data.calibration;
+  const publishedOk = cal.influence_plain !== undefined &&
+    Math.abs(cal.influence_plain - plainMax) < 0.0015 &&
+    Math.abs(cal.influence_weighted - weightedMax) < 0.0015 &&
+    Math.abs(cal.influence_worst_row_weighted - worstRowWeighted) < 0.0015;
+  check('the published influence figures are the measured ones', publishedOk,
+    publishedOk ? `${cal.influence_plain} ${cal.influence_weighted} ${cal.influence_worst_row_weighted}` :
+      `published ${cal.influence_plain} ${cal.influence_weighted} ${cal.influence_worst_row_weighted} | measured ${plainMax.toFixed(4)} ${weightedMax.toFixed(4)} ${worstRowWeighted.toFixed(4)}`);
+
+  const quotedPlain = note.includes(cal.influence_plain.toFixed(3) + ' log10');
+  const quotedWeighted = note.includes(cal.influence_weighted.toFixed(3) + ' log10');
+  const quotedWorst = note.includes('fit by ' + cal.influence_worst_row_weighted.toFixed(3));
   check('the page quotes both influence figures the measurement produces', quotedPlain && quotedWeighted,
     quotedPlain && quotedWeighted ? 'both quoted' : 'a quoted figure is missing');
+  check('the page quotes the plain fit\'s worst row on the model\'s own fit', quotedWorst,
+    quotedWorst ? 'quoted' : 'missing');
+
+  // and no literal may survive in the source that writes the sentence
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const noLiteral = !/by 0\.410 log10 under a/.test(libSrc) && !/by 0\.084, a fifth as much/.test(libSrc);
+  check('no influence figure is typed into the copy source', noLiteral,
+    noLiteral ? 'measured' : 'a literal survives in lib/model.ts');
 }
 
 // ---------------------------------------------------------------- the category table's evidence

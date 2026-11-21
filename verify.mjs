@@ -295,6 +295,115 @@ for (const name of shots) {
     bad === 0 ? `${rows.length} rows agree` : `${bad} disagree: ` + JSON.stringify(examples));
 }
 
+// ---------------------------------------------------------------- the board's scroll cue
+// The board is nine columns wide and cannot fit a narrow phone, so the wrapper scrolls sideways.
+// A scroll the reader cannot see is a scroll the reader does not know to make, so the wrapper
+// paints a shadow on whichever edge still has table beyond it. This checks the RENDERED pixels
+// at each edge at both ends of the scroll, because the cue is a gradient and a check that only
+// reads the stylesheet proves nothing about whether a reader can see it.
+//
+// The sample is the DARKEST pixel in a 6px band at each edge, on a body row clear of the
+// sticky top bar and the sticky header: a cell's own glyph would otherwise mask the cue.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 320, height: 900 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('#table-wrap tbody tr');
+  // Put the table's top 120px down the viewport, clear of the sticky bar and the sticky header.
+  // The page sets `scroll-behavior: smooth`, so the scroll is animated: it is done instantly
+  // here and then waited out, or the sample lands on whatever row the animation happens to
+  // have reached.
+  await page.evaluate(() => {
+    const w = document.getElementById('table-wrap');
+    window.scrollTo({ top: w.getBoundingClientRect().top + window.scrollY - 120, behavior: 'instant' });
+  });
+  await page.evaluate(() => new Promise((res) => {
+    let last = -1, still = 0;
+    const tick = () => {
+      if (window.scrollY === last) { if (++still > 5) return res(); } else { still = 0; last = window.scrollY; }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }));
+  // The sample row must be BELOW the table's sticky header, which is 165px tall at this width
+  // because the column headers wrap. Its bottom edge is the boundary, so the row has to start
+  // below it -- a row under the header is painted over by the header's own opaque background.
+  const box = await page.evaluate(() => {
+    const w = document.getElementById('table-wrap');
+    const th = w.querySelector('thead th');
+    const headerBottom = th.getBoundingClientRect().bottom;
+    const rows = Array.from(w.querySelectorAll('tbody tr'));
+    const tr = rows.find((r) => r.getBoundingClientRect().top > headerBottom + 4) || rows[0];
+    const r = w.getBoundingClientRect(), trr = tr.getBoundingClientRect();
+    return { x: Math.round(r.left + window.scrollX), y: Math.round(trr.top + window.scrollY), width: Math.round(r.width), rowH: Math.round(trr.height) };
+  });
+  const edgeLum = async () => {
+    const shot = await page.screenshot({ clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.rowH - 4, 30) } });
+    return page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + b64;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, img.width, img.height).data;
+      const lum = (x, y) => { const i = (y * img.width + x) * 4; return Math.round(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114); };
+      const y = Math.floor(img.height / 2);
+      const band = (from, to) => { let m = 999; for (let x = from; x < to; x++) m = Math.min(m, lum(x, y)); return m; };
+      return { L: band(0, 6), R: band(img.width - 6, img.width), M: lum(Math.floor(img.width / 2), y) };
+    }, shot.toString('base64'));
+  };
+  const atStart = await edgeLum();
+  await page.evaluate(() => { document.getElementById('table-wrap').scrollLeft = 9999; });
+  await new Promise((r) => setTimeout(r, 300));
+  const atEnd = await edgeLum();
+  await browser.close();
+  // The cue is a shadow, so the edge that still has table beyond it must be DARKER than the
+  // panel, and the edge that has reached its end must be back to the panel's own value.
+  check('the board shows a scroll cue on the edge that has table beyond it',
+    atStart.R < atStart.M - 6 && atEnd.L < atEnd.M - 6 && atStart.R < atEnd.R && atEnd.L < atStart.L,
+    `start: L=${atStart.L} M=${atStart.M} R=${atStart.R} | end: L=${atEnd.L} M=${atEnd.M} R=${atEnd.R}`);
+}
+
+// ---------------------------------------------------------------- the inputs do not zoom iOS
+// iOS Safari zooms the whole viewport when a focused input's text is under 16px, and it never
+// zooms back out. The search box and the two selects are text fields, so their text is held at
+// 16px on the narrow viewports where the zoom happens.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  const seen = [];
+  for (const w of [320, 375, 640, 1024, 1440]) {
+    await page.setViewport({ width: w, height: 800 });
+    await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+    await page.waitForSelector('#ctl-0');
+    const d = await page.evaluate(() => ({
+      fonts: Array.from(document.querySelectorAll('input,select')).map((el) => parseFloat(getComputedStyle(el).fontSize)),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+    }));
+    seen.push({ w, fonts: d.fonts, overflow: d.overflow });
+  }
+  await browser.close();
+  // below 1000px the text fields must be at 16px; above it they may be smaller
+  const narrowOk = seen.filter((s) => s.w <= 1000).every((s) => s.fonts.every((f) => f >= 16));
+  const wideOk = seen.filter((s) => s.w > 1000).every((s) => s.fonts.every((f) => f >= 14));
+  const noOverflow = seen.every((s) => !s.overflow);
+  check('no text field is under 16px on a narrow viewport, so iOS never zooms the page', narrowOk && wideOk,
+    seen.map((s) => `${s.w}px:${s.fonts.join('/')}`).join(' '));
+  check('no viewport width overflows the page horizontally', noOverflow,
+    seen.map((s) => `${s.w}px:${s.overflow ? 'OVERFLOW' : 'ok'}`).join(' '));
+}
+
 // ---------------------------------------------------------------- the influence claim
 // The page says no single row can drag the value fit: the worst single row moves the intercept
 // by 0.410 log10 under a plain least squares and by 0.273 under the model's own weight. Both

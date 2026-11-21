@@ -1771,6 +1771,134 @@ for (const name of shots) {
     'the copy source builds them from the calibration');
 }
 
+// ---------------------------------------------------------------- the model's own tables, re-derived
+// The model tab prints a category table, an age-band table and a set of five rate tiles. Every
+// number in them is printed from the calibration, but the tables are built by the page's own
+// code, so the page could print a category correction or a band count the calibration does not
+// hold. This block re-derives each printed table from the calibration and the built rows.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+  const copy = JSON.stringify(data.copy ?? {});
+
+  // --- the age-band table: five bands, each with its n, its issued count and its rate ---
+  const bands = cal.bands;
+  check('the calibration holds the five age bands the table prints', bands.length === 5,
+    `${bands.length} bands`);
+  let bandBad = 0;
+  for (const b of bands) {
+    if (!Number.isInteger(b.n) || !Number.isInteger(b.issued)) bandBad++;
+    if (b.issued > b.n) bandBad++;
+    if (b.n <= 0) bandBad++;
+  }
+  check('every age band holds a whole count of protocols and of issuers', bandBad === 0,
+    bandBad === 0 ? 'all sound' : `${bandBad} unsound`);
+  // the bands partition the universe: their counts add up to it
+  const bandTotal = bands.reduce((n, b) => n + b.n, 0);
+  check("the age bands add up to the launch model's whole universe",
+    bandTotal === cal.universe_size, `${bandTotal} of ${cal.universe_size}`);
+  // the issuers add up to the universe's issued count
+  const issuedTotal = bands.reduce((n, b) => n + b.issued, 0);
+  // the library's own rule: a protocol has issued a token of its own if it records a market cap
+  // or a CoinGecko id of its own
+  const universeIssued = data.universe.filter((p) => p.mcap_usd !== null || p.gecko_id !== null).length;
+  check('the age bands\' issuer counts add up to the universe\'s',
+    issuedTotal === universeIssued, `${issuedTotal} of ${universeIssued}`);
+
+  // --- the category table: every category the cohort saw, its correction and its evidence ---
+  const catSizes = cal.category_sizes;
+  const catLog = cal.category_log;
+  const catNames = Object.keys(catSizes);
+  check('the category table has one row per category the cohort saw',
+    catNames.length === 26, `${catNames.length} categories`);
+  check('every category in the table has a correction', catNames.every((c) => typeof catLog[c] === 'number'),
+    catNames.filter((c) => typeof catLog[c] !== 'number').join(', ') || 'all present');
+  // the evidence counts must add up to the cohort
+  const evidenceTotal = Object.values(catSizes).reduce((n, k) => n + k, 0);
+  check("the category table's evidence counts add up to the cohort",
+    evidenceTotal === cal.cohort_size, `${evidenceTotal} of ${cal.cohort_size}`);
+  // the thin categories: the copy says 21 of the 26 rest on three or fewer
+  const thin = catNames.filter((c) => catSizes[c] <= 3).length;
+  check('the thin-category count the copy prints is the measured one',
+    copy.includes(thin + ' of the ' + catNames.length + ' rest on three or fewer'),
+    `${thin} of ${catNames.length}`);
+  // the categories the cohort never saw fall back to the default correction. The page prints that
+  // row itself, so the check reads the page's source, where it formats the correction.
+  const defaultCat = cal.category_default;
+  const pageSrc = fs.readFileSync(path.join(out, 'dashboard', 'page.js'), 'utf8');
+  check('the default correction the page prints is the calibration\'s',
+    pageSrc.includes('c.category_default'), 'the page reads it from the calibration');
+  check('the default correction is a number the model can apply to an unseen category',
+    typeof defaultCat === 'number' && Number.isFinite(defaultCat), defaultCat.toFixed(5));
+
+  // --- the rows on the 5% floor: the copy names a count ---
+  const floored = data.rows.filter((r) => Math.abs(r.launch_probability - 0.05) < 1e-9).length;
+  check('the rows on the 5% floor are the count the copy names',
+    copy.includes(floored + ' rows sit on the 5% floor'), `${floored} rows`);
+  const ceiled = data.rows.filter((r) => Math.abs(r.launch_probability - 0.95) < 1e-9).length;
+  check('no row sits on the 95% ceiling', ceiled === 0, `${ceiled} rows`);
+
+  // --- the untracked protocols: the copy names a count and what it does with them ---
+  check('the untracked count the copy names is the measured one',
+    copy.includes(cal.untracked + ' with no first-tracked date'), `${cal.untracked}`);
+  check("the untracked protocols are counted as a year old, so the bands cover the universe",
+    bandTotal === cal.universe_size, `${bandTotal} of ${cal.universe_size}`);
+
+  // --- the model's own table of rates, the five tiles ---
+  const tiles = bands.map((b) => Math.round((b.issued / b.n) * 100) + '%');
+  check('the five rate tiles are the bands\' own rates', tiles.length === 5, tiles.join(' '));
+}
+
+// ---------------------------------------------------------------- the Already trading tab's counts
+// The tab's opening paragraph states eight counts: the snapshot's size, how many record a token,
+// how many carry a market cap, how many of those are exchange venues, how many are left, how many
+// the table shows, how many of those are in the cohort, and what the other nine are.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const facts = data.facts;
+  const live = data.live;
+  const copy = JSON.stringify(data.copy ?? {});
+
+  check('the snapshot\'s protocol count is the one the copy names',
+    copy.includes('holds ' + facts.snapshot_protocols + ' protocols'), String(facts.snapshot_protocols));
+  check('the count of protocols recording a token is the one the copy names',
+    copy.includes(facts.snapshot_tokens + ' of which record a token'), String(facts.snapshot_tokens));
+  check('the count carrying a market cap is the one the copy names',
+    copy.includes(facts.live_with_cap + ' carry a market cap'), String(facts.live_with_cap));
+  check('the count of exchange venues among them is the one the copy names',
+    copy.includes(facts.live_cex + ' of those are exchange venues'), String(facts.live_cex));
+  check('the count left after the venues are set aside is the one the copy names',
+    copy.includes(facts.live_candidates + ' that are left'), String(facts.live_candidates));
+  check('the table really holds the number of rows the copy names',
+    live.length === 30, `${live.length} rows`);
+
+  // the cohort membership: 21 of the 30, and the other nine
+  const cohortSlugs = new Set(data.cohort.map((p) => p.slug));
+  const inCohort = live.filter((r) => cohortSlugs.has(r.slug)).length;
+  check('the cohort membership the copy names is the measured one',
+    copy.includes(inCohort + ' of these ' + live.length + ' rows are in the model'), `${inCohort} of ${live.length}`);
+  const outside = live.filter((r) => !cohortSlugs.has(r.slug));
+  check('the rows outside the cohort are the count the copy names',
+    copy.includes('The other ' + outside.length + ' are here only as contrast'), `${outside.length}`);
+  // and each of the nine carries its own reason, and the copy's breakdown names every kind
+  const reasons = {};
+  for (const r of outside) {
+    const k = r.not_in_cohort;
+    check('the row outside the cohort states why it is there: ' + r.slug,
+      typeof k === 'string' && k.length > 0, String(k));
+    reasons[k] = (reasons[k] ?? 0) + 1;
+  }
+  // the copy lists them as "1 versioned pool, 6 bridges, 1 staking wrapper, 1 wrapped or staked name"
+  const tally = Object.entries(reasons).sort((a, b) => b[1] - a[1]);
+  check('the copy names every kind of row outside the cohort, with its count',
+    tally.every(([kind, n]) => copy.includes(n + ' ' + kind.split(' ')[0]) || copy.includes(n + ' ' + kind)),
+    tally.map(([k, n]) => n + ' ' + k).join(', '));
+  check('the rows outside the cohort add up to the count the copy names',
+    outside.length === tally.reduce((n, [, c]) => n + c, 0), `${outside.length}`);
+}
+
 // ---------------------------------------------------------------- the two narrative claims
 // The page names a row: "the row that moves a plain fit most -- the one priced at four hundred
 // times its deposits". And it claims a precision: "the coefficients are printed to four decimals

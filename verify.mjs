@@ -756,6 +756,111 @@ for (const name of shots) {
     refitBad === 0 && rkeys.size > 0, refitBad === 0 ? `${rkeys.size} categories agree` : `${refitBad} differ`);
 }
 
+// ---------------------------------------------------------------- the words on the page are the words a reader gets
+// Three defects the page carried until now, each of which a reader can see:
+//  1. the sort arrow is a picture of the direction, and `aria-sort` on the header already says
+//     the direction, so the glyph must be out of the accessibility tree or the rank button is
+//     called "#\u25b2";
+//  2. the copy names fields in <code>, but the rule that styled them was scoped to `.prose code`
+//     and the code tags live in `.card p` and `.prose`, so they rendered in the browser's
+//     default monospace at the paragraph's own size -- not the page's;
+//  3. the search box's placeholder was the browser's default grey on a dark panel.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+
+  // the accessible name of a control is aria-label, else the text of its subtree MINUS anything
+  // aria-hidden. That is the rule the browser uses, so the probe uses it too.
+  const d = await page.evaluate(() => {
+    const accName = (el) => {
+      const al = el.getAttribute('aria-label');
+      if (al) return al;
+      let out = '';
+      const walk = (n) => {
+        if (n.nodeType === 3) { out += n.textContent; return; }
+        if (n.nodeType !== 1) return;
+        if (n.getAttribute('aria-hidden') === 'true') return;
+        if (n.tagName === 'SCRIPT' || n.tagName === 'STYLE') return;
+        Array.from(n.childNodes).forEach(walk);
+      };
+      walk(el);
+      return out.replace(/\s+/g, ' ').trim();
+    };
+    const sortButtons = Array.from(document.querySelectorAll('thead th button')).map((b) => ({
+      name: accName(b),
+      sort: b.closest('th').getAttribute('aria-sort')
+    }));
+    // the model view carries the <code> tags
+    document.querySelectorAll('[role=tab]')[2].click();
+    return { sortButtons, codes: null, placeholder: null, sortButtonsNow: null };
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  const d2 = await page.evaluate(() => {
+    const codes = Array.from(document.querySelectorAll('code'));
+    const q = document.querySelector('.controls .q');
+    const phColor = getComputedStyle(q, '::placeholder').color;
+    const bodyColor = getComputedStyle(q).color;
+    const mono = getComputedStyle(document.querySelector('.num')).fontFamily.split(',')[0];
+    return {
+      codes: codes.map((c) => ({
+        text: c.textContent,
+        font: getComputedStyle(c).fontFamily.split(',')[0],
+        size: getComputedStyle(c).fontSize
+      })),
+      placeholder: { color: phColor, bodyColor },
+      mono
+    };
+  });
+  await browser.close();
+
+  // 1. the sort button's name must be the column's name and nothing else
+  const badName = d.sortButtons.filter((b) => /[^\x20-\x7e]/.test(b.name) || /[\u25b2\u25bc]/.test(b.name));
+  check('no sort button carries the direction arrow in its accessible name', badName.length === 0,
+    badName.length === 0 ? d.sortButtons.map((b) => '"' + b.name + '"').join(' ') : JSON.stringify(badName));
+  // the arrow must still be drawn: the direction is shown to a sighted reader as well
+  const arrowDrawn = await (async () => {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+    const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+    const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1440, height: 900 });
+    await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+    await page.waitForSelector('tbody tr');
+    const r = await page.evaluate(() => {
+      const a = document.querySelector('thead th .arrow');
+      if (!a) return null;
+      const box = a.getBoundingClientRect();
+      return { glyph: a.textContent, w: Math.round(box.width), h: Math.round(box.height), hidden: a.getAttribute('aria-hidden') };
+    });
+    await browser.close();
+    return r;
+  })();
+  check('the sort arrow is still drawn for a sighted reader',
+    !!arrowDrawn && arrowDrawn.w > 0 && arrowDrawn.h > 0 && arrowDrawn.hidden === 'true',
+    arrowDrawn ? `"${arrowDrawn.glyph}" at ${arrowDrawn.w}x${arrowDrawn.h}, aria-hidden=${arrowDrawn.hidden}` : 'no arrow');
+
+  // 2. every <code> must use the page's own monospace at the page's own small size
+  const badCode = d2.codes.filter((c) => c.font !== d2.mono || parseFloat(c.size) >= 13.5);
+  check('every <code> is set in the page\'s own monospace, smaller than its paragraph',
+    badCode.length === 0 && d2.codes.length > 0,
+    badCode.length === 0 ? `${d2.codes.length} codes, all ${d2.mono} at ${d2.codes[0].size}` : JSON.stringify(badCode));
+
+  // 3. the placeholder must be the page's own muted ink, not the browser's grey
+  const grey = /^rgb\(117, 117, 117\)$/.test(d2.placeholder.color);
+  check('the search placeholder is the page\'s own ink, not the browser default grey',
+    !grey && d2.placeholder.color !== d2.placeholder.bodyColor,
+    `placeholder ${d2.placeholder.color} vs text ${d2.placeholder.bodyColor}`);
+}
+
 // ---------------------------------------------------------------- dossier_matches
 const dossierPath = path.join(out, 'dossier.json');
 const dossier = fs.readFileSync(dossierPath);

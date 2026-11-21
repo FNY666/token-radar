@@ -116,7 +116,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    'aria-sort': active ? (sort.dir === 1 ? 'ascending' : 'descending') : null
   }, [el('button', { type: 'button', onclick: on, 'data-col': key }, [
    document.createTextNode(label),
-   active ? e('span', 'arrow', sort.dir === 1 ? '▲' : '▼') : null
+   // `aria-sort` on the header says the direction to a reader, so the arrow is hidden from
+   // the accessibility tree: otherwise the rank button is called "#▲".
+   active ? el('span', { class: 'arrow', 'aria-hidden': 'true', text: sort.dir === 1 ? '▲' : '▼' }) : null
   ])]);
  }
  function focusedColumn() {
@@ -131,12 +133,10 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
 
  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
- // The page refits the model and recomputes every row of the board from its own figures. The
- // board's three displayed figures -- the odds, the value if it issues, the implied value -- are
- // each shown to a fixed precision, and the implied value is computed from the other two at that
- // precision. So the check is made the same way: does the row's own arithmetic hold to the last
- // digit the reader can see? That is the claim the page makes, and a reader can check it with
- // the three numbers in front of them.
+ // The page refits the model and recomputes every row from its own figures. The board's three
+ // displayed figures are each shown to a fixed precision and the implied value is computed from
+ // the other two at that precision, so the check is made the same way: does the row's own
+ // arithmetic hold to the last digit the reader can see? That is the claim the page makes.
  function sigRound(n, sig) {
   if (!isFinite(n) || n === 0) return n;
   var a = Math.abs(n);
@@ -168,7 +168,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
   var odds = launchP(row);
   // the implied value, computed the way the board computes it: from the conditional value and
-  // the odds at the precision they are shown, so the drawer's ledger lands on the board's figure
+  // the odds at the precision they are shown, so the ledger lands on the board's figure
   var shown = sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3);
   return {
    conditional: cond,
@@ -222,17 +222,15 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
    line('TVL', moneyExact(row.tvl_usd)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),
    line(L.category_correction, '×' + Math.pow(10, row.category_log).toPrecision(9)),
-   // How many cohort members this row's category correction rests on. A correction fitted on one
-   // row and one fitted on ten are different kinds of number, and the reader is being asked to
-   // weigh this one against the implied value below it.
+   // How many cohort members this row's category correction rests on: one row and ten are
+   // different numbers, and the reader is asked to weigh this one against the implied value.
    line(L.category_evidence, categoryEvidence(row)),
    line(L.value_if_issues, moneyExact(calc.conditional)),
    line(L.odds_recomputed, oddsText(odds)),
    line(L.implied, moneyExact(calc.expected), true)
   ]);
 
-  // The category correction's evidence, in the page's own voice: how many cohort members the
-  // correction rests on, and whether that is thin enough to say so.
+  // The correction's evidence in the page's own voice: how many cohort members it rests on.
   function categoryEvidence(r) {
    var n = (D.calibration.category_sizes || {})[r.category];
    if (n === undefined) return 'the cohort never saw this category';
@@ -373,9 +371,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  catTable.appendChild(el('tr', null, [
  t('td', k),
  t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')'),
- // How many cohort members the correction rests on. A correction fitted on one row and one
- // fitted on ten are different kinds of number, and a reader can only weigh them if the count
- // is in front of them.
+ // How many cohort members the correction rests on: one row and ten are different numbers.
  e('td', 'num', n === undefined ? '—' : String(n))
  ]));
  }
@@ -437,8 +433,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
  var H = 150, padL = 54, padR = 16, padT = 22, padB = 30;
  var maxV = colExtreme(list, 'implied_value_usd', 'max');
- // The scale's top is the power of ten at or above the board's largest value, so the grid
- // lines are evenly spaced and the top two labels do not overlap.
+ // The scale's top is the next power of ten, so the grid lines are even and the top labels
+ // cannot overlap.
  var scaleTop = 1; while (scaleTop < maxV) scaleTop *= 10;
  var logMin = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'min'), 1));
  var logMax = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'max'), 1));
@@ -453,8 +449,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
 // The viewBox scales UNIFORMLY: a dot is a circle, a label is not.
  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-// The SVG holds the dots, and each dot is a control, so the SVG is a GROUP: an image
- // holding buttons is a contradiction no screen reader can resolve.
+// Each dot is a control, so the SVG is a GROUP: an image holding buttons is a contradiction
+// no screen reader can resolve.
  svg.setAttribute('role', 'group');
  function add(tag, attrs, text) {
  var n = document.createElementNS(ns, tag);
@@ -554,10 +550,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  ])
  ]),
  e('td', 'cat', r.category || 'Uncategorised'),
- // The market cap and the TVL print at SIX significant figures, not the three the board uses.
- // The multiple beside them is shown to two decimals, and a two-decimal multiple is not
- // determined by a three-figure figure: at three figures a reader's own division missed the
- // printed multiple on 13 of the 30 rows, at five on 2, at six on none.
+ // The market cap and the TVL print at SIX significant figures, not the board's three: a
+ // two-decimal multiple is not determined by a three-figure figure (a reader's own division
+ // missed the printed multiple on 13 of the 30 rows at three figures, 2 at five, none at six).
  e('td', 'right num', money(r.mcap_usd, 6)),
  e('td', 'right num', money(r.tvl_usd, 6)),
  h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : r.ratio.toFixed(2))]),
@@ -572,8 +567,8 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  CTL.search = el('input', {
  class: 'q', type: 'search', placeholder: L.search_placeholder,
  'aria-label': L.search_label,
- // The name is what a form posts and what a password manager keys on; a search box that
- // carries no name is a box no browser can restore, and no assistive technology can name.
+ // The name is what a form posts and what a password manager keys on; a search box with no
+ // name is a box no browser can restore and no assistive technology can name.
  name: 'q', autocomplete: 'off', spellcheck: false,
  oninput: function () { state.q = CTL.search.value; writeHash('refine'); renderControlsResult(); renderTabs(); renderTable(); renderPlot(); }
  });

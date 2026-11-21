@@ -16,7 +16,9 @@ button,tbody tr.row{cursor:pointer}
 html{scroll-padding-block-start:calc(var(--bar-h,63px) + var(--c))}
 a,.kpi .v.cyan{color:var(--odds)}
 .num{font-variant-numeric:tabular-nums}
-.num,.val,.plot .tick,.plot .q,.formula,.bands,.bands td,.cat-table td,.curve-row .v,.deriv .line span:last-child{font-family:var(--mono)}
+.num,.val,.plot .tick,.plot .q,.formula,.bands,.bands td,.cat-table td,.curve-row .v,.deriv .line span:last-child,code{font-family:var(--mono)}
+/* The copy names fields in <code>; the tags sit in a paragraph, so they are sized against it. */
+code{font-size:.92em}
 .bar{position:sticky;top:0;z-index:40;background:var(--b2);border-bottom:var(--bl)}
 .bar-in,main{max-width:1400px;margin:0 auto}
 .bar-in{padding:var(--c) var(--e);display:flex;align-items:center;justify-content:space-between;gap:var(--e)}
@@ -55,7 +57,7 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 .tab{background:transparent;border:1px solid transparent;color:var(--i3);padding:var(--a) var(--d)}
 .tab:hover{color:var(--i2);background:var(--b2)}
 .tab[aria-selected="true"]{color:var(--ink);background:var(--panel);border-color:var(--l2)}
-.tab .count,.cond,.sheet .slug,.steps .meta,.prose code,.pill,.chip-static{font-family:var(--mono);font-size:12px}
+.tab .count,.cond,.sheet .slug,.steps .meta,.pill,.chip-static{font-family:var(--mono);font-size:12px}
 .tab .count{margin-left:var(--b)}
 .controls{display:flex;gap:var(--b);align-items:center;flex-wrap:wrap;padding:var(--b) var(--d);border-radius:var(--rm);margin-bottom:var(--c)}
 .controls label{font-size:12px;color:var(--i3)}
@@ -63,7 +65,8 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 .controls .q,.controls select,.chip,.controls button.ghost,.sheet .close,.skip,.tag{border:var(--bv)}
 .controls .q,.controls select{border-color:var(--i3);color:var(--ink);padding:var(--a) var(--c)}
 .controls .q{min-width:200px}
-.controls .q::placeholder,.controls select{min-width:140px}
+.controls .q::placeholder{color:var(--i3)}
+.controls select{min-width:140px}
 .chip,.controls button.ghost{border-radius:var(--rs);font-size:13px}
 .chip{color:var(--i2);padding:var(--a) var(--c)}
 .chip[aria-pressed="true"]{border-color:var(--value);color:var(--value);background:var(--v08)}

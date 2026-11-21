@@ -200,6 +200,101 @@ for (const name of shots) {
     st.size >= 300 * 1024 && st.size <= 350 * 1024, `${st.size} bytes`);
 }
 
+// ---------------------------------------------------------------- the row's own arithmetic
+// The board shows three figures per row: the launch odds, the value if it issues, and the
+// implied value. The entry claims a reader can multiply the two they can see and land on the
+// third. This checks that in EXACT DECIMAL -- the arithmetic a reader performs by hand -- and
+// it reads the RENDERED page, so it tests what is shown rather than what is stored.
+//
+// It has to be exact decimal rather than floating point: the two disagree exactly on the
+// rounding boundary, and a check that reuses the same float code that produced the value
+// proves nothing about what the reader can do.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1200 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  const rows = await page.evaluate(() => Array.from(document.querySelectorAll('tbody tr')).map((r) => {
+    const cells = Array.from(r.querySelectorAll('td')).map((t) => t.textContent.trim());
+    return { last3: cells.slice(-3) };
+  }));
+  await browser.close();
+
+  // A money string as an exact integer scaled by 1e6 dollars: "$8.7775M" -> 8777500000000.
+  // The board shows five significant figures, so the mantissa carries at most four decimals and
+  // the value is exact at 1e-6.
+  const moneyScaled = (text) => {
+    const m = /^\$?([\d.]+)([BMK])?$/.exec(text.trim());
+    if (!m) return null;
+    const dot = m[1].indexOf('.');
+    const frac = dot === -1 ? 0 : m[1].length - dot - 1;
+    const digits = BigInt(m[1].replace('.', ''));
+    const unit = m[2] === 'B' ? 9 : m[2] === 'M' ? 6 : m[2] === 'K' ? 3 : 0;
+    return digits * 10n ** BigInt(6 - frac + unit);
+  };
+  // A percentage string as an exact integer scaled by 1e6 of the probability: "25.6904%" ->
+  // 256904, because four decimals of a percent is a millionth of the probability.
+  const pctScaled = (text) => {
+    const m = /^([\d.]+)%$/.exec(text.trim());
+    if (!m) return null;
+    const dot = m[1].indexOf('.');
+    const frac = dot === -1 ? 0 : m[1].length - dot - 1;
+    return BigInt(m[1].replace('.', '')) * 10n ** BigInt(6 - frac - 2);
+  };
+  // Round a scaled integer to `sig` significant figures, exactly.
+  const roundSig = (scaled, sig) => {
+    const s = scaled.toString();
+    const lead = s.length - s.replace(/^0+/, '').length;
+    const keep = lead + sig - 1;
+    if (keep >= s.length) return scaled;
+    let head = s.slice(0, keep + 1);
+    if (s[keep + 1] >= '5') {
+      const arr = head.split('').reverse();
+      let carry = 1;
+      for (let i = 0; i < arr.length && carry; i++) {
+        const d = Number(arr[i]) + carry;
+        arr[i] = String(d % 10);
+        carry = d >= 10 ? 1 : 0;
+      }
+      head = arr.reverse().join('');
+    }
+    return BigInt(head + '0'.repeat(s.length - head.length));
+  };
+  const moneyText = (scaled) => {
+    const v = Number(scaled) / 1e6;
+    const a = Math.abs(v);
+    if (a >= 1e9) return '$' + (v / 1e9).toPrecision(3) + 'B';
+    if (a >= 1e6) return '$' + (v / 1e6).toPrecision(3) + 'M';
+    if (a >= 1e3) return '$' + (v / 1e3).toPrecision(3) + 'K';
+    return '$' + Math.round(v);
+  };
+  let bad = 0;
+  const examples = [];
+  for (const r of rows) {
+    const [oddsText, condText, valText] = r.last3;
+    const cond = moneyScaled(condText);
+    const odds = pctScaled(oddsText);
+    if (cond === null || odds === null) { bad++; continue; }
+    // the product, in dollars scaled by 1e12
+    const product = cond * odds;
+    // three significant figures of that product; the product is scaled by 1e12, and
+    // moneyText wants a value scaled by 1e6
+    const rounded = roundSig(product, 3);
+    const computed = moneyText(rounded / 1000000n);
+    if (computed !== valText) {
+      bad++;
+      if (examples.length < 4) examples.push({ cond: condText, odds: oddsText, shown: valText, computed });
+    }
+  }
+  check('every row\'s three displayed figures multiply out, in exact decimal', bad === 0,
+    bad === 0 ? `${rows.length} rows agree` : `${bad} disagree: ` + JSON.stringify(examples));
+}
+
 // ---------------------------------------------------------------- the influence claim
 // The page says no single row can drag the value fit: the worst single row moves the intercept
 // by 0.410 log10 under a plain least squares and by 0.273 under the model's own weight. Both

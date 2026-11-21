@@ -51,7 +51,7 @@ their own and 195 that record none.
 This distinction is not cosmetic. Product rows are older and bigger than pre-token rows by
 construction — a pool of a protocol that already issued — so labelling them "issued" would teach the
 fit that *old and big means issued*, which is exactly the question the board is asking. It was worth
-**19.4 points of base rate**: 55.0% of the old universe "issued", 35.6% of the corrected one does.
+**19.3 points of base rate**: 55.0% of the old universe "issued", 35.6% of the corrected one does.
 
 ## 3. The value model — what a token is worth if it issues
 

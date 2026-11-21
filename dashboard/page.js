@@ -602,7 +602,9 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
  host.appendChild(chip);
  });
  host.appendChild(h('span','spacer'));
- host.appendChild(el('span', { class: 'result', id: 'result-count' }));
+ // The row count is the one thing a screen-reader user cannot see change as they type, so it
+ // is a polite live region: `role="status"` implies `aria-live="polite"`.
+ host.appendChild(el('span', { class: 'result', id: 'result-count', role: 'status', 'aria-atomic': 'true' }));
  host.appendChild(el('button', {
  class: 'ghost', type: 'button', text: L.clear_filters,
  onclick: function () {

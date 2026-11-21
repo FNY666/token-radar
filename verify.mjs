@@ -454,6 +454,61 @@ for (const name of shots) {
     seen.map((s) => `${s.w}px:${s.brandLines}line${s.brandClipped ? '-CLIPPED' : ''}`).join(' '));
 }
 
+// ---------------------------------------------------------------- the row count is announced
+// The row count is the one thing a screen-reader user cannot see change when they type in the
+// search box, so it must be a polite live region. A polite region announces when its TEXT
+// changes, so the region has to be in the DOM from the start rather than inserted with its
+// content -- inserting a polite region with its content is announced inconsistently.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('#result-count');
+  const d = await page.evaluate(async () => {
+    const node = document.getElementById('result-count');
+    let changes = 0;
+    const obs = new MutationObserver((muts) => { for (const m of muts) if (m.type === 'childList' || m.type === 'characterData') changes++; });
+    obs.observe(node, { childList: true, characterData: true, subtree: true });
+    const i = document.getElementById('ctl-0');
+    i.value = 'poly';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 200));
+    const afterTyping = node.textContent;
+    const typed = changes;
+    changes = 0;
+    i.value = 'zzznotathing';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 200));
+    obs.disconnect();
+    return {
+      role: node.getAttribute('role'),
+      live: node.getAttribute('aria-live'),
+      atomic: node.getAttribute('aria-atomic'),
+      afterTyping,
+      afterNoMatch: node.textContent,
+      typedChanges: typed,
+      emptyText: (document.querySelector('.empty') || {}).textContent || ''
+    };
+  });
+  await browser.close();
+  // `role="status"` implies `aria-live="polite"`, so the region is polite whether or not the
+  // attribute is spelled out. What matters is that it is a status region and that its text
+  // changes rather than the region being inserted with its content.
+  const polite = d.role === 'status' || d.live === 'polite';
+  check('the row count is a polite live region, in the DOM before its text changes',
+    polite && d.typedChanges > 0,
+    `role=${d.role} live=${d.live} atomic=${d.atomic} changes-on-typing=${d.typedChanges}`);
+  check('the count reaches the reader as the filters narrow it', /\d+ of 195 rows/.test(d.afterTyping) && /\d+ of 195 rows/.test(d.afterNoMatch),
+    `"${d.afterTyping}" then "${d.afterNoMatch}"`);
+  check('a search that matches nothing says so and says how to recover', /Clear them/.test(d.emptyText),
+    d.emptyText);
+}
+
 // ---------------------------------------------------------------- the influence claim
 // The page says no single row can drag the value fit: the worst single row moves the intercept
 // by 0.410 log10 under a plain least squares and by 0.273 under the model's own weight. Both

@@ -1652,6 +1652,125 @@ for (const name of shots) {
     `${st.tableTop}px down`);
 }
 
+// ---------------------------------------------------------------- the model tab's four unbacked figures
+// The model tab prints four figures that no check yet re-derives: the "factor of 2.2" the median
+// error stands for, the held-out "factor of 2.6", the intercept moves 0.410 and 0.273, and the
+// "0.084, a fifth as much" that the worst plain-fit row costs the model's own fit. This block
+// re-derives all of them from the built data using the library's own definitions, and checks
+// that the copy quotes the measured values rather than typed-in literals.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+  const cohort = data.cohort;
+
+  // --- the two factors the tab turns the log10 errors into ---
+  // "Half land within a factor of 2.2 of the model" is 10^median_error rounded to one decimal.
+  const factorIn = Math.pow(10, cal.mae_log10);
+  const factorOut = Math.pow(10, cal.held_out_mae_log10);
+  check("the in-sample median error stands for the factor of 2.2 the copy prints",
+    factorIn.toFixed(1) === '2.2', `10^${cal.mae_log10} = ${factorIn.toFixed(4)} -> ${factorIn.toFixed(1)}`);
+  check("the held-out error stands for the factor of 2.6 the copy prints",
+    factorOut.toFixed(1) === '2.6', `10^${cal.held_out_mae_log10} = ${factorOut.toFixed(4)} -> ${factorOut.toFixed(1)}`);
+
+  // --- the influence of the worst single row, recomputed from the cohort ---
+  // The library's own definitions: the intercept of a fit with one row left out, under a plain
+  // least squares and under the redescending weight the model uses.
+  const medianOf = (v) => {
+    const a = [...v].sort((x, y) => x - y);
+    const n = a.length;
+    return n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+  };
+  const solve2 = (matrix, rhs) => {
+    const k = matrix.length;
+    const m = matrix.map((row, i) => [...row, rhs[i]]);
+    for (let c = 0; c < k; c++) {
+      let piv = c;
+      for (let r = c + 1; r < k; r++) if (Math.abs(m[r][c]) > Math.abs(m[piv][c])) piv = r;
+      [m[c], m[piv]] = [m[piv], m[c]];
+      for (let r = 0; r < k; r++) {
+        if (r === c) continue;
+        const f = m[r][c] / m[c][c];
+        for (let j = c; j <= k; j++) m[r][j] -= f * m[c][j];
+      }
+    }
+    return m.map((row, i) => row[k] / m[i][i]);
+  };
+  const interceptOf = (rows, weighted) => {
+    const d = rows.map((p) => [1, Math.log10(Math.max(p.tvl_usd, 1))]);
+    const t = rows.map((p) => Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)));
+    const k = 2;
+    if (!weighted) {
+      const A = [[0, 0], [0, 0]], b = [0, 0];
+      d.forEach((x, i) => {
+        for (let a = 0; a < k; a++) {
+          for (let c = 0; c < k; c++) A[a][c] += x[a] * x[c];
+          b[a] += x[a] * t[i];
+        }
+      });
+      return solve2(A, b)[0];
+    }
+    let beta = [0, 0];
+    for (let it = 0; it < 24; it++) {
+      const residual = (i) => t[i] - (beta[0] * d[i][0] + beta[1] * d[i][1]);
+      const scale = 1.4826 * medianOf(d.map((_, i) => Math.abs(residual(i))));
+      const A = [[0, 0], [0, 0]], b = [0, 0];
+      d.forEach((x, i) => {
+        const r = Math.abs(residual(i));
+        const w = r <= 1.5 * scale ? 1 : (1.5 * scale) / r;
+        for (let a = 0; a < k; a++) {
+          for (let c = 0; c < k; c++) A[a][c] += w * w * x[a] * x[c];
+          b[a] += w * w * x[a] * t[i];
+        }
+      });
+      A[0][0] += 1e-6; A[1][1] += 1e-6;
+      beta = solve2(A, b);
+    }
+    return beta[0];
+  };
+  const plainFull = interceptOf(cohort, false);
+  const weightedFull = interceptOf(cohort, true);
+  let plainMax = 0, weightedMax = 0, worstSlug = null, weightedOfWorst = 0;
+  for (const row of cohort) {
+    const rest = cohort.filter((p) => p.slug !== row.slug);
+    const pm = Math.abs(plainFull - interceptOf(rest, false));
+    if (pm > plainMax) {
+      plainMax = pm;
+      worstSlug = row.slug;
+      weightedOfWorst = Math.abs(weightedFull - interceptOf(rest, true));
+    }
+    const wm = Math.abs(weightedFull - interceptOf(rest, true));
+    if (wm > weightedMax) weightedMax = wm;
+  }
+  check("the worst plain-fit row moves the intercept by the 0.410 the copy prints",
+    Math.round(plainMax * 1000) / 1000 === cal.influence_plain,
+    `recomputed ${plainMax.toFixed(4)} vs published ${cal.influence_plain}`);
+  check("the worst row moves the weighted fit by the 0.273 the copy prints",
+    Math.round(weightedMax * 1000) / 1000 === cal.influence_weighted,
+    `recomputed ${weightedMax.toFixed(4)} vs published ${cal.influence_weighted}`);
+  check("the row a plain fit leans on moves the model's own fit by the 0.084 the copy prints",
+    Math.round(weightedOfWorst * 1000) / 1000 === cal.influence_worst_row_weighted,
+    `recomputed ${weightedOfWorst.toFixed(4)} vs published ${cal.influence_worst_row_weighted} (${worstSlug})`);
+  // "a fifth as much" is the ratio of the two moves, rounded to a fifth.
+  const ratio = plainMax / weightedOfWorst;
+  check("the weighted fit's move really is about a fifth of the plain fit's",
+    Math.round(ratio) === 5, `${ratio.toFixed(2)}x -> a round ${Math.round(ratio)}th`);
+
+  // and the copy must quote the measured values, not typed-in ones
+  const copy = data.copy ?? {};
+  const modelCopy = JSON.stringify(copy);
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const quoted = (v) => modelCopy.includes(v.toFixed(3));
+  check("the copy quotes the measured intercept moves", quoted(cal.influence_plain) && quoted(cal.influence_weighted),
+    `${cal.influence_plain} and ${cal.influence_weighted} appear in the copy`);
+  check("the copy quotes the measured worst-row move", quoted(cal.influence_worst_row_weighted),
+    `${cal.influence_worst_row_weighted} appears in the copy`);
+  const noLiteral = !/by 0\.410 log10/.test(libSrc) && !/by 0\.273 log10/.test(libSrc)
+    && !/by 0\.084, a fifth/.test(libSrc);
+  check("no influence figure is typed into the copy source", noLiteral,
+    'the copy source builds them from the calibration');
+}
+
 // ---------------------------------------------------------------- the two narrative claims
 // The page names a row: "the row that moves a plain fit most -- the one priced at four hundred
 // times its deposits". And it claims a precision: "the coefficients are printed to four decimals

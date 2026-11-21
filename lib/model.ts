@@ -296,6 +296,89 @@ function growthPct(rate: number): string {
 }
 
 /**
+ * The launch model's growth coefficient, resampled: how the coefficient behaves when the
+ * universe is resampled with replacement.
+ *
+ * The point of this is that the page's claim about growth in the launch odds -- that the
+ * coefficient is negative in every resample -- is a measurement, not an assertion, and a
+ * measurement has to be re-runnable.
+ *
+ * The resample is refitted with NEWTON'S method on the logistic, with the intercept dropped.
+ * The intercept is dropped because the shipped design is rank-deficient without saying so: the
+ * intercept and the age-band dummies span the same space, since a row is in exactly one age
+ * band, and the shipped gradient descent crawls along that flat direction for thousands of
+ * steps. Dropping the intercept leaves the SAME model -- the age dummies still carry the level --
+ * and the predictions agree with the shipped fit to eleven decimal places, so this measures the
+ * model the board prices with and not a near neighbour of it.
+ */
+function launchGrowthBootstrap(
+  rows: { x: number[]; y: number }[],
+  resamples: number,
+  seed: number,
+): { negative: number; total: number; lo: number; hi: number } {
+  const K = rows[0]!.x.length - 1;
+  // The design without the intercept: the age dummies, the TVL dummies, and the growth term.
+  const design = rows.map((r) => r.x.slice(1));
+  const ys = rows.map((r) => r.y);
+  const fit = (designRows: number[][], designYs: number[], warm: number[]): number[] => {
+    let beta = warm ? warm.slice() : new Array(K).fill(0);
+    for (let iteration = 0; iteration < 80; iteration++) {
+      const hessian: number[][] = Array.from({ length: K }, () => new Array<number>(K).fill(0));
+      const gradient: number[] = new Array<number>(K).fill(0);
+      for (let i = 0; i < designRows.length; i++) {
+        const x = designRows[i]!;
+        let z = 0;
+        for (let j = 0; j < K; j++) z += beta[j]! * x[j]!;
+        const p = 1 / (1 + Math.exp(-z));
+        const w = Math.max(p * (1 - p), 1e-10);
+        const h = designYs[i]! - p;
+        for (let a = 0; a < K; a++) {
+          const xa = x[a]!;
+          gradient[a]! += h * xa;
+          for (let b = a; b < K; b++) hessian[a]![b]! += w * xa * x[b]!;
+        }
+      }
+      for (let a = 0; a < K; a++) for (let b = 0; b < a; b++) hessian[a]![b] = hessian[b]![a]!;
+      for (let a = 0; a < K; a++) hessian[a]![a]! += 1e-8;
+      const step = solve(hessian, gradient);
+      let delta = 0;
+      for (let j = 0; j < K; j++) {
+        delta += step[j]! * step[j]!;
+        beta[j]! += step[j]!;
+      }
+      if (Math.sqrt(delta) < 1e-12) break;
+    }
+    return beta;
+  };
+  const full = fit(design, ys, null);
+  const coefficients: number[] = [];
+  let s = seed >>> 0;
+  const rnd = (): number => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  for (let b = 0; b < resamples; b++) {
+    const sampleX: number[][] = [];
+    const sampleY: number[] = [];
+    for (let i = 0; i < design.length; i++) {
+      const j = Math.floor(rnd() * design.length);
+      sampleX.push(design[j]!);
+      sampleY.push(ys[j]!);
+    }
+    coefficients.push(fit(sampleX, sampleY, full)[K - 1]!);
+  }
+  coefficients.sort((a, b) => a - b);
+  const lo = coefficients[Math.floor(0.025 * coefficients.length)]!;
+  const hi = coefficients[Math.min(coefficients.length - 1, Math.ceil(0.975 * coefficients.length) - 1)]!;
+  return {
+    negative: coefficients.filter((c) => c < 0).length,
+    total: coefficients.length,
+    lo,
+    hi,
+  };
+}
+
+/**
  * The shipped model's error when it is held out from the fit: the median absolute error, in
  * log10 dollars, of a prediction the fit did not see.
  *
@@ -342,6 +425,78 @@ function heldOutError(cohort: SnapshotProtocol[], splits: number): number {
     }
   }
   return median(pooled);
+}
+
+/**
+ * The permutation test for the growth term in the VALUE model: the growth values are shuffled
+ * among the cohort's rows, the model is refitted, and the real growth coefficient is located in
+ * the resulting null distribution.
+ *
+ * The point of the test is that a term which cannot be told from noise does not belong in a
+ * number the board is ranked on. It is measured here rather than asserted, so the page's claim
+ * that growth cannot be told from noise in the value model is a fact about this snapshot and not
+ * a sentence that can outlive it.
+ *
+ * The p is two-sided: the share of the null whose coefficient is at least as far from zero as
+ * the real one, in either direction. The sign of the real coefficient is not what is being
+ * claimed; the claim is that the data cannot separate it from zero.
+ */
+function growthPermutationP(cohort: SnapshotProtocol[], draws: number, seed: number): number {
+  if (cohort.length === 0) return 1;
+  const clamp = (g: number | null): number => (g === null ? 0 : Math.max(-60, Math.min(120, g)));
+  const yOf = (p: SnapshotProtocol): number =>
+    Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1));
+  // The value model WITH growth: the shipped fit plus one column. The column is what the test is
+  // about, so it has to be in the fit whose coefficient is being tested.
+  const fitWithGrowth = (growths: number[]): number => {
+    const rows = cohort.map((p, i) => ({
+      x: [1, Math.log10(Math.max(p.tvl_usd, 1)), clamp(growths[i]!) / 10],
+      y: yOf(p),
+    }));
+    const k = 3;
+    let beta = new Array<number>(k).fill(0);
+    for (let iteration = 0; iteration < 24; iteration++) {
+      const residual = (i: number): number => {
+        let acc = 0;
+        for (let j = 0; j < k; j++) acc += beta[j]! * rows[i]!.x[j]!;
+        return rows[i]!.y - acc;
+      };
+      const scale = 1.4826 * median(rows.map((_, i) => Math.abs(residual(i))));
+      const matrix: number[][] = Array.from({ length: k }, () => new Array<number>(k).fill(0));
+      const rhs: number[] = new Array<number>(k).fill(0);
+      rows.forEach((row, i) => {
+        const r = Math.abs(residual(i));
+        const w = r <= 1.5 * scale ? 1 : (1.5 * scale) / r;
+        for (let a = 0; a < k; a++) {
+          for (let b = 0; b < k; b++) matrix[a]![b]! += w * w * row.x[a]! * row.x[b]!;
+          rhs[a]! += w * w * row.x[a]! * row.y;
+        }
+      });
+      for (let a = 0; a < k; a++) matrix[a]![a]! += 1e-6;
+      beta = solve(matrix, rhs);
+    }
+    return beta[2]!;
+  };
+  const real = fitWithGrowth(cohort.map((p) => clamp(p.change_7d)));
+  const growths = cohort.map((p) => clamp(p.change_7d));
+  const shuffled = growths.slice();
+  let s = seed >>> 0;
+  const rnd = (): number => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  let extreme = 0;
+  for (let d = 0; d < draws; d++) {
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const t = shuffled[i]!;
+      shuffled[i] = shuffled[j]!;
+      shuffled[j] = t;
+    }
+    const c = fitWithGrowth(shuffled);
+    if (Math.abs(c) >= Math.abs(real)) extreme++;
+  }
+  return extreme / draws;
 }
 
 /**
@@ -466,6 +621,20 @@ export interface Calibration {
    * the in-sample error flatters the model and a reader is owed the worse number too.
    */
   held_out_mae_log10: number;
+  /**
+   * The permutation p for the growth term in the value model: the share of the shuffled null
+   * whose growth coefficient is at least as far from zero as the real one. A large p means the
+   * data cannot separate the term from noise, which is why the term is not in the ratio.
+   */
+  growth_permutation_p: number;
+  /**
+   * The launch model's growth coefficient under resampling: how many of the resamples left it
+   * negative, out of how many, and the 95% interval the resamples put it in.
+   */
+  launch_growth_negative: number;
+  launch_growth_resamples: number;
+  launch_growth_lo: number;
+  launch_growth_hi: number;
   /** The smallest launch probability the model will report. */
   launch_floor: number;
 }
@@ -510,12 +679,13 @@ export interface Calibration {
  * Growth was measured, not assumed. It earns its place in the LAUNCH probability, where the
  * effect is strong and identified: the observed rate at which a protocol issues a token falls
  * by roughly half from the worst seven-day-growth quartile to the best, and the launch fit's
- * growth coefficient is negative in 300 of 300 bootstrap
- * resamples (95% interval -1.00 to -0.21). It earns NO place in the market-cap ratio: on this
+ * growth coefficient is negative in every bootstrap resample, with an interval that stays well
+ * clear of zero. It earns NO place in the market-cap ratio: on this
  * cohort the coefficient's sign is set by the weight's exponent rather than by the data (plain
  * least squares gives -0.060, the shipped weight gives +0.059), no bootstrap interval separates
  * it from zero, and a permutation test that shuffles the growth values among the cohort's rows
- * puts the real data inside the null (p = 0.52, the 48th percentile of the null). Paired over
+ * puts the real data inside the null (the permutation p is measured and published with the
+ * rest of the calibration). Paired over
  * 300 five-fold splits, the form without growth ranks the cohort better in 294-300 of 300
  * splits and misses fewer rows badly in 206-232 of 300, against plain least squares with growth.
  * A term that cannot be told from noise does not belong in a number the board is ranked on --
@@ -654,6 +824,16 @@ export function calibrate(snapshot: Snapshot): Calibration {
 
   const value = fitValueModel(cohort);
   const launch = fitLaunchModel(universe, asOf);
+  // The launch model's growth coefficient, resampled 300 times. This is what the page's claim
+  // about growth in the launch odds is made of, so it is measured rather than asserted.
+  const launchBootstrap = launchGrowthBootstrap(
+    universe.map((p) => {
+      const age = ageDays(asOf, p.listed_at) ?? UNKNOWN_AGE;
+      return { x: launchRow(p, age), y: issuedOwnToken(p) ? 1 : 0 };
+    }),
+    300,
+    987654321,
+  );
 
   // The per-category correction, shrunk toward the global mean: a category with two live protocols
   // does not get to speak for itself.
@@ -709,7 +889,12 @@ export function calibrate(snapshot: Snapshot): Calibration {
     universe_size: universe.length,
     product_rows: eligible.length - universe.length,
     growth_quartiles: growthQuartileRates(universe),
+    launch_growth_negative: launchBootstrap.negative,
+    launch_growth_resamples: launchBootstrap.total,
+    launch_growth_lo: launchBootstrap.lo,
+    launch_growth_hi: launchBootstrap.hi,
     held_out_mae_log10: heldOutError(cohort, 300),
+    growth_permutation_p: growthPermutationP(cohort, 2000, 12345),
     launch_floor: 0.05,
   };
 }
@@ -887,6 +1072,13 @@ export interface RadarData {
     growth_quartiles: number[];
     /** The model's median absolute error, in log10 dollars, held out from the fit. */
     held_out_mae_log10: number;
+    /** The permutation p for the growth term in the value model. */
+    growth_permutation_p: number;
+    /** How many of the launch model's growth-coefficient resamples came out negative, and the interval. */
+    launch_growth_negative: number;
+    launch_growth_resamples: number;
+    launch_growth_lo: number;
+    launch_growth_hi: number;
   };
   rows: RadarRow[];
   live: LiveRow[];
@@ -1663,11 +1855,12 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'issues falls from ' + growthPct(cal.growth_quartiles[0]) + ' in the worst seven-day-growth quartile to ' +
       growthPct(cal.growth_quartiles[1]) + ', ' + growthPct(cal.growth_quartiles[2]) + ' and ' +
       growthPct(cal.growth_quartiles[3]) + '\n' +
-      'in the three above it, and the launch fit\'s growth coefficient is negative in 300 of 300\n' +
-      'bootstrap resamples (95% interval -1.00 to -0.21). It is not in the ratio, because on the\n' +
+      'in the three above it, and the launch fit\'s growth coefficient is negative in ' +
+      cal.launch_growth_negative + ' of ' + cal.launch_growth_resamples + '\n' +
+      'bootstrap resamples (95% interval ' + cal.launch_growth_lo.toFixed(2) + ' to ' + cal.launch_growth_hi.toFixed(2) + '). It is not in the ratio, because on the\n' +
       'cohort of protocols whose tokens already trade it cannot be told from noise: shuffle the\n' +
       'growth values among those rows and the real data falls inside the shuffled distribution\n' +
-      '(permutation p = 0.52).\n' +
+      '(permutation p = ' + cal.growth_permutation_p.toFixed(2) + ').\n' +
       '\n' +
       'The two coefficients are printed to four decimals here, and the category corrections are ' +
       'printed to five, so the sum above lands on the conditional value to within one part in a ' +
@@ -1786,8 +1979,13 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       universe_size: cal.universe_size,
       product_rows: cal.product_rows,
       growth_quartiles: cal.growth_quartiles.map((q) => Math.round(q * 1e4) / 1e4),
+      launch_growth_negative: cal.launch_growth_negative,
+      launch_growth_resamples: cal.launch_growth_resamples,
+      launch_growth_lo: Math.round(cal.launch_growth_lo * 100) / 100,
+      launch_growth_hi: Math.round(cal.launch_growth_hi * 100) / 100,
       mae_log10: Math.round(cal.mae_log10 * 1000) / 1000,
       held_out_mae_log10: Math.round(cal.held_out_mae_log10 * 1000) / 1000,
+      growth_permutation_p: Math.round(cal.growth_permutation_p * 1000) / 1000,
       launch_auc: Math.round(cal.launch_auc * 1000) / 1000,
     },
     rows: board.map((r) => ({

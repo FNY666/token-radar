@@ -104,12 +104,12 @@ trades at a small and shrinking fraction of the deposits behind it, and the fit 
 model it is strong and identified: across the 303 protocols the launch fit is fitted on, the rate
 at which a protocol issues falls from **58.7% in the worst seven-day-growth quartile to 40.0%,
 26.7% and 17.9%** in the three above it, and the growth coefficient is negative in 300 of 300
-bootstrap resamples (95% interval −1.00 to −0.21). In the value model it is not identified at
+bootstrap resamples (95% interval −0.98 to −0.20). In the value model it is not identified at
 all. On this cohort the growth term's *sign* is set by the weight's exponent rather than by the
 data: plain least squares gives −0.060, the shipped weight gives +0.059, and no bootstrap interval
 separates the coefficient from zero. A permutation test that shuffles the growth values among the
-cohort's rows puts the real data inside the null (p = 0.52; the real coefficient sits at the 48th
-percentile of the null). Paired over 300 five-fold splits, the form *without* growth ranks the
+cohort's rows puts the real data inside the null (permutation p = 0.52, measured over 2000
+shuffles). Paired over 300 five-fold splits, the form *without* growth ranks the
 cohort better in 294–300 of 300 splits and misses fewer rows badly in 206–232 of 300. A term
 that cannot be told from noise does not belong in a number the board is ranked on — and the two
 models must not disagree: a hot protocol is *less* likely to issue, not more.

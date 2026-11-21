@@ -1129,6 +1129,238 @@ for (const name of shots) {
   check('no held-out error is typed into the copy source', noLiteral, noLiteral ? 'measured' : 'a literal survives');
 }
 
+// ---------------------------------------------------------------- the permutation p is measured, not typed
+// The page says that in the value model the growth term cannot be told from noise: shuffling the
+// growth values among the cohort's rows puts the real data inside the shuffled distribution,
+// "permutation p = 0.52". The p was a literal. The calibration now runs the permutation test and
+// publishes it, and this check re-runs it and refuses to let the copy quote anything else.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+
+  const median = (v) => { if (!v.length) return 0; const s = [...v].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const solve = (matrix, rhs) => {
+    const n = rhs.length;
+    const m = matrix.map((row, i) => row.concat([rhs[i]]));
+    for (let c = 0; c < n; c++) {
+      let pivot = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(m[r][c]) > Math.abs(m[pivot][c])) pivot = r;
+      [m[c], m[pivot]] = [m[pivot], m[c]];
+      if (Math.abs(m[c][c]) < 1e-10) continue;
+      for (let rr = 0; rr < n; rr++) {
+        if (rr === c) continue;
+        const f = m[rr][c] / m[c][c];
+        for (let k = c; k <= n; k++) m[rr][k] -= f * m[c][k];
+      }
+    }
+    return m.map((row, i) => row[n] / (row[i] || 1));
+  };
+  const issued = (p) => (p.mcap_usd !== null && p.mcap_usd !== undefined) || (p.gecko_id !== null && p.gecko_id !== undefined);
+  // The cohort comes from the SNAPSHOT through the library's OWN eligibility rules, so it is the
+  // same 75 rows the calibration fits. An eligibility rule left out here would quietly measure
+  // a different population.
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+  const VERSIONED = constOf('VERSIONED');
+  const WRAPPED_WORD = constOf('WRAPPED_WORD');
+  const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+  const eligibleRows = snapshot.protocols.filter((p) =>
+    !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+    !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name));
+  const cohort = eligibleRows.filter((p) => {
+    const iss = issued(p);
+    const product = p.symbol !== null && p.symbol !== undefined && !iss;
+    const preToken = p.mcap_usd === null && p.gecko_id === null && p.symbol === null;
+    return !preToken && !product && iss && (p.mcap_usd ?? 0) >= 1e6 && p.tvl_usd >= 1e6;
+  });
+  const clamp = (g) => (g === null ? 0 : Math.max(-60, Math.min(120, g)));
+  const yOf = (p) => Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1));
+  const fitWithGrowth = (growths) => {
+    const rows = cohort.map((p, i) => ({ x: [1, Math.log10(Math.max(p.tvl_usd, 1)), growths[i] / 10], y: yOf(p) }));
+    const k = 3;
+    let beta = new Array(k).fill(0);
+    for (let it = 0; it < 24; it++) {
+      const residual = (i) => { let a = 0; for (let j = 0; j < k; j++) a += beta[j] * rows[i].x[j]; return rows[i].y - a; };
+      const scale = 1.4826 * median(rows.map((_, i) => Math.abs(residual(i))));
+      const M = Array.from({ length: k }, () => new Array(k).fill(0));
+      const B = new Array(k).fill(0);
+      rows.forEach((row, i) => {
+        const r = Math.abs(residual(i));
+        const w = r <= 1.5 * scale ? 1 : (1.5 * scale) / r;
+        for (let a = 0; a < k; a++) { for (let b = 0; b < k; b++) M[a][b] += w * w * row.x[a] * row.x[b]; B[a] += w * w * row.x[a] * row.y; }
+      });
+      for (let a = 0; a < k; a++) M[a][a] += 1e-6;
+      beta = solve(M, B);
+    }
+    return beta[2];
+  };
+  const growths = cohort.map((p) => clamp(p.change_7d));
+  const real = fitWithGrowth(growths);
+  const shuffled = growths.slice();
+  let s = 12345;
+  const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  let extreme = 0;
+  const DRAWS = 2000;
+  for (let d = 0; d < DRAWS; d++) {
+    for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const t = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = t; }
+    const c = fitWithGrowth(shuffled);
+    if (Math.abs(c) >= Math.abs(real)) extreme++;
+  }
+  const measured = extreme / DRAWS;
+  check('the published permutation p is the measured one',
+    cal.growth_permutation_p !== undefined && Math.abs(measured - cal.growth_permutation_p) < 0.002,
+    `published ${cal.growth_permutation_p} measured ${measured.toFixed(3)}`);
+
+  // the p must be large: that is the claim -- the term cannot be told from noise
+  check('the permutation p is large enough to keep growth out of the ratio', measured > 0.1,
+    `p = ${measured.toFixed(3)}`);
+
+  // and the sentence must quote it
+  const copy = data.copy.formula;
+  check('the page quotes the measured permutation p, not a typed-in one',
+    copy.includes('(permutation p = ' + cal.growth_permutation_p.toFixed(2) + ')'),
+    copy.includes('(permutation p = ' + cal.growth_permutation_p.toFixed(2) + ')') ? 'quoted' : 'not quoted');
+
+  // no literal may survive in the source that writes the sentence
+  check('no permutation p is typed into the copy source',
+    !/permutation p = 0\.52/.test(libSrc), 'measured');
+}
+
+// ---------------------------------------------------------------- the bootstrap claim is measured, not typed
+// The page says the launch fit's growth coefficient is negative in 300 of 300 bootstrap
+// resamples, with a 95% interval of -1.00 to -0.21. Those were string literals. The
+// calibration now runs the bootstrap and publishes the count and the interval, and this check
+// re-runs it -- with the same Newton fit on the intercept-free design, which predicts the
+// shipped fit to eleven decimal places -- and refuses to let the copy quote anything else.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const AGE_BANDS = constOf('AGE_BANDS');
+  const TVL_BANDS = constOf('TVL_BANDS');
+  const UNKNOWN_AGE = constOf('UNKNOWN_AGE');
+  const issued = (p) => p.mcap_usd !== null || p.gecko_id !== null;
+  const universe = snapshot.protocols.filter((p) => {
+    const product = p.symbol !== null && !issued(p);
+    return !product;
+  });
+  // the universe the launch fit uses: eligible less the product rows
+  const eligibleRows = snapshot.protocols.filter((p) => {
+    const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+    const VERSIONED = constOf('VERSIONED');
+    const WRAPPED_WORD = constOf('WRAPPED_WORD');
+    const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+    return !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+      !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name);
+  });
+  const launchRows = eligibleRows.filter((p) => !(p.symbol !== null && !issued(p)));
+  const ageDays = (listedAt) => {
+    if (!listedAt) return null;
+    const a = Date.parse(snapshot.as_of + 'T00:00:00Z'), b = Date.parse(listedAt + 'T00:00:00Z');
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return Math.max(0, Math.floor((a - b) / 86400000));
+  };
+  const clampGrowth = (g) => (g === null ? 0 : Math.max(-60, Math.min(120, g)));
+  const design = launchRows.map((p) => {
+    const age = ageDays(p.listed_at) ?? UNKNOWN_AGE;
+    let ab = AGE_BANDS.length - 1;
+    for (let i = 0; i < AGE_BANDS.length; i++) { const b = AGE_BANDS[i]; if (age >= b.lo && age < b.hi) { ab = i; break; } }
+    let tb = TVL_BANDS.length - 1;
+    for (let i = 0; i < TVL_BANDS.length; i++) { const b = TVL_BANDS[i]; if (p.tvl_usd >= b[0] && p.tvl_usd < b[1]) { tb = i; break; } }
+    return {
+      x: [1, ...AGE_BANDS.map((_, i) => (i === ab ? 1 : 0)), ...TVL_BANDS.map((_, i) => (i === tb ? 1 : 0)), clampGrowth(p.change_7d) / 10],
+      y: issued(p) ? 1 : 0,
+    };
+  });
+  const K = design[0].x.length - 1;
+  const solveSym = (M, rhs) => {
+    const n = rhs.length;
+    const A = M.map((row, i) => [...row, rhs[i]]);
+    for (let c = 0; c < n; c++) {
+      let piv = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+      [A[c], A[piv]] = [A[piv], A[c]];
+      for (let r = 0; r < n; r++) { if (r === c) continue; const f = A[r][c] / A[c][c]; for (let k = c; k <= n; k++) A[r][k] -= f * A[c][k]; }
+    }
+    return A.map((row, i) => row[n] / (row[i] || 1));
+  };
+  const fitNewton = (X, Y, warm) => {
+    let beta = warm ? warm.slice() : new Array(K).fill(0);
+    for (let it = 0; it < 80; it++) {
+      const H = Array.from({ length: K }, () => new Array(K).fill(0));
+      const g = new Array(K).fill(0);
+      for (let i = 0; i < X.length; i++) {
+        const x = X[i];
+        let z = 0; for (let j = 0; j < K; j++) z += beta[j] * x[j];
+        const p = 1 / (1 + Math.exp(-z));
+        const w = Math.max(p * (1 - p), 1e-10);
+        const h = Y[i] - p;
+        for (let a = 0; a < K; a++) { const xa = x[a]; g[a] += h * xa; for (let b = a; b < K; b++) H[a][b] += w * xa * x[b]; }
+      }
+      for (let a = 0; a < K; a++) for (let b = 0; b < a; b++) H[a][b] = H[b][a];
+      for (let a = 0; a < K; a++) H[a][a] += 1e-8;
+      const step = solveSym(H, g);
+      let d = 0; for (let j = 0; j < K; j++) { d += step[j] * step[j]; beta[j] += step[j]; }
+      if (Math.sqrt(d) < 1e-12) break;
+    }
+    return beta;
+  };
+  const X = design.map((r) => r.x.slice(1));
+  const Y = design.map((r) => r.y);
+  const full = fitNewton(X, Y, null);
+  const coefficients = [];
+  let s = 987654321;
+  const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  for (let b = 0; b < 300; b++) {
+    const sx = [], sy = [];
+    for (let i = 0; i < X.length; i++) { const j = Math.floor(rnd() * X.length); sx.push(X[j]); sy.push(Y[j]); }
+    coefficients.push(fitNewton(sx, sy, full)[K - 1]);
+  }
+  coefficients.sort((a, b) => a - b);
+  const negative = coefficients.filter((c) => c < 0).length;
+  const lo = coefficients[Math.floor(0.025 * coefficients.length)];
+  const hi = coefficients[Math.min(coefficients.length - 1, Math.ceil(0.975 * coefficients.length) - 1)];
+
+  // the no-intercept fit must reproduce the shipped fit's own growth coefficient
+  const shippedGrowth = cal.launch_beta[cal.launch_beta.length - 1];
+  const sameModel = Math.abs(full[K - 1] - shippedGrowth) < 1e-9;
+  check('the bootstrap\'s fit is the shipped fit', sameModel,
+    `newton ${full[K - 1].toFixed(6)} vs shipped ${shippedGrowth.toFixed(6)}`);
+
+  const publishedOk = cal.launch_growth_negative === negative && cal.launch_growth_resamples === 300 &&
+    Math.abs(cal.launch_growth_lo - lo) < 0.005 && Math.abs(cal.launch_growth_hi - hi) < 0.005;
+  check('the published bootstrap is the measured one', publishedOk,
+    publishedOk ? `${negative}/300, ${lo.toFixed(2)} to ${hi.toFixed(2)}` :
+      `published ${cal.launch_growth_negative}/${cal.launch_growth_resamples} ${cal.launch_growth_lo} to ${cal.launch_growth_hi} | measured ${negative}/300 ${lo.toFixed(2)} to ${hi.toFixed(2)}`);
+
+  // the growth coefficient must be negative in every resample -- that is the claim
+  check('the growth coefficient is negative in every resample', negative === 300,
+    `${negative} of 300`);
+
+  // and the sentence must quote the measured count and interval
+  const copy = data.copy.formula;
+  const quoteOk = copy.includes('negative in ' + negative + ' of 300') &&
+    copy.includes('95% interval ' + cal.launch_growth_lo.toFixed(2) + ' to ' + cal.launch_growth_hi.toFixed(2));
+  check('the page quotes the measured bootstrap, not typed-in numbers', quoteOk,
+    quoteOk ? 'both quoted' : 'the sentence does not carry the measured figures');
+
+  // no literal may survive in the source that writes the sentence
+  const noLiteral = !/95% interval -1\.00 to -0\.21/.test(libSrc) && !/negative in 300 of 300/.test(libSrc);
+  check('no bootstrap figure is typed into the copy source', noLiteral,
+    noLiteral ? 'measured' : 'a literal survives in lib/model.ts');
+}
+
 // ---------------------------------------------------------------- the growth claim is measured, not typed
 // The page says the rate at which a protocol issues a token falls from a figure in the worst
 // seven-day-growth quartile to three figures in the quartiles above it. Those four numbers were

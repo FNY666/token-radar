@@ -1461,6 +1461,121 @@ for (const name of shots) {
     libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
 }
 
+// ---------------------------------------------------------------- the launch model's AUC, both labellings
+// MODEL.md: "The correction raised the AUC from 0.735: a model trained on the wrong labels was
+// taken on trust." The OLD labelling is the pre-G08 one -- y = isPreToken(p) ? 0 : 1 over the WHOLE
+// eligible universe, fitted by 400 iterations of plain gradient ascent with step 0.6*gradient/n.
+// The NEW labelling drops the product rows and fits to a flat gradient. This check re-derives
+// both, and refuses to let the shipped AUC drift from the measured one.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+  const VERSIONED = constOf('VERSIONED');
+  const WRAPPED_WORD = constOf('WRAPPED_WORD');
+  const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+  const AGE_BANDS = constOf('AGE_BANDS');
+  const TVL_BANDS = constOf('TVL_BANDS');
+  const UNKNOWN_AGE = constOf('UNKNOWN_AGE');
+  const clampGrowth = (g) => (g === null ? 0 : Math.max(-60, Math.min(120, g)));
+  const ageDays = (listedAt) => {
+    if (!listedAt) return null;
+    const a = Date.parse(snapshot.as_of + 'T00:00:00Z'), b = Date.parse(listedAt + 'T00:00:00Z');
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return Math.max(0, Math.floor((a - b) / 86400000));
+  };
+  const ageBandOf = (age) => { for (let i = 0; i < AGE_BANDS.length; i++) { const b = AGE_BANDS[i]; if (age >= b.lo && age < b.hi) return i; } return AGE_BANDS.length - 1; };
+  const tvlBandOf = (tvl) => { for (let i = 0; i < TVL_BANDS.length; i++) { const b = TVL_BANDS[i]; if (tvl >= b[0] && tvl < b[1]) return i; } return TVL_BANDS.length - 1; };
+  const launchRow = (p, age) => [1, ...AGE_BANDS.map((_, i) => (i === ageBandOf(age) ? 1 : 0)),
+    ...TVL_BANDS.map((_, i) => (i === tvlBandOf(p.tvl_usd) ? 1 : 0)), clampGrowth(p.change_7d) / 10];
+  const isPreToken = (p) => p.mcap_usd === null && p.gecko_id === null && p.symbol === null;
+  const issued = (p) => p.mcap_usd !== null || p.gecko_id !== null;
+  const eligible = snapshot.protocols.filter((p) =>
+    !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+    !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name));
+
+  // the OLD fit, verbatim from the pre-G08 source
+  const fitOld = (rows) => {
+    const k = rows[0].x.length;
+    let beta = new Array(k).fill(0);
+    for (let iteration = 0; iteration < 400; iteration++) {
+      const gradient = new Array(k).fill(0);
+      for (const row of rows) {
+        let z = 0;
+        for (let j = 0; j < k; j++) z += beta[j] * row.x[j];
+        const error = row.y - 1 / (1 + Math.exp(-z));
+        for (let j = 0; j < k; j++) gradient[j] += error * row.x[j];
+      }
+      for (let j = 0; j < k; j++) beta[j] += (0.6 * gradient[j]) / rows.length;
+    }
+    return beta;
+  };
+  const aucWith = (rows, beta) => {
+    const positives = rows.filter((r) => r.y === 1);
+    const negatives = rows.filter((r) => r.y === 0);
+    if (!positives.length || !negatives.length) return 0.5;
+    let hits = 0;
+    for (const positive of positives) {
+      let zp = 0; for (let j = 0; j < positive.x.length; j++) zp += beta[j] * positive.x[j];
+      for (const negative of negatives) {
+        let zn = 0; for (let j = 0; j < negative.x.length; j++) zn += beta[j] * negative.x[j];
+        hits += zp > zn ? 1 : zp === zn ? 0.5 : 0;
+      }
+    }
+    return hits / (positives.length * negatives.length);
+  };
+
+  const oldRows = eligible.map((p) => {
+    const age = ageDays(p.listed_at) ?? UNKNOWN_AGE;
+    return { x: launchRow(p, age), y: isPreToken(p) ? 0 : 1 };
+  });
+  const oldAuc = aucWith(oldRows, fitOld(oldRows));
+  check('the old labelling AUC is 0.735', Math.abs(oldAuc - 0.735) < 0.001, oldAuc.toFixed(4));
+
+  // the NEW labelling, fitted the way the library fits: to a flat gradient
+  const universe = eligible.filter((p) => !(p.symbol !== null && !issued(p)));
+  const newRows = universe.map((p) => {
+    const age = ageDays(p.listed_at) ?? UNKNOWN_AGE;
+    return { x: launchRow(p, age), y: issued(p) ? 1 : 0 };
+  });
+  const fitNew = (rows) => {
+    const k = rows[0].x.length;
+    let beta = new Array(k).fill(0);
+    for (let iteration = 0; iteration < 200000; iteration++) {
+      const gradient = new Array(k).fill(0);
+      for (const row of rows) {
+        let z = 0;
+        for (let j = 0; j < k; j++) z += beta[j] * row.x[j];
+        const error = row.y - 1 / (1 + Math.exp(-z));
+        for (let j = 0; j < k; j++) gradient[j] += error * row.x[j];
+      }
+      let norm = 0;
+      for (let j = 0; j < k; j++) norm += gradient[j] * gradient[j];
+      if (Math.sqrt(norm) < 1e-6) break;
+      for (let j = 0; j < k; j++) beta[j] += (0.6 * gradient[j]) / rows.length;
+    }
+    return beta;
+  };
+  const newAuc = aucWith(newRows, fitNew(newRows));
+  check('the corrected labelling AUC is 0.753', Math.abs(newAuc - 0.753) < 0.001, newAuc.toFixed(4));
+  check('the shipped AUC is the measured one', Math.abs(cal.launch_auc - newAuc) < 0.001,
+    `published ${cal.launch_auc} measured ${newAuc.toFixed(4)}`);
+  check('the correction raised the AUC', newAuc > oldAuc, `${oldAuc.toFixed(4)} -> ${newAuc.toFixed(4)}`);
+
+  // and the other figures MODEL.md states about the same fit
+  check('the fitted coefficients are 4.4042 and -0.6443',
+    Math.abs(cal.value_beta[0] - 4.4042) < 0.0001 && Math.abs(cal.value_beta[1] + 0.6443) < 0.0001,
+    cal.value_beta.map((v) => v.toFixed(4)).join(', '));
+  check('the in-sample median error is 0.337', Math.abs(cal.mae_log10 - 0.337) < 0.0005, String(cal.mae_log10));
+}
+
 // ---------------------------------------------------------------- the base rate and the shrinkage are measured
 // MODEL.md claims three things about the category correction that were never re-derived:
 //   "the base rate falls from 55.0% to 35.6%" (a 19.3-point gap)

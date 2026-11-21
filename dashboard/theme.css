@@ -69,7 +69,12 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 .controls .spacer{flex:1 1 auto}
 .controls button.ghost{background:transparent;color:var(--i2);padding:var(--b) var(--c)}
 .controls button.ghost:hover{color:var(--ink);border-color:var(--i3)}
-.table-wrap{overflow-x:auto;overflow-y:clip}
+/* The board is nine columns wide and cannot fit a narrow phone. A scroll the reader cannot see
+   is a scroll the reader does not know to make, so the wrapper paints a shadow on whichever
+   edge still has table beyond it: the shadows are fixed to the wrapper, and the two opaque
+   covers are attached to the SCROLLING content and slide away, uncovering the shadow. The
+   covers are fully opaque across the shadow's own width, so they hide it completely. */
+.table-wrap{overflow-x:auto;overflow-y:clip;background-image:linear-gradient(to right,var(--panel),var(--panel)),linear-gradient(to left,var(--panel),var(--panel)),linear-gradient(to right,var(--shadow),transparent),linear-gradient(to left,var(--shadow),transparent);background-position:left center,right center,left center,right center;background-repeat:no-repeat;background-size:16px 100%,16px 100%,16px 100%,16px 100%;background-attachment:local,local,scroll,scroll}
 table{width:100%;border-collapse:collapse}
 thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--c);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
 thead th button{background:none;border:none;padding:0;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit}
@@ -173,4 +178,8 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .chips{display:flex;flex-wrap:wrap;gap:var(--a);margin-top:var(--b)}
 .chip-static{background:var(--p2);color:var(--i2);border:var(--bl)}
 @media (max-width: 1000px){.hero-grid{grid-template-columns:1fr}.brand-tag{display:none}}
+/* iOS Safari zooms the whole viewport when a focused input's text is under 16px, and it never
+   zooms back out, so the text fields hold 16px on the narrow viewports where the zoom happens
+   and drop back to the page's own 14px above them, where no zoom occurs. */
+@media (max-width: 1000px){.controls .q,.controls select{font-size:16px}}
 @media (max-width: 420px){.kpis{grid-template-columns:1fr}}

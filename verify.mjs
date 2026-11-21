@@ -1461,6 +1461,55 @@ for (const name of shots) {
     libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
 }
 
+// ---------------------------------------------------------------- the universe's counts, and the board's
+// MODEL.md states the shape of the snapshot: 758 protocols, 433 eligible, 195 on the board,
+// 40 of them the house's watchlist, 26 categories in the cohort's correction table, 21 of them
+// with three members or fewer, 11 with exactly one, and 35 protocols with no first-tracked date.
+// This check re-derives every one of them from the snapshot and the published calibration.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+  const rows = data.rows ?? data.board ?? [];
+
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+  const VERSIONED = constOf('VERSIONED');
+  const WRAPPED_WORD = constOf('WRAPPED_WORD');
+  const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+  const issued = (p) => p.mcap_usd !== null || p.gecko_id !== null;
+  const isPreToken = (p) => !issued(p) && p.symbol === null;
+  const isProduct = (p) => p.symbol !== null && !issued(p);
+  const eligible = snapshot.protocols.filter((p) =>
+    !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+    !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name));
+
+  check('the snapshot holds 758 protocols', snapshot.protocols.length === 758, `${snapshot.protocols.length}`);
+  check('the eligible universe is 433 of them', eligible.length === 433, `${eligible.length}`);
+  check('the board holds 195 rows', rows.length === 195, `${rows.length}`);
+
+  const onWatchlist = rows.filter((r) => r.on_watchlist).length;
+  check('the house watchlist holds 40 protocols', snapshot.watchlist.length === 40, `${snapshot.watchlist.length}`);
+  check('all 40 watchlist protocols are on the board', onWatchlist === 40, `${onWatchlist}`);
+
+  const categoryNames = Object.keys(cal.category_log);
+  check('the cohort correction table names 26 categories', categoryNames.length === 26, `${categoryNames.length}`);
+  const sizes = categoryNames.map((k) => cal.category_sizes[k]);
+  const thin = sizes.filter((n) => n <= 3).length;
+  const single = sizes.filter((n) => n === 1).length;
+  check('21 of the 26 categories have three cohort members or fewer', thin === 21, `${thin}`);
+  check('11 of them have exactly one', single === 11, `${single}`);
+
+  // the protocols with no first-tracked date
+  const untrackedBoard = rows.filter((r) => r.age_days === null || r.age_days === undefined).length;
+  check('seven board rows have no first-tracked date', untrackedBoard === 7, `${untrackedBoard}`);
+  check('35 protocols in the launch universe have no first-tracked date', cal.untracked === 35, `${cal.untracked}`);
+}
+
 // ---------------------------------------------------------------- the launch model's AUC, both labellings
 // MODEL.md: "The correction raised the AUC from 0.735: a model trained on the wrong labels was
 // taken on trust." The OLD labelling is the pre-G08 one -- y = isPreToken(p) ? 0 : 1 over the WHOLE

@@ -62,7 +62,7 @@ function byName(a, b) { return a.name < b.name ? -1 : 1; }
   var head = el('thead', null, [
    el('tr', null, [
     // The rank column shows "#", but a screen reader reads the header's text, so the button
-    // carries the name and the glyph is only its visible half.
+    // carries the name.
     sortHeader('rank', '#', false, 1, L.rank),
     sortHeader('name', 'Protocol', false, -1),
     el('th', { scope: 'col', text: 'Scope' }),

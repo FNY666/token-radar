@@ -262,6 +262,39 @@ function clampGrowth(growth: number | null): number {
   return Math.max(-60, Math.min(120, growth));
 }
 
+/**
+ * The rate at which each seven-day-growth quartile of a population issues a token of its own,
+ * worst growth first, as a fraction.
+ *
+ * Two rules decide the answer and both are stated here because the numbers on the page depend on
+ * them. A row with no growth figure is not a row with bad growth — it is a row the snapshot did
+ * not measure — so it sorts LAST rather than into the worst bucket, which would let two
+ * unmeasured rows drag the worst quartile's rate down. And the quartiles are cut by a plain
+ * floor of a quarter of the rows, so any rows left over by the cut fall into the top quartile
+ * rather than being dropped: a reader who divides the population by four must still find every
+ * row accounted for in one of the four rates.
+ */
+function growthQuartileRates(rows: SnapshotProtocol[]): number[] {
+  const sorted = rows.slice().sort((a, b) => {
+    const av = a.change_7d === null ? Infinity : a.change_7d;
+    const bv = b.change_7d === null ? Infinity : b.change_7d;
+    return av - bv;
+  });
+  const quarter = Math.floor(sorted.length / 4);
+  const groups = [
+    sorted.slice(0, quarter),
+    sorted.slice(quarter, 2 * quarter),
+    sorted.slice(2 * quarter, 3 * quarter),
+    sorted.slice(3 * quarter),
+  ];
+  return groups.map((g) => (g.length ? g.filter(issuedOwnToken).length / g.length : 0));
+}
+
+/** A growth-quartile rate as the page prints it: a percentage to one decimal place. */
+function growthPct(rate: number): string {
+  return (rate * 100).toFixed(1) + '%';
+}
+
 /** The value model's row: [1, log10 TVL]. */
 function valueRow(p: SnapshotProtocol): number[] {
   return [1, Math.log10(Math.max(p.tvl_usd, 1))];
@@ -337,6 +370,12 @@ export interface Calibration {
   universe_size: number;
   /** How many product rows were left out of the launch fit: a ticker with no market cap or id of its own. */
   product_rows: number;
+  /**
+   * The rate at which each seven-day-growth quartile of the launch universe issues a token,
+   * worst growth first, as a fraction. This is what the page's growth claim is made of, and it
+   * is measured here rather than typed in, so the sentence cannot drift from the data.
+   */
+  growth_quartiles: number[];
   /** The smallest launch probability the model will report. */
   launch_floor: number;
 }
@@ -380,8 +419,8 @@ export interface Calibration {
  *
  * Growth was measured, not assumed. It earns its place in the LAUNCH probability, where the
  * effect is strong and identified: the observed rate at which a protocol issues a token falls
- * from 58.7% in the worst seven-day-growth quartile to 40.0%, 26.7% and 17.9% in the three
- * above it, and the launch fit's growth coefficient is negative in 300 of 300 bootstrap
+ * by roughly half from the worst seven-day-growth quartile to the best, and the launch fit's
+ * growth coefficient is negative in 300 of 300 bootstrap
  * resamples (95% interval -1.00 to -0.21). It earns NO place in the market-cap ratio: on this
  * cohort the coefficient's sign is set by the weight's exponent rather than by the data (plain
  * least squares gives -0.060, the shipped weight gives +0.059), no bootstrap interval separates
@@ -579,6 +618,7 @@ export function calibrate(snapshot: Snapshot): Calibration {
     launch_auc: launch.auc,
     universe_size: universe.length,
     product_rows: eligible.length - universe.length,
+    growth_quartiles: growthQuartileRates(universe),
     launch_floor: 0.05,
   };
 }
@@ -752,6 +792,8 @@ export interface RadarData {
     universe_size: number;
     /** The product rows left out of the launch fit: a ticker with no market cap or id of its own. */
     product_rows: number;
+    /** The rate at which each growth quartile of the launch universe issues a token, worst first. */
+    growth_quartiles: number[];
   };
   rows: RadarRow[];
   live: LiveRow[];
@@ -1525,7 +1567,9 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       '\n' +
       'Growth enters through the launch odds, where it is measured and strong: across the ' +
       cal.universe_size + ' protocols the launch model is fitted on, the rate at which a protocol\n' +
-      'issues falls from 58.7% in the worst seven-day-growth quartile to 40.0%, 26.7% and 17.9%\n' +
+      'issues falls from ' + growthPct(cal.growth_quartiles[0]) + ' in the worst seven-day-growth quartile to ' +
+      growthPct(cal.growth_quartiles[1]) + ', ' + growthPct(cal.growth_quartiles[2]) + ' and ' +
+      growthPct(cal.growth_quartiles[3]) + '\n' +
       'in the three above it, and the launch fit\'s growth coefficient is negative in 300 of 300\n' +
       'bootstrap resamples (95% interval -1.00 to -0.21). It is not in the ratio, because on the\n' +
       'cohort of protocols whose tokens already trade it cannot be told from noise: shuffle the\n' +
@@ -1648,6 +1692,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       cohort_size: cal.cohort_size,
       universe_size: cal.universe_size,
       product_rows: cal.product_rows,
+      growth_quartiles: cal.growth_quartiles.map((q) => Math.round(q * 1e4) / 1e4),
       mae_log10: Math.round(cal.mae_log10 * 1000) / 1000,
       launch_auc: Math.round(cal.launch_auc * 1000) / 1000,
     },

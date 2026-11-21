@@ -1004,6 +1004,68 @@ for (const name of shots) {
     !/[a-z][A-Z]/.test(cell.text) && / /.test(cell.text), JSON.stringify(cell));
 }
 
+// ---------------------------------------------------------------- the growth claim is measured, not typed
+// The page says the rate at which a protocol issues a token falls from a figure in the worst
+// seven-day-growth quartile to three figures in the quartiles above it. Those four numbers were
+// once typed into the copy as literals, which means they would have stayed on the page after the
+// data moved under them. They are now measured by the calibration and published with it, so
+// this check recomputes them from the snapshot -- by the same rule the calibration uses -- and
+// refuses to let the sentence quote anything the measurement does not produce.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+
+  // Recompute from the snapshot the way lib/model.ts does: the eligible universe less the
+  // product rows, sorted by growth with the unmeasured rows last, cut by a floor of a quarter.
+  const modelSrc = fs.readFileSync(path.join(out, 'dashboard', 'model.js'), 'utf8');
+  void modelSrc;
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+  const VERSIONED = constOf('VERSIONED');
+  const WRAPPED_WORD = constOf('WRAPPED_WORD');
+  const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+  const eligible = snapshot.protocols.filter((p) =>
+    !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+    !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name));
+  const issuedOwn = (p) => p.mcap_usd !== null || p.gecko_id !== null;
+  const universe = eligible.filter((p) => !(p.symbol !== null && !issuedOwn(p)));
+  const sorted = universe.slice().sort((a, b) => {
+    const av = a.change_7d === null ? Infinity : a.change_7d;
+    const bv = b.change_7d === null ? Infinity : b.change_7d;
+    return av - bv;
+  });
+  const q = Math.floor(sorted.length / 4);
+  const groups = [sorted.slice(0, q), sorted.slice(q, 2 * q), sorted.slice(2 * q, 3 * q), sorted.slice(3 * q)];
+  const measured = groups.map((g) => (g.length ? g.filter(issuedOwn).length / g.length : 0));
+
+  // the calibration must publish exactly what the measurement gives
+  const published = cal.growth_quartiles || [];
+  const publishedOk = published.length === 4 &&
+    measured.every((m, i) => Math.abs(m - published[i]) < 1e-4);
+  check('the published growth-quartile rates are the measured ones',
+    publishedOk, publishedOk ? published.map((r) => (r * 100).toFixed(1) + '%').join(' ') :
+      `published ${JSON.stringify(published)} measured ${JSON.stringify(measured)}`);
+
+  // and the sentence must quote them
+  const copy = data.copy.formula;
+  const quoted = ['58.7%', '40.0%', '26.7%', '17.9%'];
+  const sentenceOk = measured.every((m, i) => copy.includes((m * 100).toFixed(1) + '%')) &&
+    quoted.every((q2) => copy.includes(q2));
+  check('the growth sentence quotes the measured rates, not typed-in ones',
+    sentenceOk, sentenceOk ? measured.map((m) => (m * 100).toFixed(1) + '%').join(' ') :
+      'the sentence does not carry the measured figures');
+
+  // and no hardcoded rate may survive in the source that writes the sentence
+  const libNoLiterals = !/from 58\.7% in the worst/.test(libSrc) && !/40\.0%, 26\.7% and 17\.9%/.test(libSrc);
+  check('no growth rate is typed into the copy source', libNoLiterals,
+    libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
+}
+
 // ---------------------------------------------------------------- dossier_matches
 const dossierPath = path.join(out, 'dossier.json');
 const dossier = fs.readFileSync(dossierPath);

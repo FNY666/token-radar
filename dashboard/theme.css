@@ -2,7 +2,7 @@
 html{color-scheme:dark;overflow-x:clip}
 @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.55 var(--font);-webkit-font-smoothing:antialiased;overflow-x:clip}
-h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-0.015em;text-wrap:balance}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-0.015em;text-wrap:balance}
 p{margin:0}
 button,input,select{font:inherit;color:inherit}
 /* The tap highlight is set deliberately rather than left to the browser's default blue: on a
@@ -35,7 +35,7 @@ main{padding:0 var(--e) var(--g)}
 .hero{padding:var(--d) 0 var(--c);border-bottom:var(--bl)}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,0.5fr);gap:var(--e)}
 .hero h1{font-size:28px;line-height:1.12;letter-spacing:-0.025em;color:var(--ink)}
-.hero h1 + .lede::first-line,.kpi .v.gold,.peer .pv,.tag.wl,.prose code{color:var(--value)}
+.hero h1 + .lede::first-line,.kpi .v.gold,.peer .pv,.tag.wl{color:var(--value)}
 .tag.wl{border-color:var(--v45)}
 thead th .arrow{color:var(--value);margin-left:var(--a)}
 .hero p.lede{margin-top:var(--b);color:var(--i2);max-width:74ch;font-size:14px}

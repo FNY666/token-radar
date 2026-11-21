@@ -1824,7 +1824,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     ' sit above it and are off the list for another reason: all ' + facts.off_list_above_floor_no_reason +
     ' of them clear the house\'s own structural test, and the snapshot names no rule that keeps any of them out — the watchlist is a list of ' +
     snapshot.watchlist.length + ' names the snapshot carries, not a rule the board can apply. ' +
-    'The other ' + offListBelow + ' board rows are off the list because they sit below that floor: the radar keeps them, because the floor is a house rule and the point of a radar is the protocol that is about to cross it.';
+    'The other ' + offListBelow + ' sit below that floor; the radar keeps them, because the floor is a house rule and the point of a radar is the protocol that is about to cross it.';
   const reasonNames: Record<string, string> = {
     exchanges: 'exchange venues', bridges: 'bridges', staking: 'staking wrappers',
     versioned: 'versioned pools', wrapped: 'wrapped or staked names',
@@ -1848,9 +1848,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       ' off the list. The watchlist is a floor, never a ceiling. ' + sep + ' ' +
       'A further ' + facts.off_total + ' clear the ' + FLOOR + ' floor with no token and are still left off: ' +
       offText + ' — a venue, a bridge or a wrapper of someone else\'s token, not a protocol of its own. ' +
-      'The model is fitted at run time on the snapshot itself — the ' + cal.cohort_size +
-      ' protocols whose tokens <strong>already trade</strong> teach it what a market cap is worth against TVL; ' +
-      'the ' + cal.universe_size + ' eligible protocols that are not a product of someone else\'s token teach it how often a protocol of a given age and size issues one at all.',
+      'Every figure here is fitted at run time on the snapshot itself; the <strong>The model</strong> tab shows the arithmetic.',
     live_lede:
       'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol. ' +
       'This tab holds the other side of the line: the ' + live.length + ' largest of the ' + facts.live_candidates +

@@ -31,7 +31,8 @@ cohort — 75 protocols after the eligibility rules below — is the calibration
 redescending-weight least squares fits log(market cap over TVL) against log TVL, with a
 per-category correction shrunk toward the global mean. The form was measured, not assumed: over 300
 random five-fold splits the growth term cannot be told from noise in this fit, so it is not in it
-(0.415 median absolute error in log10 dollars held out from the fit). A second logistic fit, on the
+(0.414 median absolute error in log10 dollars held out from the fit over 300 random five-fold
+splits). A second logistic fit, on the
 303-protocol eligible universe that is left once the product rows are taken out, gives
 the chance a protocol of a given age and size issues a token of its own (AUC 0.753), and growth
 is strongly identified there. The board ranks

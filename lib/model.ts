@@ -295,6 +295,90 @@ function growthPct(rate: number): string {
   return (rate * 100).toFixed(1) + '%';
 }
 
+/**
+ * The shipped model's error when it is held out from the fit: the median absolute error, in
+ * log10 dollars, of a prediction the fit did not see.
+ *
+ * This is the model's own error, not the line's: each fold refits the line AND the shrunk
+ * category correction on four folds and predicts the fifth with both, because that is the model
+ * the board prices with. The splits are random, and the figure is the median of the pooled
+ * held-out errors over them, so one unlucky split cannot move it.
+ *
+ * The shuffle is a plain linear congruential generator seeded from a counter, so the measurement
+ * is the same every time the page is built: a number that changed on every build would be a
+ * number nobody could check.
+ */
+function heldOutError(cohort: SnapshotProtocol[], splits: number): number {
+  if (cohort.length === 0) return 0;
+  const FOLDS = 5;
+  const pooled: number[] = [];
+  for (let seed = 1; seed <= splits; seed++) {
+    // The shuffle: a linear congruential generator over the cohort's own order.
+    const order = cohort.map((_, i) => i);
+    let s = (seed >>> 0) * 2654435761 >>> 0;
+    for (let i = order.length - 1; i > 0; i--) {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      const j = Math.floor((s / 4294967296) * (i + 1));
+      const t = order[i]!;
+      order[i] = order[j]!;
+      order[j] = t;
+    }
+    for (let f = 0; f < FOLDS; f++) {
+      // The folds are POSITIONS in the shuffled order, not the cohort's own indices: the whole
+      // point of the shuffle is that neighbouring rows land on different sides of the fold.
+      const train = order.filter((_, i) => i % FOLDS !== f).map((i) => cohort[i]!);
+      const test = order.filter((_, i) => i % FOLDS === f).map((i) => cohort[i]!);
+      if (train.length === 0 || test.length === 0) continue;
+      const value = fitValueModel(train);
+      const correction = categoryCorrections(train, value.beta);
+      for (const p of test) {
+        let acc = 0;
+        for (let j = 0; j < value.beta.length; j++) acc += value.beta[j]! * valueRow(p)[j]!;
+        const key = p.category ?? '(none)';
+        const cat = correction.get(key) ?? correction.default;
+        const truth = Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1));
+        pooled.push(Math.abs(truth - acc - cat));
+      }
+    }
+  }
+  return median(pooled);
+}
+
+/**
+ * The per-category correction, shrunk toward the global mean: a category with one live protocol
+ * does not get to speak for itself. The winsorizing, the prior and the shrinkage are the ones
+ * the calibration uses, so a held-out fold is corrected exactly as the full fit is.
+ */
+function categoryCorrections(
+  cohort: SnapshotProtocol[],
+  beta: number[],
+): { get: (key: string) => number | undefined; default: number } {
+  const residualOf = (p: SnapshotProtocol): number => {
+    let acc = 0;
+    for (let j = 0; j < beta.length; j++) acc += beta[j]! * valueRow(p)[j]!;
+    return Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1)) - acc;
+  };
+  const byCategory = new Map<string, number[]>();
+  for (const p of cohort) {
+    const key = p.category ?? '(none)';
+    const list = byCategory.get(key) ?? [];
+    list.push(residualOf(p));
+    byCategory.set(key, list);
+  }
+  const allResiduals = cohort.map(residualOf);
+  const lo = quantile(allResiduals, 0.1);
+  const hi = quantile(allResiduals, 0.9);
+  const clip = (v: number): number => Math.max(lo, Math.min(hi, v));
+  const globalResidual = median(allResiduals.map(clip));
+  const shrinkage = 4;
+  const out = new Map<string, number>();
+  for (const [key, list] of byCategory) {
+    const clipped = list.map(clip);
+    out.set(key, (clipped.length * median(clipped) + shrinkage * globalResidual) / (clipped.length + shrinkage));
+  }
+  return { get: (key: string) => out.get(key), default: globalResidual };
+}
+
 /** The value model's row: [1, log10 TVL]. */
 function valueRow(p: SnapshotProtocol): number[] {
   return [1, Math.log10(Math.max(p.tvl_usd, 1))];
@@ -376,6 +460,12 @@ export interface Calibration {
    * is measured here rather than typed in, so the sentence cannot drift from the data.
    */
   growth_quartiles: number[];
+  /**
+   * The shipped model's median absolute error, in log10 dollars, when it is held out from the fit
+   * over 300 random five-fold splits. The page states this beside the in-sample error, because
+   * the in-sample error flatters the model and a reader is owed the worse number too.
+   */
+  held_out_mae_log10: number;
   /** The smallest launch probability the model will report. */
   launch_floor: number;
 }
@@ -619,6 +709,7 @@ export function calibrate(snapshot: Snapshot): Calibration {
     universe_size: universe.length,
     product_rows: eligible.length - universe.length,
     growth_quartiles: growthQuartileRates(universe),
+    held_out_mae_log10: heldOutError(cohort, 300),
     launch_floor: 0.05,
   };
 }
@@ -794,6 +885,8 @@ export interface RadarData {
     product_rows: number;
     /** The rate at which each growth quartile of the launch universe issues a token, worst first. */
     growth_quartiles: number[];
+    /** The model's median absolute error, in log10 dollars, held out from the fit. */
+    held_out_mae_log10: number;
   };
   rows: RadarRow[];
   live: LiveRow[];
@@ -1542,8 +1635,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       ' protocols whose tokens trade, each with a market cap and TVL of a million dollars or more. ' +
       'Half land within a factor of ' + Math.pow(10, cal.mae_log10).toFixed(1) + ' of the model. ' +
       'That is measured on the rows the model was fitted on, so it flatters it: held out from the ' +
-      'fit, the same form scores ' + '0.415' + ' on a median row — within a factor of ' +
-      Math.pow(10, 0.415).toFixed(1) + '. The fit is a redescending-weight least squares, so no ' +
+      'fit over 300 random five-fold splits, the same form scores ' + cal.held_out_mae_log10.toFixed(3) + ' on a median row — within a factor of ' +
+      Math.pow(10, cal.held_out_mae_log10).toFixed(1) + '. The fit is a redescending-weight least squares, so no ' +
       'single row can drag it: the worst single row moves the intercept by 0.410 log10 under a ' +
       'plain least squares, and by 0.273 log10 under the weight the model uses. The row that moves ' +
       'a plain fit most — the one priced at four hundred times its deposits — moves the ' +
@@ -1694,6 +1787,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       product_rows: cal.product_rows,
       growth_quartiles: cal.growth_quartiles.map((q) => Math.round(q * 1e4) / 1e4),
       mae_log10: Math.round(cal.mae_log10 * 1000) / 1000,
+      held_out_mae_log10: Math.round(cal.held_out_mae_log10 * 1000) / 1000,
       launch_auc: Math.round(cal.launch_auc * 1000) / 1000,
     },
     rows: board.map((r) => ({

@@ -1004,6 +1004,131 @@ for (const name of shots) {
     !/[a-z][A-Z]/.test(cell.text) && / /.test(cell.text), JSON.stringify(cell));
 }
 
+// ---------------------------------------------------------------- the held-out error is measured, not typed
+// The page says the value model, held out from the fit, scores 0.414 on a median row. That
+// number was a string literal in the copy: the only remaining number on the page that nothing
+// measured. It is now computed by the calibration -- 300 random five-fold splits, each fold
+// refitting the line AND the shrunk category correction, because that is the model the board
+// prices with -- and published with it. This check recomputes it from the snapshot, independently
+// of the library, and refuses to let the copy quote anything else.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const cal = data.calibration;
+
+  const median = (v) => { if (!v.length) return 0; const s = [...v].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const quantile = (v, q) => { const s = [...v].sort((a, b) => a - b); const at = (s.length - 1) * q; const lo = Math.floor(at), hi = Math.ceil(at); return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (at - lo); };
+  const solve = (matrix, rhs) => {
+    const n = rhs.length;
+    const m = matrix.map((row, i) => row.concat([rhs[i]]));
+    for (let c = 0; c < n; c++) {
+      let pivot = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(m[r][c]) > Math.abs(m[pivot][c])) pivot = r;
+      [m[c], m[pivot]] = [m[pivot], m[c]];
+      if (Math.abs(m[c][c]) < 1e-10) continue;
+      for (let rr = 0; rr < n; rr++) {
+        if (rr === c) continue;
+        const f = m[rr][c] / m[c][c];
+        for (let k = c; k <= n; k++) m[rr][k] -= f * m[c][k];
+      }
+    }
+    return m.map((row, i) => row[n] / (row[i] || 1));
+  };
+  const issued = (p) => (p.mcap_usd !== null && p.mcap_usd !== undefined) || (p.gecko_id !== null && p.gecko_id !== undefined);
+  // The cohort comes from the SNAPSHOT, not from the page's published universe: the published
+  // rows carry no category, and the category correction is half of what is being held out.
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const constOf = (name) => {
+    const m = libSrc.match(new RegExp('const ' + name + '[^=]*=\\s*([\\s\\S]*?);\\n'));
+    return m ? eval(m[1]) : undefined;
+  };
+  const DERIVATIVE_CATEGORIES = constOf('DERIVATIVE_CATEGORIES');
+  const VERSIONED = constOf('VERSIONED');
+  const WRAPPED_WORD = constOf('WRAPPED_WORD');
+  const EXCHANGE_NAME = constOf('EXCHANGE_NAME');
+  const eligibleRows = snapshot.protocols.filter((p) =>
+    !(p.category !== null && DERIVATIVE_CATEGORIES.has(p.category)) &&
+    !VERSIONED.test(p.name) && !WRAPPED_WORD.test(p.name) && !EXCHANGE_NAME.test(p.name));
+  const cohort = eligibleRows.filter((p) => {
+    const iss = issued(p);
+    const product = p.symbol !== null && p.symbol !== undefined && !iss;
+    return !product && iss && (p.mcap_usd ?? 0) >= 1e6 && p.tvl_usd >= 1e6;
+  });
+  const Y = (p) => Math.log10(Math.max(p.mcap_usd ?? 1, 1) / Math.max(p.tvl_usd, 1));
+  const X = (p) => [1, Math.log10(Math.max(p.tvl_usd, 1))];
+  const fitLine = (rows) => {
+    const R = rows.map((p) => ({ x: X(p), y: Y(p) }));
+    const k = 2;
+    let beta = new Array(k).fill(0);
+    for (let it = 0; it < 24; it++) {
+      const residual = (i) => { let a = 0; for (let j = 0; j < k; j++) a += beta[j] * R[i].x[j]; return R[i].y - a; };
+      const scale = 1.4826 * median(R.map((_, i) => Math.abs(residual(i))));
+      const M = Array.from({ length: k }, () => new Array(k).fill(0));
+      const B = new Array(k).fill(0);
+      R.forEach((row, i) => {
+        const r = Math.abs(residual(i));
+        const w = r <= 1.5 * scale ? 1 : (1.5 * scale) / r;
+        for (let a = 0; a < k; a++) { for (let b = 0; b < k; b++) M[a][b] += w * w * row.x[a] * row.x[b]; B[a] += w * w * row.x[a] * row.y; }
+      });
+      for (let a = 0; a < k; a++) M[a][a] += 1e-6;
+      beta = solve(M, B);
+    }
+    return beta;
+  };
+  const corrections = (train, beta) => {
+    const res = (p) => Y(p) - (beta[0] + beta[1] * X(p)[1]);
+    const byCat = new Map();
+    for (const p of train) { const k = p.category ?? '(none)'; const l = byCat.get(k) || []; l.push(res(p)); byCat.set(k, l); }
+    const all = train.map(res);
+    const lo = quantile(all, 0.1), hi = quantile(all, 0.9);
+    const clip = (v) => Math.max(lo, Math.min(hi, v));
+    const global = median(all.map(clip));
+    const out = new Map();
+    for (const [k, l] of byCat) { const c = l.map(clip); out.set(k, (c.length * median(c) + 4 * global) / (c.length + 4)); }
+    return { out, global };
+  };
+  // the library's own shuffle, reproduced from the source
+  const heldOut = (splits) => {
+    const pooled = [];
+    for (let seed = 1; seed <= splits; seed++) {
+      const order = cohort.map((_, i) => i);
+      let s = (seed >>> 0) * 2654435761 >>> 0;
+      for (let i = order.length - 1; i > 0; i--) {
+        s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+        const j = Math.floor((s / 4294967296) * (i + 1));
+        const t = order[i]; order[i] = order[j]; order[j] = t;
+      }
+      for (let f = 0; f < 5; f++) {
+        const train = order.filter((_, i) => i % 5 !== f).map((i) => cohort[i]);
+        const test = order.filter((_, i) => i % 5 === f).map((i) => cohort[i]);
+        if (!train.length || !test.length) continue;
+        const b = fitLine(train);
+        const cc = corrections(train, b);
+        for (const p of test) {
+          const pred = b[0] + b[1] * X(p)[1] + (cc.out.get(p.category ?? '(none)') ?? cc.global);
+          pooled.push(Math.abs(Y(p) - pred));
+        }
+      }
+    }
+    return median(pooled);
+  };
+  const measured = heldOut(300);
+  const published = cal.held_out_mae_log10;
+  check('the published held-out error is the measured one',
+    published !== undefined && Math.abs(measured - published) < 0.002,
+    `published ${published} measured ${measured.toFixed(4)}`);
+
+  // and the sentence must quote it
+  const note = data.copy.value_fit_note;
+  check('the page quotes the measured held-out error, not a typed-in one',
+    note.includes(measured.toFixed(3)) && !/scores 0\.415 on a median row/.test(note),
+    note.includes(measured.toFixed(3)) ? measured.toFixed(3) : 'the sentence does not carry the measured figure');
+
+  // and no literal may survive in the source that writes the sentence
+  const noLiteral = !/scores ' \+ '0\.415'/.test(libSrc) && !/Math\.pow\(10, 0\.415\)/.test(libSrc);
+  check('no held-out error is typed into the copy source', noLiteral, noLiteral ? 'measured' : 'a literal survives');
+}
+
 // ---------------------------------------------------------------- the growth claim is measured, not typed
 // The page says the rate at which a protocol issues a token falls from a figure in the worst
 // seven-day-growth quartile to three figures in the quartiles above it. Those four numbers were

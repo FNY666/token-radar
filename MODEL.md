@@ -136,7 +136,9 @@ under the random scheme and 214–231 under the hash scheme.
 
 **The error the board publishes is measured, and it flatters the model.** In-sample, the median
 absolute error of the model the board prices with is **0.337 log10** — a factor of 2.2 on the
-conditional value. Held out from the fit, the same form scores 0.415 on a median row, a factor of
+conditional value. Held out from the fit over 300 random five-fold splits — each fold refitting the
+line *and* the shrunk category correction on four folds and predicting the fifth with both, which is
+the model the board prices with — the same form scores **0.414 log10** on a median row, a factor of
 2.6. The dashboard's model page says both, rather than quoting only the flattering one.
 
 **The category correction.** Each category's residual is added to the fit, but three guards keep a

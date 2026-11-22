@@ -1496,34 +1496,50 @@ function chainOf(p: SnapshotProtocol): string {
 
 /**
  * The TVL ladder: how deep a position the protocol's own book asks for. The bigger the book, the
- * deeper the position -- this is the FLOOR of the capital, not the whole of it.
+ * deeper the position. The shape is fixed -- a book 40 times the size gets a stake 8 times deeper,
+ * which is the entry's own judgment about depth -- and the SCALE of the ladder is set so that the
+ * plan's gas is a small share of the stake.
+ *
+ * The scale is not a guess: it is the smallest multiple of the shape whose bottom step covers the
+ * most expensive gas bill the board can produce, so the deepest position any row asks for still
+ * pays for its own fees several times over. A row never gets more than its band asks for, and
+ * never less than its gas needs.
  */
-function tvlBandFor(p: SnapshotProtocol): number {
-  if (p.tvl_usd >= 1_000_000_000) return 400;
-  if (p.tvl_usd >= 250_000_000) return 250;
-  if (p.tvl_usd >= 100_000_000) return 150;
-  if (p.tvl_usd >= 50_000_000) return 100;
-  return 50;
+const CAPITAL_SHAPE: number[] = [50, 100, 150, 250, 400];
+/** The gas the plan spends at its most, over every board row: the ceiling the ladder must clear. */
+const WORST_GAS_BILL = 204;
+/** The share of the stake the gas may be at most. */
+const GAS_SHARE_CAP = 5;
+
+/** The band a TVL falls in: 0 is the smallest book, 4 the largest. */
+function capitalBandOf(p: SnapshotProtocol): number {
+  if (p.tvl_usd >= 1_000_000_000) return 4;
+  if (p.tvl_usd >= 250_000_000) return 3;
+  if (p.tvl_usd >= 100_000_000) return 2;
+  if (p.tvl_usd >= 50_000_000) return 1;
+  return 0;
 }
 
 /**
- * The capital a farm position needs: the TVL ladder's floor, raised until the plan's OWN gas bill
- * is a fifth of the stake.
+ * The capital one farm position needs: the TVL ladder's step for the protocol's book, raised until
+ * the plan's OWN gas bill is a fifth of the stake.
  *
  * The two numbers used to be fixed apart -- the capital from the TVL band, the gas from the
  * chain -- so a plan could tell a farmer to stake $50 and then spend $204 of gas on it: the gas
  * was four times the stake, and the plan read as though the position cost $50. The stake now has
  * to carry the gas the plan spends: the wallet, the setup, every weekly action, the claim and the
- * unwind. A fifth is the line: the gas is a real cost of a position, and a position whose fees
- * are a fifth of it is still a position, not a rounding error.
+ * unwind.
  *
- * The result stays a MULTIPLE OF FIFTY DOLLARS, so the number a reader sees is one they can fund,
- * and the ladder keeps its shape: the TVL band is still the floor every row is lifted from.
+ * Lifting each row by its OWN gas instead of lifting the ladder would break the ladder: a $28M
+ * protocol on Ethereum would get a deeper position than a $1.58B one, which is the opposite of
+ * what a ladder means. So the ladder is scaled once, by the worst gas bill the board can produce,
+ * and every row reads its step off it.
  */
 function capitalFor(p: SnapshotProtocol, gasTotal: number): number {
-  const floor = tvlBandFor(p);
-  const needed = Math.ceil((gasTotal * 5) / 50) * 50;
-  return Math.max(floor, needed);
+  const scale = Math.ceil((WORST_GAS_BILL * GAS_SHARE_CAP) / CAPITAL_SHAPE[0]!);
+  const band = CAPITAL_SHAPE[capitalBandOf(p)]! * scale;
+  const needed = Math.ceil((gasTotal * GAS_SHARE_CAP) / 50) * 50;
+  return Math.max(band, needed);
 }
 
 /** How long to hold, from the protocol's age: a protocol that has run longer without a token needs a longer window. */
@@ -1775,8 +1791,9 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       // The whole bill, in one line, so the reader can check the position against the gas it
       // spends instead of adding five separate costs up in their head. The plan spends gas at five
       // points -- the wallet, the setup, every weekly action, the claim and the unwind -- and the
-      // capital above is sized to carry that bill.
-      text: `Add the whole bill: the wallet, the setup, the weekly actions, the claim and the unwind come to about $${gasTotal} of gas over the ${weeks} weeks, which is about ${Math.round((gasTotal / capital) * 100)}% of the $${capital} stake.`,
+      // capital above is sized to carry that bill. The share is printed to a tenth of a percent,
+      // because "about 0%" is a number that reads as a mistake.
+      text: `Add the whole bill: the wallet, the setup, the weekly actions, the claim and the unwind come to about $${gasTotal} of gas over the ${weeks} weeks, which is about ${(gasTotal / capital * 100).toFixed(1)}% of the $${capital} stake.`,
       cost: `about $${gasTotal} of gas in all, and no other fee`,
       time: '2 minutes',
     },

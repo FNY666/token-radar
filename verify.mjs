@@ -1479,20 +1479,32 @@ for (const name of shots) {
     const m = libSrc.match(new RegExp('function ' + name + '\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}'));
     return m ? m[1] : '';
   };
-  const tvlBandFor = (p) => {
-    if (p.tvl_usd >= 1_000_000_000) return 400;
-    if (p.tvl_usd >= 250_000_000) return 250;
-    if (p.tvl_usd >= 100_000_000) return 150;
-    if (p.tvl_usd >= 50_000_000) return 100;
-    return 50;
+  // The capital ladder: the shape is fixed and the scale is set by the worst gas bill the board
+  // can produce. Read the shape and the scale out of the library's source, so this check cannot
+  // drift from the rule it checks.
+  const shapeMatch = libSrc.match(/const CAPITAL_SHAPE: number\[\] = \[([\s\S]*?)\];/);
+  const CAPITAL_SHAPE = shapeMatch
+    ? shapeMatch[1].split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n))
+    : [50, 100, 150, 250, 400];
+  const worstGasMatch = libSrc.match(/const WORST_GAS_BILL = (\d+);/);
+  const WORST_GAS_BILL = worstGasMatch ? Number(worstGasMatch[1]) : 204;
+  const capMatch = libSrc.match(/const GAS_SHARE_CAP = (\d+);/);
+  const GAS_SHARE_CAP = capMatch ? Number(capMatch[1]) : 5;
+  const capitalBandOf = (p) => {
+    if (p.tvl_usd >= 1_000_000_000) return 4;
+    if (p.tvl_usd >= 250_000_000) return 3;
+    if (p.tvl_usd >= 100_000_000) return 2;
+    if (p.tvl_usd >= 50_000_000) return 1;
+    return 0;
   };
-  // The capital the plan states: the TVL band, lifted until the plan's own gas bill is a fifth of
-  // it. The gas bill comes from the plan's OWN text -- its weekly gas and its window -- so this
+  // The capital the plan states: its ladder step, raised until the plan's own gas bill is a fifth
+  // of it. The gas bill comes from the plan's OWN text -- its weekly gas and its window -- so this
   // check reads the shipped numbers, not a second copy of the rule.
   const capitalFor = (p, gasTotal) => {
-    const floor = tvlBandFor(p);
-    const needed = Math.ceil((gasTotal * 5) / 50) * 50;
-    return Math.max(floor, needed);
+    const scale = Math.ceil((WORST_GAS_BILL * GAS_SHARE_CAP) / CAPITAL_SHAPE[0]);
+    const band = CAPITAL_SHAPE[capitalBandOf(p)] * scale;
+    const needed = Math.ceil((gasTotal * GAS_SHARE_CAP) / 50) * 50;
+    return Math.max(band, needed);
   };
   const holdDaysFor = (age) => {
     if (age === null) return 60;
@@ -1551,18 +1563,21 @@ for (const name of shots) {
         const share = gasTotal / capital;
         if (share > 0.25) gasOverQuarter++;
         if (share > worstGasShare) worstGasShare = share;
-        // the capital must still be at least the TVL band asks for
-        if (capital < tvlBandFor(protoOf.get(r.slug))) capFloorBad++;
+        // the capital must still be at least the ladder's own step for the book's size
+        const scale = Math.ceil((WORST_GAS_BILL * GAS_SHARE_CAP) / CAPITAL_SHAPE[0]);
+        if (capital < CAPITAL_SHAPE[capitalBandOf(protoOf.get(r.slug))] * scale) capFloorBad++;
         // and it must be a number a reader can actually fund
         if (capital % 50 !== 0) capOddBad++;
       }
     }
     // the plan's own bill line must state the gas total and the share of the stake
-    const bm = s.match(/come to about \$(\d+) of gas over the (\d+) weeks, which is about (\d+)% of the \$(\d+) stake/);
+    const bm = s.match(/come to about \$(\d+) of gas over the (\d+) weeks, which is about ([\d.]+)% of the \$(\d+) stake/);
     if (bm) {
       const gasTotal = gm ? Number(gm[1]) * (Number(gm[3]) + 4) : null;
       if (gasTotal === null || Number(bm[1]) !== gasTotal || Number(bm[2]) !== Number(gm[3])) billBad++;
-      else if (cm && (Number(bm[4]) !== Number(cm[1]) || Number(bm[3]) !== Math.round((gasTotal / Number(cm[1])) * 100))) billBad++;
+      else if (cm && (Number(bm[4]) !== Number(cm[1]) || Number(bm[3]) !== Number((gasTotal / Number(cm[1]) * 100).toFixed(1)))) billBad++;
+      // and the share it prints must not read as zero
+      if (Number(bm[3]) < 0.1) billBad++;
     } else billBad++;
 
     // The plan must not assert a cadence or a programme the record cannot support. The snapshot
@@ -1594,6 +1609,23 @@ for (const name of shots) {
     gasOverQuarter === 0 ? `the worst is ${(worstGasShare * 100).toFixed(0)}%` : `${gasOverQuarter} over a quarter`);
   check('every farm plan states its own gas bill and what share of the stake it is', billBad === 0,
     billBad === 0 ? 'all agree' : `${billBad} differ`);
+
+  // The ladder must still BE a ladder: a bigger book gets a bigger stake. Lifting each row by
+  // its OWN gas instead of scaling the ladder once would put a $28M protocol's stake above a
+  // $1.58B one's -- the opposite of what a ladder means, and the opposite of the entry's own
+  // "the bigger the book, the deeper the position".
+  {
+    const capOf = new Map();
+    for (const r of rows) {
+      const m = r.farm_steps.join(' | ').match(/\$(\d+) of capital/);
+      if (m) capOf.set(r.slug, { cap: Number(m[1]), tvl: r.tvl_usd ?? 0 });
+    }
+    const ordered = [...capOf.entries()].sort((a, b) => a[1].tvl - b[1].tvl || a[0].localeCompare(b[0]));
+    let inversions = 0; let runMax = -Infinity;
+    for (const [, v] of ordered) { if (v.cap < runMax) inversions++; runMax = Math.max(runMax, v.cap); }
+    check('the capital still rises with the protocol\'s book -- a bigger book, a deeper position',
+      inversions === 0, inversions === 0 ? `${ordered.length} rows, no inversion` : `${inversions} inversions`);
+  }
   // The guard on the guard: if the snapshot ever grows a field that records a cadence or a points
   // schedule, the check above stops being a prohibition and becomes a description, and this one
   // says so. Today the snapshot's ten fields carry no cadence of any kind.

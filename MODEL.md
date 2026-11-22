@@ -284,13 +284,18 @@ code.
 
 ## 7. The farm plans
 
-Every row carries eight steps, each an action with a cost and a time, derived from the protocol's own
+Every row carries nine steps, each an action with a cost and a time, derived from the protocol's own
 record and never from a hand-written list of names:
 
 * **the action** follows from the category (a curated vault is deposited into, a lending market is
   supplied to, a DEX is provided liquidity to, and so on);
-* **the capital** follows from the TVL ($400 at $1B+, $250 at $250M+, $150 at $100M+, $100 at the
-  $50M floor, $50 below it);
+* **the capital** starts from the TVL ($400 at $1B+, $250 at $250M+, $150 at $100M+, $100 at the
+  $50M floor, $50 below it) and is then **lifted until the plan's own gas bill is a fifth of the
+  stake**. The two numbers used to be decided apart — the capital from the TVL band, the gas from
+  the chain — so a plan could tell a farmer to stake $50 and then spend $204 of gas on it, with the
+  gas at four times the stake. The stake now has to carry the gas the plan spends: the wallet, the
+  setup, every weekly action, the claim and the unwind. It is still a multiple of $50, so the
+  number a reader sees is one they can fund;
 * **the gas** follows from the chain (about $12 on Ethereum, $6 on Bitcoin, $1 on Solana, $3
   elsewhere);
 * **the hold** follows from the age (90 days under 180, 60 under 365, 45 under 730, then 30). A
@@ -302,6 +307,10 @@ record and never from a hand-written list of names:
   90-day hold is budgeted for 13 weeks and a 30-day hold for 5. Before this was priced from the
   window, every one of the 195 rows budgeted four weeks of gas and then held for five to thirteen —
   an understatement of more than a factor of three on the longest holds.
+* **the whole bill** is stated in one line, so the reader can check the position against the fees
+  instead of adding five costs up in their head. The plan spends gas at five points, and step 8
+  says what that comes to and what share of the stake it is. Across the 195 rows the share runs
+  from 4% to 20%, and no row spends more than a quarter of its stake on gas.
 * **what the position earns** follows from the action, not from the category's name. A deposit
   into a vault, a lending market, a pool or a strategy earns the protocol's own yield, and the
   plan says so. A swap, a purchase, a bridge, a collateral lock, a margin position, a wrapper or
@@ -315,8 +324,8 @@ record and never from a hand-written list of names:
   other rows are described as slow ones. A protocol with no first-tracked date is told that the
   house cannot tell how long it has run, and is not told anything it cannot support.
 
-The plan is generated **once**, by `lib/model.ts`, and travels with the row: the eight steps go into
-`board.json` and into the dataset the page reads. The detail view shows those same eight steps, so
+The plan is generated **once**, by `lib/model.ts`, and travels with the row: the nine steps go into
+`board.json` and into the dataset the page reads. The detail view shows those same nine steps, so
 the plan a reader reads on the page is the plan the board hands in — there is no second
 implementation that could drift.
 

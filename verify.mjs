@@ -1479,12 +1479,20 @@ for (const name of shots) {
     const m = libSrc.match(new RegExp('function ' + name + '\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}'));
     return m ? m[1] : '';
   };
-  const capitalFor = (p) => {
+  const tvlBandFor = (p) => {
     if (p.tvl_usd >= 1_000_000_000) return 400;
     if (p.tvl_usd >= 250_000_000) return 250;
     if (p.tvl_usd >= 100_000_000) return 150;
     if (p.tvl_usd >= 50_000_000) return 100;
     return 50;
+  };
+  // The capital the plan states: the TVL band, lifted until the plan's own gas bill is a fifth of
+  // it. The gas bill comes from the plan's OWN text -- its weekly gas and its window -- so this
+  // check reads the shipped numbers, not a second copy of the rule.
+  const capitalFor = (p, gasTotal) => {
+    const floor = tvlBandFor(p);
+    const needed = Math.ceil((gasTotal * 5) / 50) * 50;
+    return Math.max(floor, needed);
   };
   const holdDaysFor = (age) => {
     if (age === null) return 60;
@@ -1495,6 +1503,8 @@ for (const name of shots) {
   };
 
   let nameBad = 0, dateBad = 0, capBad = 0, holdBad = 0, streakBad = 0, gasBad = 0;
+  // the gas share of the capital, and the plan's own bill line
+  let gasOverQuarter = 0, worstGasShare = 0, billBad = 0, capFloorBad = 0, capOddBad = 0;
   for (const r of rows) {
     const s = r.farm_steps.join(' | ');
     if (!s.includes(r.name)) nameBad++;
@@ -1503,12 +1513,6 @@ for (const name of shots) {
     if (dm) {
       const listed = listedOf.get(r.slug);
       if (dm[1] !== (listed ?? '')) dateBad++;
-    }
-    // the capital
-    const cm = s.match(/Fund \$(\d+) of USDC/);
-    if (cm) {
-      const want = capitalFor(protoOf.get(r.slug));
-      if (Number(cm[1]) !== want) capBad++;
     }
     // the hold window, from the row's age
     const hm = s.match(/for at least (\d+) days/);
@@ -1527,19 +1531,57 @@ for (const name of shots) {
       const perWeek = Number(gm[1]), total = Number(gm[2]), weeks = Number(gm[3]);
       if (perWeek * weeks !== total || weeks !== Math.ceil(Number(hm[1]) / 7)) gasBad++;
     }
+    // The capital, from the step-2 cost line EVERY plan carries -- not from one category's
+    // wording, which would check a handful of rows and call the rest covered.
+    const cm = s.match(/\$(\d+) of capital and about \$(\d+) of gas/);
+    if (cm) {
+      const capital = Number(cm[1]);
+      // the plan's own gas bill: five spend points -- the wallet, the setup, every weekly action,
+      // the claim and the unwind
+      const gasTotal = gm ? Number(gm[1]) * (Number(gm[3]) + 4) : null;
+      if (gasTotal !== null) {
+        const want = capitalFor(protoOf.get(r.slug), gasTotal);
+        if (capital !== want) capBad++;
+        // the gas must be a share of the stake, never most of it
+        const share = gasTotal / capital;
+        if (share > 0.25) gasOverQuarter++;
+        if (share > worstGasShare) worstGasShare = share;
+        // the capital must still be at least the TVL band asks for
+        if (capital < tvlBandFor(protoOf.get(r.slug))) capFloorBad++;
+        // and it must be a number a reader can actually fund
+        if (capital % 50 !== 0) capOddBad++;
+      }
+    }
+    // the plan's own bill line must state the gas total and the share of the stake
+    const bm = s.match(/come to about \$(\d+) of gas over the (\d+) weeks, which is about (\d+)% of the \$(\d+) stake/);
+    if (bm) {
+      const gasTotal = gm ? Number(gm[1]) * (Number(gm[3]) + 4) : null;
+      if (gasTotal === null || Number(bm[1]) !== gasTotal || Number(bm[2]) !== Number(gm[3])) billBad++;
+      else if (cm && (Number(bm[4]) !== Number(cm[1]) || Number(bm[3]) !== Math.round((gasTotal / Number(cm[1])) * 100))) billBad++;
+    } else billBad++;
   }
 
   check('every farm plan names its own protocol', nameBad === 0, `${rows.length - nameBad} of ${rows.length}`);
   check('every farm plan tracked-since date is the protocol\'s own listing date', dateBad === 0,
     dateBad === 0 ? 'all agree' : `${dateBad} differ`);
-  check('every farm plan\'s capital is the one its TVL band gives', capBad === 0,
+  check('every farm plan\'s capital is the one its TVL band and its own gas bill give', capBad === 0,
     capBad === 0 ? 'all agree' : `${capBad} differ`);
+  check('every farm plan\'s capital is at least the TVL band asks for', capFloorBad === 0,
+    capFloorBad === 0 ? 'all agree' : `${capFloorBad} differ`);
+  check('every farm plan\'s capital is a multiple of $50, so a reader can fund it', capOddBad === 0,
+    capOddBad === 0 ? 'all agree' : `${capOddBad} are not`);
   check('every farm plan\'s hold window is the one its age gives', holdBad === 0,
     holdBad === 0 ? 'all agree' : `${holdBad} differ`);
   check('every farm plan\'s weekly streak is the hold window in whole weeks', streakBad === 0,
     streakBad === 0 ? 'all agree' : `${streakBad} differ`);
   check('every farm plan\'s weekly gas is priced for the whole hold window', gasBad === 0,
     gasBad === 0 ? 'all agree' : `${gasBad} differ`);
+  // The gas is a cost of the position, so it must be a SHARE of the position: a plan that spends
+  // more on gas than it stakes tells the reader to do something that cannot pay for itself.
+  check('no farm plan spends more than a quarter of its capital on gas', gasOverQuarter === 0,
+    gasOverQuarter === 0 ? `the worst is ${(worstGasShare * 100).toFixed(0)}%` : `${gasOverQuarter} over a quarter`);
+  check('every farm plan states its own gas bill and what share of the stake it is', billBad === 0,
+    billBad === 0 ? 'all agree' : `${billBad} differ`);
 
   // and every step names an action, a cost and a time, which is what the page parses out of them
   let shaped = 0;

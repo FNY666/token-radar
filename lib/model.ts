@@ -1494,13 +1494,36 @@ function chainOf(p: SnapshotProtocol): string {
   return p.chains.length > 0 ? p.chains[0]! : 'its main chain';
 }
 
-/** How much capital one farm position needs, from the protocol's own TVL: the bigger the book, the deeper the position. */
-function capitalFor(p: SnapshotProtocol): number {
+/**
+ * The TVL ladder: how deep a position the protocol's own book asks for. The bigger the book, the
+ * deeper the position -- this is the FLOOR of the capital, not the whole of it.
+ */
+function tvlBandFor(p: SnapshotProtocol): number {
   if (p.tvl_usd >= 1_000_000_000) return 400;
   if (p.tvl_usd >= 250_000_000) return 250;
   if (p.tvl_usd >= 100_000_000) return 150;
   if (p.tvl_usd >= 50_000_000) return 100;
   return 50;
+}
+
+/**
+ * The capital a farm position needs: the TVL ladder's floor, raised until the plan's OWN gas bill
+ * is a fifth of the stake.
+ *
+ * The two numbers used to be fixed apart -- the capital from the TVL band, the gas from the
+ * chain -- so a plan could tell a farmer to stake $50 and then spend $204 of gas on it: the gas
+ * was four times the stake, and the plan read as though the position cost $50. The stake now has
+ * to carry the gas the plan spends: the wallet, the setup, every weekly action, the claim and the
+ * unwind. A fifth is the line: the gas is a real cost of a position, and a position whose fees
+ * are a fifth of it is still a position, not a rounding error.
+ *
+ * The result stays a MULTIPLE OF FIFTY DOLLARS, so the number a reader sees is one they can fund,
+ * and the ladder keeps its shape: the TVL band is still the floor every row is lifted from.
+ */
+function capitalFor(p: SnapshotProtocol, gasTotal: number): number {
+  const floor = tvlBandFor(p);
+  const needed = Math.ceil((gasTotal * 5) / 50) * 50;
+  return Math.max(floor, needed);
 }
 
 /** How long to hold, from the protocol's age: a protocol that has run longer without a token needs a longer window. */
@@ -1666,21 +1689,24 @@ function actionFor(p: SnapshotProtocol, capital: number, chain: string): string 
 }
 
 /**
- * A protocol's farm plan: eight steps, each an action with a cost and a time. Every number in the plan
+ * A protocol's farm plan: nine steps, each an action with a cost and a time. Every number in the plan
  * comes from the protocol's own record (category, chains, TVL, age) and the snapshot's date, never from
  * a hand-written list of names.
  */
 export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
-  const capital = capitalFor(p);
   const hold = holdDaysFor(age);
   // The gas is the gas OF THE CHAIN THE PLAN NAMES, so the two can never disagree.
   const gas = gasOnChain(chain);
+  // The weekly gas is priced for the whole hold window, in whole weeks.
+  const weeks = Math.ceil(hold / 7);
+  // What the plan SPENDS on gas, over the whole plan: the wallet, the setup, every weekly action,
+  // the claim and the unwind. This is the number the capital has to carry.
+  const gasTotal = gas * (weeks + 4);
+  const capital = capitalFor(p, gasTotal);
   const action = actionFor(p, capital, chain);
   const dated = p.listed_at !== null;
   const tracked = dated ? `since ${p.listed_at}` : 'on an unknown date';
-  // The weekly gas is priced for the whole hold window, in whole weeks.
-  const weeks = Math.ceil(hold / 7);
   // Whether the position earns the protocol's own yield: a deposit into a vault, a market or a
   // pool does, and a swap, a purchase or a bridged position does not.
   const earns = positionEarns(p.category ?? null);
@@ -1734,6 +1760,15 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       text: `Log the wallet, the deposit dates and the transaction hashes, then unwind the position on the same day you claim, and never move funds out before the claim window closes.`,
       cost: `about $${gas} of gas to unwind`,
       time: '30 minutes',
+    },
+    {
+      // The whole bill, in one line, so the reader can check the position against the gas it
+      // spends instead of adding five separate costs up in their head. The plan spends gas at five
+      // points -- the wallet, the setup, every weekly action, the claim and the unwind -- and the
+      // capital above is sized to carry that bill.
+      text: `Add the whole bill: the wallet, the setup, the weekly actions, the claim and the unwind come to about $${gasTotal} of gas over the ${weeks} weeks, which is about ${Math.round((gasTotal / capital) * 100)}% of the $${capital} stake.`,
+      cost: `about $${gasTotal} of gas in all, and no other fee`,
+      time: '2 minutes',
     },
     {
       // A protocol with no first-tracked date has no age, so the plan must not claim it has run

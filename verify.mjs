@@ -1899,6 +1899,116 @@ for (const name of shots) {
     outside.length === tally.reduce((n, [, c]) => n + c, 0), `${outside.length}`);
 }
 
+// ---------------------------------------------------------------- the reader's own arithmetic lands
+// The board prints three numbers per row: the conditional value ("If issued"), the launch odds,
+// and the implied value. The library computes the implied value from the two figures AS DISPLAYED
+// so that a reader's own multiplication lands on it. This checks that promise for every row, with
+// the library's own rounding, and that the page's rendered cells are the data's own.
+{
+  const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+  const data = JSON.parse(src.slice(src.indexOf('{')).replace(/;\s*$/, ''));
+  const rows = data.rows;
+
+  // the library's own roundToSig, read out of lib/model.ts so the check cannot drift from it
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const sigMatch = libSrc.match(/export function roundToSig\(n: number, sig: number\): number \{([\s\S]*?)\n\}/);
+  const roundToSig = sigMatch
+    ? new Function('n', 'sig', sigMatch[1])
+    : (n, sig) => {
+      if (!Number.isFinite(n) || n === 0) return n;
+      const a = Math.abs(n);
+      const scale = a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
+      const mant = n / scale;
+      const factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
+      return Math.round(mant * factor) / factor * scale;
+    };
+
+  // 1. the implied value is the conditional value times the odds, from the figures as displayed
+  let off = 0;
+  let worstOff = 0;
+  for (const r of rows) {
+    const shownConditional = roundToSig(r.conditional_value_usd, 5);
+    const shownProbability = Math.round(r.launch_probability * 1e6) / 1e6;
+    const expected = Math.max(1, Math.round(roundToSig(shownConditional * shownProbability, 3)));
+    if (expected !== r.implied_value_usd) {
+      off++;
+      worstOff = Math.max(worstOff, Math.abs(expected - r.implied_value_usd));
+    }
+  }
+  check("every row's implied value is the product of the two figures the page prints",
+    off === 0, off === 0 ? `all ${rows.length} rows` : `${off} differ, worst by ${worstOff}`);
+
+  // 2. a reader who multiplies the PRINTED numbers lands on the PRINTED implied value
+  const money = (n, sig) => {
+    if (n === null || n === undefined) return '—';
+    const a = Math.abs(n);
+    const s = sig || 3;
+    if (a >= 1e9) return '$' + (n / 1e9).toPrecision(s) + 'B';
+    if (a >= 1e6) return '$' + (n / 1e6).toPrecision(s) + 'M';
+    if (a >= 1e3) return '$' + (n / 1e3).toPrecision(s) + 'K';
+    return '$' + Math.round(n);
+  };
+  let drift = 0;
+  let worstDrift = 0;
+  for (const r of rows) {
+    const condText = money(r.conditional_value_usd, 5);
+    const probText = (r.launch_probability * 100).toFixed(4) + '%';
+    const unit = { K: 1e3, M: 1e6, B: 1e9 }[condText.slice(-1)] ?? 1;
+    const condNum = parseFloat(condText.replace(/[$,]/g, '').replace(/[KMB]$/, '')) * unit;
+    const probNum = parseFloat(probText) / 100;
+    const reader = roundToSig(condNum * probNum, 3);
+    const shown = roundToSig(r.implied_value_usd, 3);
+    const d = Math.abs(reader - shown) / Math.max(shown, 1);
+    if (d > 1e-4) { drift++; worstDrift = Math.max(worstDrift, d); }
+  }
+  check("a reader's own multiplication of the printed figures lands on the printed implied value",
+    drift === 0, drift === 0 ? `all ${rows.length} rows` : `${drift} rows, worst ${(worstDrift * 100).toFixed(4)}% off`);
+
+  // 3. and the rendered page shows the data, character for character
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1000 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  const shown = await page.evaluate(() => {
+    const out = [];
+    for (const tr of document.querySelectorAll('#view-board tbody tr')) {
+      out.push([...tr.querySelectorAll('td')].map((td) => td.textContent.replace(/\s+/g, ' ').trim()));
+    }
+    return out;
+  });
+  await browser.close();
+  let cellBad = 0;
+  const firstBad = [];
+  shown.forEach((tds, i) => {
+    const r = rows[i];
+    if (!r) { cellBad++; return; }
+    const want = [
+      String(r.rank),
+      r.name,
+      r.on_watchlist ? 'On the house watchlist' : 'Off the house watchlist',
+      r.category,
+      money(r.tvl_usd),
+      r.change_7d === null ? '—' : (r.change_7d >= 0 ? '+' : '') + r.change_7d.toFixed(1) + '%',
+      (r.launch_probability * 100).toFixed(4) + '%',
+      money(r.conditional_value_usd, 5),
+      money(r.implied_value_usd),
+    ];
+    for (let c = 0; c < want.length; c++) {
+      if (tds[c] !== want[c]) {
+        cellBad++;
+        if (firstBad.length < 4) firstBad.push(`row ${r.rank} column ${c}: the page shows "${tds[c]}", the data says "${want[c]}"`);
+      }
+    }
+  });
+  check('every cell the board renders is the data it carries, character for character',
+    cellBad === 0, cellBad === 0 ? `${shown.length} rows, ${shown.length * 9} cells` : firstBad.join(' | '));
+}
+
 // ---------------------------------------------------------------- the two narrative claims
 // The page names a row: "the row that moves a plain fit most -- the one priced at four hundred
 // times its deposits". And it claims a precision: "the coefficients are printed to four decimals

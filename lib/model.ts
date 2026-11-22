@@ -1277,8 +1277,6 @@ export interface Labels {
   others_here: string;
   /** The drawer's close control. */
   close: string;
-  /** What to do when the board file is missing. */
-  no_board_hint: string;
   /** The live table's columns. */
   market_cap: string;
   cap_over_tvl: string;
@@ -1335,10 +1333,9 @@ export interface Labels {
   no_chain: string;
   live_not_here: string;
   live_not_here_short: string;
+  /** A protocol that records a token the snapshot does not price: no market cap, so no row. */
+  token_recorded_not_priced: string;
   no_such_protocol: string;
-  /** The page with no data at all. */
-  no_board_title: string;
-  no_board_body: string;
 }
 
 /** The counts the page states, computed once from the data so the page cannot get them wrong. */
@@ -2111,11 +2108,11 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       no_chain: 'No chain named "',
       live_not_here: ' already trades: it is on the "Already trading" tab, not on this board.',
       live_not_here_short: 'That protocol already trades a token, so it is not on this board.',
+      // A protocol that records a CoinGecko id but carries no market cap records a token that
+      // the snapshot does not price. It is not trading, so it is not on the "Already trading"
+      // tab either -- it is not on the board because it has a token, not because it trades.
+      token_recorded_not_priced: 'That protocol records a token but the snapshot gives it no market cap, so it has no price to show and no row on either table.',
       no_such_protocol: 'No protocol with that name is on this board.',
-      no_board_title: 'This page has no board yet',
-      no_board_hint:
-        'Run the entry (node main.ts) and open the dashboard it writes: the board, the protocol details and the farm plans are all in that file.',
-      no_board_body: 'The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.',
     },
   };
   const radar: RadarData = {

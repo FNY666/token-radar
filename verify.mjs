@@ -2,6 +2,7 @@
 //   node verify.js <out-dir>
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 
 const out = path.resolve(process.argv[2] || 'out');
@@ -2008,6 +2009,19 @@ for (const name of shots) {
     tally.map(([k, n]) => n + ' ' + k).join(', '));
   check('the rows outside the cohort add up to the count the copy names',
     outside.length === tally.reduce((n, [, c]) => n + c, 0), `${outside.length}`);
+
+  // A protocol that records a CoinGecko id but carries no market cap records a token the
+  // snapshot does not price. It is not trading, so the page must not say it "already trades"
+  // -- and it is on neither table, so the message must say that too.
+  const unpriced = (data.universe ?? []).filter((u) => u.gecko_id !== null && !(u.mcap_usd > 0));
+  check('the page has a message for a token the snapshot does not price',
+    typeof data.copy?.labels?.token_recorded_not_priced === 'string'
+      && data.copy.labels.token_recorded_not_priced.length > 20
+      && !/trades/.test(data.copy.labels.token_recorded_not_priced),
+    data.copy?.labels?.token_recorded_not_priced);
+  check('the page\'s own source routes an unpriced token to that message',
+    /gecko_id !== null && !\(u\.mcap_usd > 0\)/.test(fs.readFileSync(path.join(out, 'dashboard', 'page.js'), 'utf8')),
+    'missingProtocol does not test the market cap');
 }
 
 // ---------------------------------------------------------------- the reader's own arithmetic lands
@@ -2482,6 +2496,49 @@ for (const name of shots) {
     modelMd.includes('0.648') && modelMd.includes('1.312'), 'stated');
   check('MODEL.md names the factor band as the published corrections, not a deviation from the global',
     modelMd.includes('published corrections') && modelMd.includes('run from 0.648 to 1.312'), 'stated');
+}
+
+// ---------------------------------------------------------------- the page with no data at all
+// The page reads its board from data.js, written beside it when the radar runs. If that file is
+// not there, the page has to say so: it must not throw on the way there and leave the reader
+// with a header and nothing else. The copy for that case cannot come from the data -- the data
+// is what is missing -- so it has to be written into the page itself.
+//
+// This renders the page with no data.js AT ALL and reads what a reader would see.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  // a copy of the dashboard with no data.js beside it
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'radar-nodata-'));
+  fs.mkdirSync(path.join(empty, 'dashboard'));
+  for (const f of fs.readdirSync(path.join(out, 'dashboard'))) {
+    fs.copyFileSync(path.join(out, 'dashboard', f), path.join(empty, 'dashboard', f));
+  }
+  fs.writeFileSync(path.join(empty, 'dashboard', 'data.js'), '/* no data */');
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto('file://' + path.join(empty, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await new Promise((r) => setTimeout(r, 400));
+  const seen = await page.evaluate(() => ({
+    panels: document.querySelectorAll('.missing').length,
+    heading: (document.querySelector('.missing h1') || {}).textContent || '',
+    body: (document.querySelector('.missing p') || {}).textContent || '',
+    hint: (document.querySelector('.missing p.muted') || {}).textContent || ''
+  }));
+  await browser.close();
+  fs.rmSync(empty, { recursive: true, force: true });
+  check('the page with no data.js does not throw', errors.length === 0, errors.join(' | '));
+  check('the page with no data.js shows its own explanation, not a bare header',
+    seen.panels === 1 && seen.heading.length > 0 && seen.body.length > 0 && seen.hint.length > 0,
+    seen.panels + ' panel(s): ' + seen.heading);
+  check('the no-data explanation says where the board comes from',
+    /data\.js/.test(seen.body) && /main\.ts/.test(seen.hint),
+    seen.body.slice(0, 60) + ' / ' + seen.hint.slice(0, 60));
 }
 
 // ---------------------------------------------------------------- dossier_matches

@@ -430,8 +430,7 @@
  function renderPlot() {
  var host = into('plot-wrap');
  var list = visibleRows();
- // With no row to draw there is no picture, so the plot goes and the table's message stands
- // alone: one box, one sentence, and it carries the way out.
+ // With no row to draw there is no picture, so the plot goes and the table's message stands.
  host.hidden = !list.length;
  if (host.hidden) return;
 // The SVG is in CSS pixels, so the viewBox is the box's own size.
@@ -440,8 +439,7 @@
  var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
  var H = 150, padL = 54, padR = 16, padT = 22, padB = 30;
  var maxV = colExtreme(list, 'implied_value_usd', 'max');
- // The scale's top is the next power of ten, so the grid lines are even and the labels cannot
- // overlap.
+ // The scale's top is the next power of ten, so the grid lines are even.
  var scaleTop = 1; while (scaleTop < maxV) scaleTop *= 10;
  var logMin = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'min'), 1));
  var logMax = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'max'), 1));
@@ -456,8 +454,7 @@
  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
 // The viewBox scales UNIFORMLY: a dot is a circle, a label is not.
  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-// Each dot is a control, so the SVG is a GROUP: an image holding buttons is a contradiction
-// no screen reader can resolve.
+// Each dot is a control, so the SVG is a GROUP, not an image holding buttons.
  svg.setAttribute('role', 'group');
  function add(tag, attrs, text) {
  var n = document.createElementNS(ns, tag);
@@ -481,8 +478,7 @@
  add('text', { x: 8, y: 11, class: 'axis-title' }, L.implied);
  var dots = [];
  list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
- // One description for both the tooltip a sighted reader sees and the name a screen reader
- // reads: `aria-label` overrides the title, so writing them separately is how they drift.
+ // One description for both the tooltip and the screen-reader name, so they cannot drift.
  var dl = r.name + ': ' + money(r.implied_value_usd) + ' implied, ' +
  oddsText(launchP(r)) + ' odds, ' + money(r.tvl_usd) + ' TVL, ' +
  (r.on_watchlist ? 'on' : 'off') + ' the house watchlist';
@@ -556,15 +552,12 @@
  el('td', null, [
  h('div','pname', [
  document.createTextNode(r.name),
- // The slug is a second line on screen and a second word to a reader: without the space the
- // cell reads "Rainrain".
+ // The slug is a second line on screen and a second word to a reader.
  e('span', 'slug', ' ' + r.slug)
  ])
  ]),
  e('td', 'cat', r.category || 'Uncategorised'),
- // The market cap and the TVL print at SIX significant figures, not the board's three: a
- // two-decimal multiple is not determined by a three-figure figure (a reader's division missed
- // the printed multiple on 13 of the 30 rows at three figures, 2 at five, none at six).
+ // Six figures, not three: a two-decimal multiple is not determined by a three-figure operand.
  e('td', 'right num', money(r.mcap_usd, 6)),
  e('td', 'right num', money(r.tvl_usd, 6)),
  h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : r.ratio.toFixed(2))]),
@@ -579,8 +572,7 @@
  CTL.search = el('input', {
  class: 'q', type: 'search', placeholder: L.search_placeholder,
  'aria-label': L.search_label,
- // The name is what a form posts and what a password manager keys on; a search box with no
- // name is a box no browser can restore and no AT can name.
+ // The name is what a form posts and what a password manager keys on.
  name: 'q', autocomplete: 'off', spellcheck: false,
  oninput: function () { state.q = CTL.search.value; writeHash('refine'); renderControlsResult(); renderTabs(); renderTable(); renderPlot(); }
  });
@@ -611,7 +603,7 @@
  host.appendChild(chip);
  });
  host.appendChild(h('span','spacer'));
- // The row count is the one thing a screen-reader user cannot see change as they type.
+ // The row count is the one thing a screen-reader user cannot see change.
  host.appendChild(el('span', { class: 'result', id: 'result-count', role: 'status' }));
  host.appendChild(el('button', {
  class: 'ghost', type: 'button', text: L.clear_filters,
@@ -775,8 +767,7 @@
  function rowAttrs(r) {
  return {
  class: 'row', tabindex: '0', 'data-slug': r.slug,
- // The board's row is ranked by implied value; the live table's by market cap. One helper
- // serves both, so the name follows the figure the table shows.
+ // The board's row is ranked by implied value; the live table's by market cap.
  'aria-label': r.name + ', ' + money(r.implied_value_usd === undefined ? r.mcap_usd : r.implied_value_usd) +
  (r.implied_value_usd === undefined ? ' market cap' : ' implied'),
  onclick: function (e) { openDetail(r.slug, undefined, e.currentTarget); },
@@ -917,6 +908,8 @@
  for (var j = 0; j < D.universe.length; j++) {
  var u = D.universe[j];
  if (u.slug === slug && (u.mcap_usd !== null || u.gecko_id !== null)) {
+ // A CoinGecko id with no market cap is a token the snapshot does not price.
+ if (u.gecko_id !== null && !(u.mcap_usd > 0)) return L.token_recorded_not_priced;
  return L.live_not_here_short;
  }
  }
@@ -953,10 +946,12 @@
  function renderMissingData() {
  var main = document.getElementById('board');
  if (!main) return;
+ // The copy for the case where there is no data.js at all cannot come from the data -- the data
+ // is what is missing -- so it is written here, where it is still there when it is needed.
  main.appendChild(h('section','card prose missing', [
- h('h1', null, [L.no_board_title]),
- t('p',L.no_board_body),
- e('p', 'muted', L.no_board_hint)
+ h('h1', null, ['This page has no board yet']),
+ t('p','The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.'),
+ e('p', 'muted', 'Run the entry (node main.ts) and open the dashboard it writes: the board, the protocol details and the farm plans are all in that file.')
  ]));
  var bar = document.getElementById('bar-meta');
  if (bar) clear(bar);

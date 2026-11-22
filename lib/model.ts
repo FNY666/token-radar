@@ -1925,13 +1925,10 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'the other ' + cal.product_rows + ' eligible rows carry a ticker but no market cap and no CoinGecko id of their own, and a pool of a protocol that already issued is evidence neither way. Neither model reads a name list: ' +
       'both read the snapshot\'s own fields.',
     live_note:
-      '<strong class="lead">These protocols already have a token.</strong> The board above never mixes them in: their value is the market\'s own, not a model\'s. ' +
-      'The snapshot holds ' + facts.snapshot_protocols + ' protocols, ' + facts.snapshot_tokens + ' of which record a token of some kind; ' +
+      '<strong class="lead">The snapshot holds ' + facts.snapshot_protocols + ' protocols, ' + facts.snapshot_tokens + ' of which record a token of some kind</strong>; ' +
       facts.live_with_cap + ' carry a market cap of their own, and ' + facts.live_cex + ' of those are exchange venues, so they are set aside too. ' +
       'This table holds the ' + live.length + ' largest of the ' + facts.live_candidates + ' that are left, by market cap; the rest are further down the same list. ' +
-      '<strong>' + facts.live_in_cohort + ' of these ' + live.length + ' rows are in the model\'s calibration cohort</strong>, the ' +
-      cal.cohort_size + ' protocols whose tokens already trade and that taught the model what a market cap is worth relative to TVL. ' +
-      'The other ' + facts.live_out_cohort + ' are here only as contrast — ' + facts.live_out_reasons + '. ' +
+      'The other ' + facts.live_out_cohort + ' of these ' + live.length + ' are here only as contrast — ' + facts.live_out_reasons + '. ' +
       'A market cap over TVL below 1 is a token the market prices at less than the deposits behind it.',
     clamps:
       'Two clamps, and they are the model\'s only floors. <strong>Growth</strong> is held between −60% and +120%: a week beyond either end is one regime, not a bigger number, so ' +

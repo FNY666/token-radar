@@ -1979,10 +1979,10 @@ for (const name of shots) {
   const cohortSlugs = new Set(data.cohort.map((p) => p.slug));
   const inCohort = live.filter((r) => cohortSlugs.has(r.slug)).length;
   check('the cohort membership the copy names is the measured one',
-    copy.includes(inCohort + ' of these ' + live.length + ' rows are in the model'), `${inCohort} of ${live.length}`);
+    copy.includes(inCohort + ' of these ' + live.length + ' are in the cohort'), `${inCohort} of ${live.length}`);
   const outside = live.filter((r) => !cohortSlugs.has(r.slug));
   check('the rows outside the cohort are the count the copy names',
-    copy.includes('The other ' + outside.length + ' are here only as contrast'), `${outside.length}`);
+    copy.includes('The other ' + outside.length + ' of these ' + live.length + ' are here only as contrast'), `${outside.length}`);
   // and each of the nine carries its own reason, and the copy's breakdown names every kind
   const reasons = {};
   for (const r of outside) {

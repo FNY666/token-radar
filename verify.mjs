@@ -1504,7 +1504,12 @@ for (const name of shots) {
 
   let nameBad = 0, dateBad = 0, capBad = 0, holdBad = 0, streakBad = 0, gasBad = 0;
   // the gas share of the capital, and the plan's own bill line
-  let gasOverQuarter = 0, worstGasShare = 0, billBad = 0, capFloorBad = 0, capOddBad = 0;
+  let gasOverQuarter = 0, worstGasShare = 0, billBad = 0, capFloorBad = 0, capOddBad = 0, unbackedBad = 0;
+  // The snapshot's own fields: if it ever grows one that records a cadence or a points schedule,
+  // the check below stops being a prohibition and becomes a description.
+  const snapFields = new Set(Object.keys(snapshot.protocols[0] ?? {}));
+  const recordCarries = ['points', 'snapshots', 'streak', 'schedule', 'series', 'history', 'activity']
+    .some((f) => snapFields.has(f));
   for (const r of rows) {
     const s = r.farm_steps.join(' | ');
     if (!s.includes(r.name)) nameBad++;
@@ -1559,6 +1564,13 @@ for (const name of shots) {
       if (gasTotal === null || Number(bm[1]) !== gasTotal || Number(bm[2]) !== Number(gm[3])) billBad++;
       else if (cm && (Number(bm[4]) !== Number(cm[1]) || Number(bm[3]) !== Math.round((gasTotal / Number(cm[1])) * 100))) billBad++;
     } else billBad++;
+
+    // The plan must not assert a cadence or a programme the record cannot support. The snapshot
+    // carries ten fields per protocol and NOT ONE of them records a points schedule, an activity
+    // series, a snapshot cadence or a streak -- the only time-series field it carries is one week
+    // of change. So a plan that says "every weekly snapshot", "the streak" or "its points page"
+    // is asserting something the entry cannot know, and the plan is the reader's only instruction.
+    if (/every weekly snapshot|the streak|its points page|points programme/i.test(s)) unbackedBad++;
   }
 
   check('every farm plan names its own protocol', nameBad === 0, `${rows.length - nameBad} of ${rows.length}`);
@@ -1582,6 +1594,21 @@ for (const name of shots) {
     gasOverQuarter === 0 ? `the worst is ${(worstGasShare * 100).toFixed(0)}%` : `${gasOverQuarter} over a quarter`);
   check('every farm plan states its own gas bill and what share of the stake it is', billBad === 0,
     billBad === 0 ? 'all agree' : `${billBad} differ`);
+  // The guard on the guard: if the snapshot ever grows a field that records a cadence or a points
+  // schedule, the check above stops being a prohibition and becomes a description, and this one
+  // says so. Today the snapshot's ten fields carry no cadence of any kind.
+  check('the snapshot carries no field that would support a cadence or a points schedule', recordCarries === false,
+    recordCarries === false ? `${snapFields.size} fields, none of them a cadence` : 'the record now carries one');
+  check('no farm plan asserts a snapshot cadence, a streak or a points page', unbackedBad === 0,
+    unbackedBad === 0 ? 'none do' : `${unbackedBad} do`);
+
+  // The copy a reader reads: no doubled word. "the <strong>The model</strong> tab" read as
+  // "the The model tab" on the page, because the markup is stripped when the sentence is read
+  // out. The lede is the first thing anyone sees, and it is judged by eye.
+  const copyText = JSON.stringify(data.copy ?? {}).replace(/<[^>]*>/g, ' ').replace(/\\n/g, ' ');
+  const doubled = copyText.match(/\b(the|a|an|of|in|on|to|and|is|it|that|for|with|as|at|by|be|this|are|its|was|or|not|but)\s+\1\b/gi) ?? [];
+  check('no sentence in the copy doubles a word', doubled.length === 0,
+    doubled.length === 0 ? 'none do' : `${doubled.length}: ${doubled.slice(0, 4).join(', ')}`);
 
   // and every step names an action, a cost and a time, which is what the page parses out of them
   let shaped = 0;

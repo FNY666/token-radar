@@ -1722,7 +1722,12 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: '20 minutes to set up',
     },
     {
-      text: `Make one qualifying action every week: a deposit, a swap, a borrow or a vote, so the wallet shows activity in every weekly snapshot.`,
+      // The snapshot records no points schedule and no snapshot series for any protocol -- the
+      // only time-series field it carries is one week of change -- so the plan cannot know how
+      // often a protocol measures activity. It says so, and prices the gas at the cadence that
+      // cannot be too slow: a week. More acts never lose a count, so if the protocol's own
+      // schedule is slower the bill comes down, but it can never come up.
+      text: `Make one qualifying action every week: a deposit, a swap, a borrow or a vote, so the wallet keeps showing activity for as long as the position is open. The snapshot carries no points schedule for ${p.name}, so a week is the cadence that cannot be too slow, and the gas is priced at that cadence.`,
       // The weekly action costs what any transaction on that chain costs, and the plan holds the
       // position for the whole window step 4 sets -- so the gas is priced for THOSE weeks, not for
       // four of them. A plan that budgeted four weeks of gas and then held for thirteen was
@@ -1734,10 +1739,12 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       // What "hold" means follows the position: a deposit stays deposited, and a position that
       // was bought or swapped into is simply held. And what the position earns follows the same
       // line: a deposit into the protocol's own product earns that product's yield, and a swap
-      // into an asset or an outcome share earns nothing but the asset itself.
+      // into an asset or an outcome share earns nothing but the asset itself. The window is set
+      // by the protocol's own age, so the plan says how long it waits without claiming a streak it
+      // cannot see: the snapshot records no points programme and no activity series.
       text: earns
-        ? `Hold the position for at least ${hold} days, keeping the balance deposited rather than idle, so the streak covers more than one snapshot.`
-        : `Hold the position for at least ${hold} days, keeping it open rather than closed out, so the streak covers more than one snapshot.`,
+        ? `Hold the position for at least ${hold} days, keeping the balance deposited rather than idle, so the position is open across more than one of the protocol's own checkpoints.`
+        : `Hold the position for at least ${hold} days, keeping it open rather than closed out, so the position is open across more than one of the protocol's own checkpoints.`,
       // What the position earns depends on what the step-2 action did: a deposit into a vault or
       // a market earns the protocol's own yield, but a swap, a purchase or a bridged position does
       // not, and promising a yield there would be promising something the protocol never pays.
@@ -1747,7 +1754,10 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: `${hold} days`,
     },
     {
-      text: `Watch ${possessive(p.name)} own announcements and its points page for a token or a season, and check it weekly so you act the week it opens.`,
+      // The plan does not claim the protocol HAS a points programme -- the snapshot records no
+      // points schedule for any protocol -- it only tells the reader where a token would be
+      // announced if one opens, and to check weekly so the claim week is not missed.
+      text: `Watch ${possessive(p.name)} own announcements for a token or a season, and check it weekly so you act the week it opens.`,
       cost: `no fee to read, no fee to claim, and about $${gas} of gas if you act on the claim`,
       time: '15 minutes a week',
     },
@@ -1883,7 +1893,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       ' off the list. The watchlist is a floor, never a ceiling. ' + sep + ' ' +
       'A further ' + facts.off_total + ' clear the ' + FLOOR + ' floor with no token and are still left off: ' +
       offText + ' — a venue, a bridge or a wrapper of someone else\'s token, not a protocol of its own. ' +
-      'Every figure here is fitted at run time on the snapshot itself; the <strong>The model</strong> tab shows the arithmetic.',
+      'Every figure here is fitted at run time on the snapshot itself; the <strong>model</strong> tab shows the arithmetic.',
     live_lede:
       'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol. ' +
       'This tab holds the other side of the line: the ' + live.length + ' largest of the ' + facts.live_candidates +

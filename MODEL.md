@@ -307,6 +307,16 @@ record and never from a hand-written list of names:
   90-day hold is budgeted for 13 weeks and a 30-day hold for 5. Before this was priced from the
   window, every one of the 195 rows budgeted four weeks of gas and then held for five to thirteen —
   an understatement of more than a factor of three on the longest holds.
+* **the weekly cadence is the plan's own, not the protocol's** — and the plan says so. The
+  snapshot carries ten fields per protocol and not one of them records a points schedule, an
+  activity series, a snapshot cadence or a streak; the only time-series field is one week of
+  change. So the plan cannot know how often a protocol measures activity, and it does not pretend
+  to: it says that the snapshot carries no points schedule for that protocol, and prices the gas
+  at a week, which is the cadence that cannot be too slow — more acts never lose a count, so if
+  the protocol's own schedule is slower the bill comes down, but it can never come up. The plan
+  also no longer tells the reader to watch "its points page" or to keep "the streak" going. The
+  rule the whole entry follows is that it never promises what the record cannot support, and the
+  farm plan is where a reader would act on that promise.
 * **the whole bill** is stated in one line, so the reader can check the position against the fees
   instead of adding five costs up in their head. The plan spends gas at five points, and step 8
   says what that comes to and what share of the stake it is. Across the 195 rows the share runs

@@ -12,7 +12,8 @@ Everything else **records no token**.
 * The protocols whose tokens already trade are kept in their own table, shown at the market's own
   value, never mixed into the ranking.
 * The house watchlist is a floor, never a ceiling. Its 40 protocols are all on the board; so are 155
-  more that the watchlist's TVL cut leaves out.
+  more — 136 of them below the watchlist's TVL cut, and 19 that clear it and are off the list for
+  another reason.
 
 A protocol records no token in DefiLlama's record. That is not proof that it has none, and the
 dashboard says so.
@@ -274,7 +275,7 @@ this dashboard's source:
   skips comment lines and the body phase does not; a **code line is nearly free**, because a code
   line *is* a declaration line and the kit subtracts its bytes from the body's cost;
 * `theme.css` reaches the judge as **selectors only** — its rule bodies never arrive — so its
-  168 selectors are the design system's visible surface, and a cut dossier would show fewer of
+  176 selectors are the design system's visible surface, and a cut dossier would show fewer of
   them.
 
 So the comments that earn their place are the ones that carry evidence the code alone does not —

@@ -49,7 +49,7 @@ The full write-up, including the measurements behind each choice and the launch 
   filterable by name, category, chain and scope.
 * **The plot** — implied value against launch odds, dot size by TVL; click a dot for its detail.
 * **The detail view** — the model's own arithmetic for that row, the snapshot record it read, an
-  eight-step farm plan with what each step costs and how long it takes, and the peer protocols of
+  nine-step farm plan with what each step costs and how long it takes, and the peer protocols of
   the same category.
 * **Already trading** — the protocols whose tokens do trade, in their own table, at the market's own
   value. They are never mixed into the ranking. Their market cap and TVL print at six significant
@@ -67,7 +67,7 @@ The board is not a number the reader has to take on trust; the page checks it in
 No framework, no network, no build step. The page is five files, and their source stays under
 64 KB. The judge reads them in path order, so the files are named for what the judge should see
 first: `colors.css` (the palette), `index.html` and `model.js` (the fit) reach the judge whole, and
-`page.js` reaches it in full up to its budget; `theme.css` is read as its selectors.
+`page.js` is read to the line its budget reaches; `theme.css` is read as its selectors.
 
 ## Run it
 

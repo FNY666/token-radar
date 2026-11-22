@@ -1290,7 +1290,6 @@ export interface Labels {
   is_and_is_not: string;
   /** The board's states and its controls. */
   empty_board: string;
-  empty_filters: string;
   search_placeholder: string;
   search_label: string;
   filter_by: string;
@@ -2076,7 +2075,6 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       category_corrections: 'Category corrections',
       is_and_is_not: 'What this is and is not',
       empty_board: 'No protocol matches these filters. Clear them to see the whole board.',
-      empty_filters: 'No protocol matches these filters.',
       search_placeholder: 'Search a protocol, a category, a chain…',
       search_label: 'Search protocols',
       filter_by: 'Filter by ',

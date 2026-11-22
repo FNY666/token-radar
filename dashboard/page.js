@@ -430,10 +430,10 @@
  function renderPlot() {
  var host = into('plot-wrap');
  var list = visibleRows();
- if (list.length === 0) {
- host.appendChild(e('div', 'plot-empty', L.empty_filters));
- return;
- }
+ // With no row to draw there is no picture, so the plot goes and the table's message stands
+ // alone: one box, one sentence, and it carries the way out.
+ host.hidden = !list.length;
+ if (host.hidden) return;
 // The SVG is in CSS pixels, so the viewBox is the box's own size.
  var cs = getComputedStyle(document.querySelector('.plot-wrap'));
  var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);

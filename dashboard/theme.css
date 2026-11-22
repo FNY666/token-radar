@@ -105,7 +105,7 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .pill{background:var(--o12);color:var(--odds)}
 .pill.live{background:var(--l13);color:var(--live)}
 .muted,.cond,.controls .result,.rk,.tab .count,.plot-head .hint,.plot-legend,.sheet .slug{color:var(--i3)}
-.empty,.plot-empty{text-align:center;color:var(--i3)}
+.empty{text-align:center;color:var(--i3)}
 .empty{padding:var(--f)}
 .plot-wrap{padding:var(--c) var(--d);margin-bottom:var(--c)}
 .plot-head{display:flex;justify-content:space-between;align-items:baseline;gap:var(--d);margin-bottom:var(--b)}
@@ -121,7 +121,6 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .plot .dot:focus-visible{fill-opacity:1;stroke:var(--value);stroke-width:2}
 .plot .q{fill:var(--ink);font-size:11px;pointer-events:none}
 .plot .axis-title{fill:var(--i3);font-size:11px}
-.plot-empty{font-size:13px;padding:var(--d) 0}
 .plot-legend{display:flex;gap:var(--d);font-size:12px;margin-top:var(--b)}
 .plot-legend i{width:var(--b);height:var(--b);border-radius:50%;display:inline-block;margin-right:var(--a);vertical-align:middle}
 .live-note{border-radius:var(--rm);padding:var(--d);margin-bottom:var(--d);color:var(--i2);font-size:14px;max-width:92ch}

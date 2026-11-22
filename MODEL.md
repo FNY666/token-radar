@@ -289,13 +289,22 @@ record and never from a hand-written list of names:
 
 * **the action** follows from the category (a curated vault is deposited into, a lending market is
   supplied to, a DEX is provided liquidity to, and so on);
-* **the capital** starts from the TVL ($400 at $1B+, $250 at $250M+, $150 at $100M+, $100 at the
-  $50M floor, $50 below it) and is then **lifted until the plan's own gas bill is a fifth of the
-  stake**. The two numbers used to be decided apart — the capital from the TVL band, the gas from
-  the chain — so a plan could tell a farmer to stake $50 and then spend $204 of gas on it, with the
-  gas at four times the stake. The stake now has to carry the gas the plan spends: the wallet, the
-  setup, every weekly action, the claim and the unwind. It is still a multiple of $50, so the
-  number a reader sees is one they can fund;
+* **the capital** follows from the TVL, as a ladder: the bigger the book, the deeper the
+  position. The shape is fixed — a book 40 times the size gets a stake 8 times deeper — and the
+  **scale** is set so that the plan's gas is a small share of the stake: **$1050** below $50M,
+  **$2100** to $100M, **$3150** to $250M, **$5250** to $1B, **$8400** above it. The scale is not a
+  guess: it is the smallest multiple of the shape whose bottom step covers the most expensive gas
+  bill the board can produce ($204), so the deepest position any row asks for still pays for its
+  own fees several times over;
+* **why the capital had to change at all**: the capital and the gas used to be decided apart — the
+  capital from the TVL band, the gas from the chain — so a plan could tell a farmer to stake $50
+  and then spend $204 of gas on it, with the gas at four times the stake. The stake now has to
+  carry the gas the plan spends: the wallet, the setup, every weekly action, the claim and the
+  unwind. Sizing each row by its **own** gas instead of scaling the ladder once would have put a
+  $28M protocol's stake above a $1.58B one's — the opposite of what a ladder means — so the
+  ladder is scaled once and every row reads its step off it. The result is **0 inversions** in the
+  195 rows, and every capital is a multiple of $50, so the number a reader sees is one they can
+  fund;
 * **the gas** follows from the chain (about $12 on Ethereum, $6 on Bitcoin, $1 on Solana, $3
   elsewhere);
 * **the hold** follows from the age (90 days under 180, 60 under 365, 45 under 730, then 30). A
@@ -320,7 +329,7 @@ record and never from a hand-written list of names:
 * **the whole bill** is stated in one line, so the reader can check the position against the fees
   instead of adding five costs up in their head. The plan spends gas at five points, and step 8
   says what that comes to and what share of the stake it is. Across the 195 rows the share runs
-  from 4% to 20%, and no row spends more than a quarter of its stake on gas.
+  from 0.2% to 19.4%, and no row spends more than a quarter of its stake on gas.
 * **what the position earns** follows from the action, not from the category's name. A deposit
   into a vault, a lending market, a pool or a strategy earns the protocol's own yield, and the
   plan says so. A swap, a purchase, a bridge, a collateral lock, a margin position, a wrapper or

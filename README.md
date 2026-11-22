@@ -48,14 +48,15 @@ The full write-up, including the measurements behind each choice and the launch 
   value if it issues, and the implied value the board ranks it by. Sortable on every column,
   filterable by name, category, chain and scope.
 * **The plot** — implied value against launch odds, dot size by TVL; click a dot for its detail.
-* **The detail view** — the model's own arithmetic for that row, the snapshot record it read, an
+* **The detail view** — the model's own arithmetic for that row, the snapshot record it read, a
   nine-step farm plan with what each step costs and how long it takes, and the peer protocols of
   the same category.
 * **Already trading** — the protocols whose tokens do trade, in their own table, at the market's own
-  value. They are never mixed into the ranking. Their market cap and TVL print at six significant
-  figures, because the Cap/TVL multiple beside them is shown to two decimals and a two-decimal
-  multiple is not determined by a three-figure figure: a reader's own division of the printed
-  operands now lands on the printed multiple on all 30 rows.
+  value. They are never mixed into the ranking, and the table holds every one of them, not a page
+  of the largest. Their market cap and TVL print at six significant figures, because the Cap/TVL
+  multiple beside them is shown to two decimals and a two-decimal multiple is not determined by a
+  three-figure figure: a reader's own division of the printed operands now lands on the printed
+  multiple on all 119 rows.
 * **The model** — the fitted coefficients, the launch curve read off the snapshot's cohorts, the
   category corrections, and the fit's own error and AUC.
 

@@ -167,6 +167,17 @@ export function cohortGap(p: SnapshotProtocol): string | null {
   return 'under the model\'s $1M market-cap or TVL floor';
 }
 
+/**
+ * The reason a row is outside the cohort, as the page's prose writes it: the singular for one
+ * row and the plural for several. The reason that names a floor is a phrase, not a noun, so its
+ * plural is not the same word with an "s" on it -- "under the model's $1M market-cap or TVL
+ * floor" has no plural, and the copy reads "under the model's $1M floor" instead.
+ */
+export function cohortGapPlural(reason: string, n: number): string {
+  if (reason === 'under the model\'s $1M market-cap or TVL floor') return 'under the model\'s $1M floor';
+  return n > 1 ? reason + 's' : reason;
+}
+
 /** The days a protocol has been tracked, from its first day in the snapshot to the snapshot's date. */
 export function ageDays(asOf: string, listedAt: string | null): number | null {
   if (listedAt === null) return null;
@@ -1386,13 +1397,16 @@ export interface UniverseRow {
   symbol: string | null;
 }
 
-/** How many live-token protocols the page's own table carries, by market cap. */
-export const LIVE_ROWS = 30;
-
 /**
  * Every protocol that records a token of its own and could sit in the live table: a market cap
- * above zero, and not a central exchange, whose volume is not a protocol's TVL. The table shows
- * the largest LIVE_ROWS of them; the page says so, and says how many there are.
+ * above zero, and not a central exchange, whose volume is not a protocol's TVL.
+ *
+ * The table shows ALL of them, not a page of the largest. The table used to carry the largest
+ * thirty and the page said the rest were "further down the same list" -- but there was no list
+ * below it: the live tab has no filter, no search and no second page, so a reader who wanted the
+ * thirty-first row had nowhere to go and the drawer for it said the protocol was not on the
+ * board. A table that promises a continuation it does not have is worse than one that says how
+ * many rows it holds, so the tab now holds every candidate and the copy counts them.
  */
 export function liveCandidates(snapshot: Snapshot): SnapshotProtocol[] {
   return snapshot.protocols
@@ -1459,7 +1473,6 @@ export function buildBoard(snapshot: Snapshot, cal: Calibration): BoardRow[] {
 /** The live-token protocols, by market cap, for the page's table of what already trades. */
 export function liveRows(snapshot: Snapshot): LiveRow[] {
   return liveCandidates(snapshot)
-    .slice(0, LIVE_ROWS)
     .map((p) => ({
       slug: p.slug,
       name: p.name,
@@ -1856,7 +1869,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     live_with_cap: snapshot.protocols.filter((p) => (p.mcap_usd ?? 0) > 0).length,
     live_cex: snapshot.protocols.filter((p) => (p.mcap_usd ?? 0) > 0 && p.category === 'CEX').length,
     live_out_cohort: live.length - inCohort,
-    live_out_reasons: [...gapCount].map(([why, n]) => `${n} ${why}${n > 1 ? 's' : ''}`).join(', '),
+    live_out_reasons: [...gapCount].map(([why, n]) => `${n} ${cohortGapPlural(why, n)}`).join(', '),
     clamped,
     floored,
     off_by_reason: offByReason,
@@ -1912,11 +1925,10 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'Every figure here is fitted at run time on the snapshot itself; the <strong>model</strong> tab shows the arithmetic.',
     live_lede:
       'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol. ' +
-      'This tab holds the other side of the line: the ' + live.length + ' largest of the ' + facts.live_candidates +
+      'This tab holds the other side of the line: the ' + live.length +
       ' protocols that <strong>do</strong> record a market cap of their own and are not an exchange venue, by market cap. ' +
       'Their value is the market\'s own, not a model\'s, so they are never mixed into the ranking — ' +
-      'the ' + cal.cohort_size + ' of them that are in the model\'s calibration cohort are what it was calibrated on. ' +
-      facts.live_in_cohort + ' of these ' + live.length + ' are in the cohort that taught it what a market cap is worth against TVL.',
+      facts.live_in_cohort + ' of these ' + live.length + ' are in the model\'s calibration cohort — every one of the ' + cal.cohort_size + ' the value model was fitted on.',
     model_lede:
       'Everything the board ranks comes from two fits, and both are made here in the page from the snapshot\'s own figures. ' +
       'The <strong>value model</strong> asks what a market cap is worth against TVL, and it is fitted on the ' +
@@ -1927,8 +1939,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     live_note:
       '<strong class="lead">The snapshot holds ' + facts.snapshot_protocols + ' protocols, ' + facts.snapshot_tokens + ' of which record a token of some kind</strong>; ' +
       facts.live_with_cap + ' carry a market cap of their own, and ' + facts.live_cex + ' of those are exchange venues, so they are set aside too. ' +
-      'This table holds the ' + live.length + ' largest of the ' + facts.live_candidates + ' that are left, by market cap; the rest are further down the same list. ' +
-      'The other ' + facts.live_out_cohort + ' of these ' + live.length + ' are here only as contrast — ' + facts.live_out_reasons + '. ' +
+      'That leaves the ' + facts.live_candidates + ' in this table, all of them, by market cap. ' +
+      'The other ' + facts.live_out_cohort + ' are here only as contrast — ' + facts.live_out_reasons + '. ' +
       'A market cap over TVL below 1 is a token the market prices at less than the deposits behind it.',
     clamps:
       'Two clamps, and they are the model\'s only floors. <strong>Growth</strong> is held between −60% and +120%: a week beyond either end is one regime, not a bigger number, so ' +
@@ -1939,8 +1951,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       '<p><strong>It is not:</strong> a prediction that a token will be issued, or of when, or at what price. The launch odds say how often protocols like this one have issued, not that this one will. A protocol records no token in DefiLlama\'s record; that is not proof it has none, and the board says so.</p>' +
       '<p><strong>The separation:</strong> the ' + snapshot.watchlist.length + ' watchlist protocols are all on the board, but so are ' +
       (board.length - snapshot.watchlist.length) + ' more — the watchlist is a floor, never a ceiling. The ' +
-      live.length + ' protocols shown in the <strong>Already trading</strong> table are the largest of the ' + facts.live_candidates +
-      ' that record a market cap of their own and are not an exchange venue; they are kept out of the ranking entirely.</p>',
+      live.length + ' protocols in the <strong>Already trading</strong> table are every protocol that records a market cap of its own and is not an exchange venue; they are kept out of the ranking entirely.</p>',
     drawer_note:
       'An implied value is this entry\'s own estimate of what a token may be worth if the protocol\'s record stays as it is. ' +
       'It is not a price, not a promise, and not a prediction that one will be issued.',

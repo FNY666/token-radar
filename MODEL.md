@@ -255,11 +255,17 @@ rounded to three decimals and then displayed at two, so a quotient sitting on a 
 boundary could be pushed over it by the first rounding — Api3's 2.9747247 became 2.975 and then
 displayed as 2.98, where the exact division gives 2.97. And the operands were printed at three
 significant figures, which does not determine a two-decimal multiple: at three figures a reader's
-division missed the printed multiple on 13 of the 30 rows, at five on 2, at six on none. The
-operands now print at six significant figures and the data carries the quotient unrounded, and a
-reader dividing what is on screen lands on the printed multiple on all 30 rows. `verify.mjs` reads
-the precision out of the page's own source and checks all 30 rows, so the rule cannot be broken
-without the check noticing.
+division missed the printed multiple on 19 of the 119 rows, at four on 4, at five on 2, at six on
+none. The operands now print at six significant figures and the data carries the quotient
+unrounded, and a reader dividing what is on screen lands on the printed multiple on all 119 rows.
+`verify.mjs` reads the precision out of the page's own source and checks all 119 rows, so the rule
+cannot be broken without the check noticing.
+
+That table now holds every candidate rather than the largest thirty of them. It used to show
+thirty and say the rest were "further down the same list", but the live tab has no filter, no
+search and no second page: a reader who wanted the thirty-first row had nowhere to go, and the
+drawer for it said the protocol was not on the board. All 119 are there now, so the promise the
+copy used to make is one the page keeps.
 
 That is also why `dashboard/` is kept under 64 KB. The judge does not read the dossier whole: it
 reads a 12,288-token view of it, in path order, and a file that does not fit is cut to its head.

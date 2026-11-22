@@ -1971,18 +1971,18 @@ for (const name of shots) {
   check('the count of exchange venues among them is the one the copy names',
     copy.includes(facts.live_cex + ' of those are exchange venues'), String(facts.live_cex));
   check('the count left after the venues are set aside is the one the copy names',
-    copy.includes(facts.live_candidates + ' that are left'), String(facts.live_candidates));
+    copy.includes('leaves the ' + facts.live_candidates + ' in this table'), String(facts.live_candidates));
   check('the table really holds the number of rows the copy names',
-    live.length === 30, `${live.length} rows`);
+    live.length === facts.live_candidates, `${live.length} rows`);
 
-  // the cohort membership: 21 of the 30, and the other nine
+  // the cohort membership: 75 of the 119, and the other 44
   const cohortSlugs = new Set(data.cohort.map((p) => p.slug));
   const inCohort = live.filter((r) => cohortSlugs.has(r.slug)).length;
   check('the cohort membership the copy names is the measured one',
-    copy.includes(inCohort + ' of these ' + live.length + ' are in the cohort'), `${inCohort} of ${live.length}`);
+    copy.includes(inCohort + ' of these ' + live.length + ' are in the model\'s calibration cohort'), `${inCohort} of ${live.length}`);
   const outside = live.filter((r) => !cohortSlugs.has(r.slug));
   check('the rows outside the cohort are the count the copy names',
-    copy.includes('The other ' + outside.length + ' of these ' + live.length + ' are here only as contrast'), `${outside.length}`);
+    copy.includes('The other ' + outside.length + ' are here only as contrast'), `${outside.length}`);
   // and each of the nine carries its own reason, and the copy's breakdown names every kind
   const reasons = {};
   for (const r of outside) {
@@ -1991,10 +1991,20 @@ for (const name of shots) {
       typeof k === 'string' && k.length > 0, String(k));
     reasons[k] = (reasons[k] ?? 0) + 1;
   }
-  // the copy lists them as "1 versioned pool, 6 bridges, 1 staking wrapper, 1 wrapped or staked name"
+  // the copy lists them as "1 versioned pool, 18 bridges, 11 staking wrappers, 1 wrapped or staked
+  // name, 13 under the model's $1M floor" -- and each kind's plural is written out, because the
+  // floor reason is a phrase and cannot take an "s".
   const tally = Object.entries(reasons).sort((a, b) => b[1] - a[1]);
+  const PLURAL = {
+    'bridge': 'bridges',
+    'staking wrapper': 'staking wrappers',
+    'versioned pool': 'versioned pools',
+    'wrapped or staked name': 'wrapped or staked names',
+    'exchange venue': 'exchange venues',
+    "under the model's $1M market-cap or TVL floor": "under the model's $1M floor",
+  };
   check('the copy names every kind of row outside the cohort, with its count',
-    tally.every(([kind, n]) => copy.includes(n + ' ' + kind.split(' ')[0]) || copy.includes(n + ' ' + kind)),
+    tally.every(([kind, n]) => copy.includes(n + ' ' + (n > 1 ? (PLURAL[kind] ?? kind + 's') : kind))),
     tally.map(([k, n]) => n + ' ' + k).join(', '));
   check('the rows outside the cohort add up to the count the copy names',
     outside.length === tally.reduce((n, [, c]) => n + c, 0), `${outside.length}`);
@@ -2214,10 +2224,11 @@ for (const name of shots) {
   check('119 protocols could sit in the live table', liveCandidates.length === 119, `${liveCandidates.length}`);
   check('128 protocols carry a market cap of their own', withCap.length === 128, `${withCap.length}`);
   check('9 of those are exchange venues', cex.length === 9, `${cex.length}`);
-  check('the live tab holds 30 rows', (data.live ?? []).length === 30, `${(data.live ?? []).length}`);
-  check('21 live rows are in the calibration cohort', facts.live_in_cohort === 21, `${facts.live_in_cohort}`);
-  check('the nine live rows outside the cohort are named by reason',
-    facts.live_out_reasons === '1 versioned pool, 6 bridges, 1 staking wrapper, 1 wrapped or staked name',
+  check('the live tab holds every candidate, not a page of them',
+    (data.live ?? []).length === liveCandidates.length, `${(data.live ?? []).length} of ${liveCandidates.length}`);
+  check('75 live rows are in the calibration cohort', facts.live_in_cohort === 75, `${facts.live_in_cohort}`);
+  check('the 44 live rows outside the cohort are named by reason',
+    facts.live_out_reasons === '1 versioned pool, 18 bridges, 11 staking wrappers, 1 wrapped or staked name, 13 under the model\'s $1M floor',
     facts.live_out_reasons);
 
   // the clamps

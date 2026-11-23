@@ -2041,6 +2041,14 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'launch odds      = logistic(age band, tvl band, growth), then held to [0.05, 0.95]\n' +
       'implied value    = conditional value · launch odds  ← the board ranks this\n' +
       '\n' +
+      'The launch odds are a logistic on eleven terms: an intercept, one for each age band\n' +
+      '(under 6 months, 6–12, 1–2, 2–4, over 4 years), one for each TVL band (under $10M,\n' +
+      '$10–50M, $50–200M, over $200M), and the growth term, clamped and scaled to tenths.\n' +
+      '  intercept ' + cal.launch_beta[0].toFixed(4) +
+      '   age ' + cal.launch_beta.slice(1, 6).map((b) => b.toFixed(4)).join('  ') + '\n' +
+      '  tvl   ' + cal.launch_beta.slice(6, 10).map((b) => b.toFixed(4)).join('  ') + '\n' +
+      '  growth ' + cal.launch_beta[10].toFixed(4) + '  (per ten points of clamped weekly growth)\n' +
+      '\n' +
       'Growth enters through the launch odds, where it is measured and strong: across the ' +
       cal.universe_size + ' protocols the launch model is fitted on, the rate at which a protocol\n' +
       'issues falls from ' + growthPct(cal.growth_quartiles[0]) + ' in the worst seven-day-growth quartile to ' +

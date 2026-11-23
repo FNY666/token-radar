@@ -1398,6 +1398,40 @@ for (const name of shots) {
   const noLiteral = !/95% interval -1\.00 to -0\.21/.test(libSrc) && !/negative in 300 of 300/.test(libSrc);
   check('no bootstrap figure is typed into the copy source', noLiteral,
     noLiteral ? 'measured' : 'a literal survives in lib/model.ts');
+
+  // The formula card now prints the launch model's eleven coefficients, so a reader can
+  // recompute the odds themselves. The printed coefficients must actually reproduce the odds
+  // the board publishes -- and the card must print them, not merely carry them in the data.
+  const lb = cal.launch_beta;
+  const AGE = [[0, 182], [182, 365], [365, 730], [730, 1460], [1460, Infinity]];
+  const TVL = [[0, 1e7], [1e7, 5e7], [5e7, 2e8], [2e8, Infinity]];
+  const bandOf = (edges, v) => { for (let i = 0; i < edges.length; i++) if (v < edges[i][1]) return i; return edges.length - 1; };
+  const dayOf = (listed) => {
+    if (!listed) return 365;
+    const a = Date.parse(data.as_of + 'T00:00:00Z');
+    const c = Date.parse(listed + 'T00:00:00Z');
+    if (!isFinite(a) || !isFinite(c)) return 365;
+    return Math.max(0, Math.floor((a - c) / 86400000));
+  };
+  const protoBy = new Map(snapshot.protocols.map((p) => [p.slug, p]));
+  let worst = 0;
+  for (const r of data.rows) {
+    const p = protoBy.get(r.slug);
+    if (!p) continue;
+    const ab = bandOf(AGE, dayOf(p.listed_at));
+    const tb = bandOf(TVL, p.tvl_usd);
+    const x = [1, ...AGE.map((_, i) => (i === ab ? 1 : 0)), ...TVL.map((_, i) => (i === tb ? 1 : 0)),
+      Math.max(-60, Math.min(120, p.change_7d ?? 0)) / 10];
+    let z = 0;
+    for (let i = 0; i < lb.length; i++) z += lb[i] * x[i];
+    const raw = Math.max(0.05, Math.min(0.95, 1 / (1 + Math.exp(-z))));
+    worst = Math.max(worst, Math.abs(raw - r.launch_probability));
+  }
+  check('the published launch coefficients reproduce every board row\'s odds', worst < 1e-6,
+    'worst gap ' + worst.toExponential(2));
+  const printed = lb.every((b) => copy.includes(b.toFixed(4)));
+  check('the formula card prints all eleven launch coefficients', printed,
+    lb.filter((b) => !copy.includes(b.toFixed(4))).map((b) => b.toFixed(4)).join(', ') || 'all printed');
 }
 
 // ---------------------------------------------------------------- the growth claim is measured, not typed

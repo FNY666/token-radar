@@ -1288,6 +1288,8 @@ export interface Labels {
   snapshot_record: string;
   how_to_farm: string;
   others_here: string;
+  /** What the drawer says when the row's category holds no other protocol on the board. */
+  alone_here: string;
   /** The drawer's close control. */
   close: string;
   /** The live table's columns. */
@@ -2090,6 +2092,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       snapshot_record: 'The snapshot record it read',
       how_to_farm: 'How to farm it',
       others_here: 'Others in this category',
+      alone_here: 'This is the only protocol on the board in its category, so there are no others to compare it with.',
       close: 'Close details',
       market_cap: 'Market cap',
       cap_over_tvl: 'Cap / TVL',

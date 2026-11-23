@@ -34,6 +34,8 @@
  var SORTS = {
   rank: function (r) { return r.rank; },
   name: function (r) { return r.name.toLowerCase(); },
+  scope: function (r) { return r.on_watchlist ? 0 : 1; },
+  category: function (r) { return (r.category || '').toLowerCase(); },
   tvl: function (r) { return r.tvl_usd; },
   growth: function (r) { return typeof r.change_7d !== 'number' ? NaN : r.change_7d; },
   value: function (r) { return r.implied_value_usd; },
@@ -65,8 +67,8 @@
     // carries the name.
     sortHeader('rank', '#', false, 1, L.rank),
     sortHeader('name', 'Protocol', false, -1),
-    el('th', { scope: 'col', text: 'Scope' }),
-    el('th', { scope: 'col', text: 'Category' }),
+    sortHeader('scope', 'Scope', false, 1),
+    sortHeader('category', 'Category', false, 1),
     sortHeader('tvl', 'TVL', true, -1),
     sortHeader('growth', '7d', true, -1),
     sortHeader('odds', L.odds, true, -1),
@@ -282,7 +284,7 @@
     .concat(sect(L.how_priced, deriv))
     .concat(sect(L.snapshot_record, record))
     .concat(sect(L.how_to_farm, steps))
-    .concat(peerBox ? sect(L.others_here, peerBox) : [])
+    .concat(peerBox ? sect(L.others_here, peerBox) : sect(L.others_here, e('p', 'muted', L.alone_here)))
     .concat([e('div', 'warn', D.copy.drawer_note)]));
 
   mountSheet(host, sheet, row);

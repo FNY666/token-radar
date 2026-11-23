@@ -5,9 +5,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.55 var(--fon
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-0.015em;text-wrap:balance}
 p{margin:0}
 button,input,select{font:inherit;color:inherit}
-/* The tap highlight is set deliberately rather than left to the browser's default blue: on a
-   dark panel the default reads as a flash of the wrong colour, and the ring below says where the
-   touch landed instead. `manipulation` drops the double-tap zoom delay. */
+/* The tap highlight is set rather than left to the browser's default blue: on a dark panel the
+   default reads as a flash of the wrong colour. `manipulation` drops the double-tap zoom delay. */
 button,tbody tr.row,.tab,.chip{-webkit-tap-highlight-color:var(--v07);touch-action:manipulation}
 button,tbody tr.row{cursor:pointer}
 :focus-visible{outline:2px solid var(--value);outline-offset:2px}
@@ -75,8 +74,7 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 .controls button.ghost:hover{color:var(--ink);border-color:var(--i3)}
 /* The board is nine columns wide and cannot fit a narrow phone. A scroll the reader cannot see
    is a scroll the reader does not know to make, so the wrapper paints a shadow on whichever edge
-   still has table beyond it: the shadows are fixed to the wrapper, two opaque covers scroll
-   with the content, uncovering them. */
+   still has table beyond it. */
 .table-wrap{overflow-x:auto;overflow-y:clip;background-image:linear-gradient(var(--panel),var(--panel)),linear-gradient(var(--panel),var(--panel)),linear-gradient(to right,var(--shadow),transparent),linear-gradient(to left,var(--shadow),transparent);background-position:0 50%,100% 50%,0 50%,100% 50%;background-repeat:no-repeat;background-size:16px;background-attachment:local,local,scroll,scroll}
 table{width:100%;border-collapse:collapse}
 thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--c);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
@@ -181,6 +179,6 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .chip-static{background:var(--p2);color:var(--i2);border:var(--bl)}
 @media (max-width: 1000px){.hero-grid{grid-template-columns:1fr}.brand-tag{display:none}}
 /* iOS Safari zooms the viewport when a focused input's text is under 16px and never zooms back
-   out, so the fields hold 16px where the zoom happens and drop to the page's 14px above that. */
+   out, so the fields hold 16px where the zoom happens. */
 @media (max-width: 1000px){.controls .q,.controls select{font-size:16px}}
 @media (max-width: 420px){.kpis{grid-template-columns:1fr}}

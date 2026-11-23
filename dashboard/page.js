@@ -329,13 +329,16 @@
  ]));
  if (FIT) {
  var ok = FIT.exact === FIT.total;
+ var d = FIT.total - FIT.exact;
+ var pc = FIT.worst * 100;
  host.appendChild(card(L.refitted, [
  el('div', { class: 'big', style: ok ? '' : 'color:var(--live)' },
  FIT.exact + ' / ' + FIT.total),
  el('p', { html: D.copy.refit_lead +
  (ok
  ? '<strong>All ' + FIT.total + ' rows reproduce exactly</strong>, so the board and the page are the same model.'
- : '<strong>' + (FIT.total - FIT.exact) + ' rows differ</strong>, the largest by ' + (FIT.worst * 100).toFixed(1) + '%, which means the data on this page is stale.') })
+ : '<strong>' + d + (d === 1 ? ' row differs' : ' rows differ') + '</strong>, the largest by ' +
+ (pc >= 0.1 ? pc.toFixed(1) : pc.toPrecision(2)) + '%, which means the data on this page is stale.') })
  ]));
  }
  var curve = card(L.curve_title, [t('p', D.copy.curve_note)]);
@@ -678,7 +681,7 @@
  el('h1', null, [headline]),
  el('p', { class: 'lede', html: ledeText })
  ]);
- // the callout explains the table under it, and each view has its own table
+ // the callout explains the table under it, and each view has its own
  var pc = D.copy['pricing_' + view] || D.copy.pricing_board;
  var steps = h('div','callout', [
  t('h2',pc.head),

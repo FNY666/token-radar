@@ -22,7 +22,7 @@ code{font-size:.92em}
 .bar{position:sticky;top:0;z-index:40;background:var(--b2);border-bottom:var(--bl)}
 .bar-in,main{max-width:1400px;margin:0 auto}
 .bar-in{padding:var(--c) var(--e);display:flex;align-items:center;justify-content:space-between;gap:var(--e)}
-/* The brand must not be squeezed: `flex: none` keeps the name whole while the meta wraps. */
+/* The brand must not be squeezed: `flex: none` keeps the name whole. */
 .brand{display:flex;align-items:baseline;gap:var(--c);flex:none}
 .sweep{width:9px;height:9px;border-radius:50%;background:var(--value);align-self:center;flex:none}
 .brand-name,.bar-meta dd,.controls .result,.rk{font-family:var(--mono);font-size:13px}

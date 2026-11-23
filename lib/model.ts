@@ -1346,6 +1346,8 @@ export interface Facts {
   live_candidates: number;
   live_with_cap: number;
   live_cex: number;
+  /** The protocols that record a token but carry no market cap of their own. */
+  live_no_cap: number;
   live_out_cohort: number;
   /** Why each live row outside the cohort is outside it, as a phrase. */
   live_out_reasons: string;
@@ -1865,6 +1867,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     live_candidates: liveCandidates(snapshot).length,
     live_with_cap: snapshot.protocols.filter((p) => (p.mcap_usd ?? 0) > 0).length,
     live_cex: snapshot.protocols.filter((p) => (p.mcap_usd ?? 0) > 0 && p.category === 'CEX').length,
+    live_no_cap: snapshot.protocols.filter((p) => (p.mcap_usd ?? 0) <= 0 && (p.gecko_id !== null || p.symbol !== null)).length,
     live_out_cohort: live.length - inCohort,
     live_out_reasons: [...gapCount].map(([why, n]) => `${n} ${cohortGapPlural(why, n)}`).join(', '),
     clamped,
@@ -1937,7 +1940,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       '<strong class="lead">The snapshot holds ' + facts.snapshot_protocols + ' protocols, ' + facts.snapshot_tokens + ' of which record a token of some kind</strong>; ' +
       facts.live_with_cap + ' carry a market cap of their own, and ' + facts.live_cex + ' of those are exchange venues, so they are set aside too. ' +
       'That leaves the ' + facts.live_candidates + ' in this table, all of them, by market cap. ' +
-      'The other ' + facts.live_out_cohort + ' are here only as contrast — ' + facts.live_out_reasons + '. ' +
+      'The other ' + facts.live_no_cap + ' record a token but no price — a ticker, or a CoinGecko id the snapshot carries no market cap for — so they are on neither table. ' +
+      'Of the ' + facts.live_candidates + ', ' + facts.live_out_cohort + ' are here only as contrast — ' + facts.live_out_reasons + '. ' +
       'A market cap over TVL below 1 is a token the market prices at less than the deposits behind it.',
     clamps:
       'Two clamps, and they are the model\'s only floors. <strong>Growth</strong> is held between −60% and +120%: a week beyond either end is one regime, not a bigger number, so ' +

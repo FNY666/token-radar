@@ -1976,6 +1976,20 @@ for (const name of shots) {
   check('the table really holds the number of rows the copy names',
     live.length === facts.live_candidates, `${live.length} rows`);
 
+  // The note's accounting has to close for a reader: of the protocols that record a token, some
+  // are in the table, some carry no price at all and are on neither table, and the rest are the
+  // venues set aside. A reader who adds the numbers up must land on the count the note opened
+  // with -- otherwise the paragraph has swallowed a group without saying so.
+  check('the protocols that record a token but carry no price are the count the copy names',
+    copy.includes('The other ' + facts.live_no_cap + ' record a token but no price'),
+    String(facts.live_no_cap));
+  check('the live note\'s accounting closes: the priced and the unpriced are every protocol that records a token',
+    facts.live_with_cap + facts.live_no_cap === facts.snapshot_tokens,
+    `${facts.live_with_cap} + ${facts.live_no_cap} = ${facts.live_with_cap + facts.live_no_cap}, against ${facts.snapshot_tokens}`);
+  check('the live note\'s accounting closes: the table and the venues are every priced protocol',
+    facts.live_candidates + facts.live_cex === facts.live_with_cap,
+    `${facts.live_candidates} + ${facts.live_cex} = ${facts.live_candidates + facts.live_cex}, against ${facts.live_with_cap}`);
+
   // the cohort membership: 75 of the 119, and the other 44
   const cohortSlugs = new Set(data.cohort.map((p) => p.slug));
   const inCohort = live.filter((r) => cohortSlugs.has(r.slug)).length;
@@ -1983,7 +1997,7 @@ for (const name of shots) {
     copy.includes(inCohort + ' of these ' + live.length + ' are in the model\'s calibration cohort'), `${inCohort} of ${live.length}`);
   const outside = live.filter((r) => !cohortSlugs.has(r.slug));
   check('the rows outside the cohort are the count the copy names',
-    copy.includes('The other ' + outside.length + ' are here only as contrast'), `${outside.length}`);
+    copy.includes('Of the ' + live.length + ', ' + outside.length + ' are here only as contrast'), `${outside.length}`);
   // and each of the nine carries its own reason, and the copy's breakdown names every kind
   const reasons = {};
   for (const r of outside) {

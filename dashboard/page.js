@@ -401,14 +401,14 @@
  var inCohort = COHORT[row.slug] === true;
  var gap = row.not_in_cohort || null;
  var kpis = h('div','kpis', [
- kpi(L.market_cap, moneyExact(row.mcap_usd), 'gold'),
- kpi('TVL', moneyExact(row.tvl_usd)),
+ kpi(L.market_cap, moneyWhole(row.mcap_usd), 'gold'),
+ kpi('TVL', moneyWhole(row.tvl_usd)),
  kpi(L.cap_over_tvl, row.ratio === null ? '—' : row.ratio.toFixed(2), 'cyan'),
  kpi('7d change', pct(row.change_7d))
  ]);
  var record = h('div','deriv', [
- line(L.market_cap, moneyExact(row.mcap_usd)),
- line('TVL', moneyExact(row.tvl_usd)),
+ line(L.market_cap, moneyWhole(row.mcap_usd)),
+ line('TVL', moneyWhole(row.tvl_usd)),
  line(L.cap_over_tvl, row.ratio === null ? L.not_recorded : row.ratio.toFixed(4)),
  line(L.seven_day, pct(row.change_7d)),
  line('Category', row.category || 'Uncategorised'),
@@ -792,6 +792,13 @@
  var mant = n / scale;
  var factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
  return '$' + (Math.round(mant * factor) / factor * scale).toLocaleString('en-US');
+ }
+ // The dollars the snapshot carries, with the thousands a reader reads them with. The live
+ // drawer's market cap and TVL are its own operands for the multiple beside them, so they print
+ // in full: the reader's own division of the two has to land on that multiple.
+ function moneyWhole(n) {
+ if (n === null || n === undefined) return '—';
+ return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });
  }
  function chg(r) {
  return e('td', 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), pct(r.change_7d));

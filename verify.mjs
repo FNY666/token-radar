@@ -520,9 +520,16 @@ for (const name of shots) {
         const row = Array.from(document.querySelectorAll('tbody tr.row')).find((x) => x.querySelector('.pname').childNodes[0].textContent === n);
         row.click();
       }, name);
-      await page.waitForSelector('.sheet', { visible: true });
-      const lines = await page.evaluate(() => Array.from(document.querySelectorAll('.sheet .deriv .line')).map((l) => l.innerText.replace(/\n/g, ' = ')));
-      await page.evaluate(() => document.querySelector('.drawer .close').click());
+      // A drawer that throws never opens, so this must not wait for one that will never come.
+      const opened = await page.waitForFunction(() => {
+        const s = document.querySelector('.drawer .sheet');
+        return !!(s && !s.closest('.drawer').hidden);
+      }, { timeout: 2000 }).then(() => true).catch(() => false);
+      const lines = opened ? await page.evaluate(() => Array.from(document.querySelectorAll('.sheet .deriv .line')).map((l) => l.innerText.replace(/\n/g, ' = '))) : [];
+      await page.evaluate(() => {
+        const c = document.querySelector('.drawer .close');
+        if (c) c.click();
+      });
       await new Promise((r) => setTimeout(r, 15));
       const dollars = (s) => { const m = /\$([\d,]+)/.exec(s); return m ? Number(m[1].replace(/,/g, '')) : null; };
       const percent = (s) => { const m = /= ([\d.]+)%/.exec(s); return m ? Number(m[1]) : null; };
@@ -552,6 +559,117 @@ for (const name of shots) {
       off.length === 0,
       off.length === 0 ? `${ledger.length} rows agree` : `${off.length} disagree: ` + JSON.stringify(off.slice(0, 4)));
   }
+}
+
+// ---------------------------------------------------------------- the live drawer's ledger
+// The LIVE drawer prints the market cap, the TVL and the Cap/TVL multiple, and it prints the
+// multiple at four decimals. A reader who opens a live row and divides the two figures on
+// screen must land on that multiple: the drawer has to be the reader's own division. The two
+// operands are whole dollars in the snapshot, so the drawer prints them whole; rounding them
+// to six figures loses the fourth decimal of the multiple on the rows where it matters.
+//
+// This opens every live row, reads the drawer's OWN two operands and the drawer's OWN multiple,
+// and does the division the reader would do.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1200 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  // switch to the live tab
+  await page.evaluate(() => document.getElementById('tab-live').click());
+  await page.waitForFunction(() => document.querySelectorAll('#view-live tbody tr.row').length > 0);
+  const names = await page.evaluate(() => Array.from(document.querySelectorAll('#view-live tbody tr.row')).map((r) => r.querySelector('.pname').childNodes[0].textContent));
+  const ledger = [];
+  for (const name of names) {
+    await page.evaluate((n) => {
+      const row = Array.from(document.querySelectorAll('#view-live tbody tr.row')).find((x) => x.querySelector('.pname').childNodes[0].textContent === n);
+      row.click();
+    }, name);
+    const opened = await page.waitForFunction(() => {
+      const s = document.querySelector('.drawer .sheet');
+      return !!(s && !s.closest('.drawer').hidden);
+    }, { timeout: 2000 }).then(() => true).catch(() => false);
+    const lines = opened ? await page.evaluate(() => Array.from(document.querySelectorAll('.sheet .deriv .line')).map((l) => l.innerText.replace(/\n/g, ' = '))) : [];
+    await page.evaluate(() => {
+      const c = document.querySelector('.drawer .close');
+      if (c) c.click();
+    });
+    await new Promise((r) => setTimeout(r, 15));
+    const dollars = (s) => { const m = /\$([\d,]+)/.exec(s); return m ? Number(m[1].replace(/,/g, '')) : null; };
+    const multiple = (s) => { const m = /= ([\d.]+)$/.exec(s); return m ? Number(m[1]) : null; };
+    ledger.push({ name, mcap: dollars(lines[0]), tvl: dollars(lines[1]), ratio: multiple(lines[2]) });
+  }
+  await browser.close();
+  const off = [];
+  for (const r of ledger) {
+    if (r.mcap === null || r.tvl === null || r.ratio === null) { off.push({ name: r.name, why: 'unparsed' }); continue; }
+    if (r.tvl === 0) { off.push({ name: r.name, why: 'zero tvl' }); continue; }
+    const computed = (r.mcap / r.tvl).toFixed(4);
+    if (computed !== r.ratio.toFixed(4)) {
+      off.push({ name: r.name, mcap: r.mcap, tvl: r.tvl, printed: r.ratio.toFixed(4), computed });
+    }
+  }
+  check("the live drawer's own figures divide out: the market cap over the TVL is the multiple beside them",
+    off.length === 0,
+    off.length === 0 ? `${ledger.length} live rows agree` : `${off.length} disagree: ` + JSON.stringify(off.slice(0, 4)));
+}
+
+// ---------------------------------------------------------------- no row's drawer throws
+// A row's drawer is a function call away from the row, and a name that no longer exists fails
+// only when a reader opens THAT row -- the page still loads, the table still renders, and every
+// other check still passes. A helper was once renamed in one place and left in four others, and
+// every live row's drawer threw a ReferenceError while the whole suite stayed green: nothing
+// here ever opened a drawer on the page's own data.
+//
+// So this opens EVERY row of BOTH tables and watches for a page error. A drawer that throws
+// does not open, so the sheet must be on screen afterwards too: an exception that is caught
+// somewhere else and leaves the reader with no drawer is the same failure.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.setViewport({ width: 1440, height: 1200 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  let opened = 0;
+  let failed = 0;
+  for (const view of ['board', 'live']) {
+    if (view === 'live') {
+      await page.evaluate(() => document.getElementById('tab-live').click());
+      await page.waitForFunction(() => document.querySelectorAll('#view-live tbody tr.row').length > 0);
+    }
+    const n = await page.evaluate((v) => document.querySelectorAll('#view-' + v + ' tbody tr.row').length, view);
+    for (let i = 0; i < n; i++) {
+      await page.evaluate((v, k) => {
+        document.querySelectorAll('#view-' + v + ' tbody tr.row')[k].click();
+      }, view, i);
+      const shown = await page.evaluate(() => {
+        const s = document.querySelector('.drawer .sheet');
+        return !!(s && !s.closest('.drawer').hidden);
+      });
+      if (shown) opened++;
+      else failed++;
+      await page.evaluate(() => {
+        const c = document.querySelector('.drawer .close');
+        if (c) c.click();
+      });
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  }
+  await browser.close();
+  check("every row of both tables opens its drawer, and nothing throws on the way",
+    errors.length === 0 && failed === 0,
+    errors.length === 0 && failed === 0 ? `${opened} drawers opened` : `${failed} did not open; ` + errors.slice(0, 2).join(' | '));
 }
 
 // ---------------------------------------------------------------- the board's scroll cue

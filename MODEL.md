@@ -265,6 +265,26 @@ unrounded, and a reader dividing what is on screen lands on the printed multiple
 `verify.mjs` reads the precision out of the page's own source and checks all 119 rows, so the rule
 cannot be broken without the check noticing.
 
+**The drawer carries the same rule, and it did not.** The already-trading drawer prints the
+market cap, the TVL and the Cap/TVL multiple again. It printed the two operands at **six
+significant figures** while the multiple beside them is at **four decimals**, and six figures do
+not determine a four-decimal multiple: dividing the drawer's own two operands missed the printed
+multiple on 3 of the 119 rows, by 0.0006 on Rain and by 0.0001 on the other two. The two operands
+are whole dollars in the snapshot, so the drawer now prints them **whole** — the market cap and the
+TVL, in dollars, with the thousands a reader reads them with — and the division of the two lands
+on the multiple beside them on all 119 rows. A check opens all 119 live rows and does that
+division; planting the six-figure rounding back into the built page makes it report exactly those
+3 rows.
+
+**And a row's drawer is a call away from its row.** A helper was renamed in the place that
+defines it and left in the four places that call it, so every live row's drawer threw a
+`ReferenceError` and **did not open at all** — while the whole suite stayed green, because every
+check that read a drawer was reading a *board* row's drawer, and no check watched for a page
+error on the page's own data. A check now opens every row of both tables (195 board, 119 live)
+and asserts that the sheet is on screen afterwards and that nothing threw on the way. The two
+drawer checks that read figures no longer wait for a sheet that a throw will never bring: they
+report the row as unreadable instead of hanging the suite for thirty seconds.
+
 That table now holds every candidate rather than the largest thirty of them. It used to show
 thirty and say the rest were "further down the same list", but the live tab has no filter, no
 search and no second page: a reader who wanted the thirty-first row had nowhere to go, and the

@@ -2908,6 +2908,27 @@ for (const name of shots) {
   check('the one-member corrections run from 0.648 to 1.312 on the conditional value',
     Math.abs(lo - 0.648) < 0.001 && Math.abs(hi - 1.312) < 0.001, `${lo.toFixed(3)} to ${hi.toFixed(3)}`);
 
+  // The same three bounds over the two WIDER sets the doc now names. The one-member figures are
+  // the tightest of the three, and a doc that quoted only them would read as if the shrinkage
+  // bounded every category's correction, which it does not.
+  for (const [label, pick] of [
+    ['the 21 thin categories', (es) => es.filter(([, n]) => n <= 3)],
+    ['all 26 categories the cohort saw', (es) => es]
+  ]) {
+    const es = pick(Object.entries(cal.category_sizes));
+    const ks = es.map(([k]) => k);
+    const own = Math.max(...ks.map((k) => Math.abs(ownOf(k) - default_)));
+    const pub = Math.max(...ks.map((k) => Math.abs(cal.category_log[k] - default_)));
+    const f = ks.map((k) => Math.pow(10, cal.category_log[k]));
+    const flo = Math.min(...f), fhi = Math.max(...f);
+    check(`${label} carry their own shrinkage bounds`,
+      Math.abs(own - (ks.length === 21 ? 1.751 : 1.837)) < 0.001 &&
+      Math.abs(pub - (ks.length === 21 ? 0.350 : 0.367)) < 0.001 &&
+      Math.abs(flo - (ks.length === 21 ? 0.510 : 0.510)) < 0.001 &&
+      Math.abs(fhi - (ks.length === 21 ? 1.951 : 2.030)) < 0.001,
+      `${ks.length} categories: own ${own.toFixed(3)}, published ${pub.toFixed(3)}, multipliers ${flo.toFixed(3)}–${fhi.toFixed(3)}`);
+  }
+
   // and the sentence that states them must say them the way the measurement reads.
   const modelMd = fs.readFileSync(path.join(process.cwd(), 'MODEL.md'), 'utf8');
   check('MODEL.md states the base-rate gap as 19.3 points', modelMd.includes('19.3 points of base rate'), 'stated');

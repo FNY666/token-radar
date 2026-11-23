@@ -63,8 +63,7 @@
   headCtx.redraw = refresh;
   var head = el('thead', null, [
    el('tr', null, [
-    // The rank column shows "#", but a screen reader reads the header's text, so the button
-    // carries the name.
+    // The rank column shows "#", but a screen reader reads the header's text.
     sortHeader('rank', '#', false, 1, L.rank),
     sortHeader('name', 'Protocol', false, -1),
     sortHeader('scope', 'Scope', false, 1),
@@ -136,10 +135,8 @@
 
  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
- // The page refits the model and recomputes every row from its own figures. The three displayed
- // figures are each shown to a fixed precision and the implied value is computed from the other
- // two at that precision, so the check is made the same way: does the row's arithmetic hold to
- // the last digit the reader can see?
+ // The page refits the model and recomputes every row from its own figures, so the check is made
+ // the way the board computes: does the row's arithmetic hold to the last digit the reader sees?
  function sigRound(n, sig) {
   if (!isFinite(n) || n === 0) return n;
   var a = Math.abs(n);
@@ -170,8 +167,8 @@
    : row.conditional_value_usd;
   var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
   var odds = launchP(row);
-  // the implied value, computed the way the board computes it: from the conditional value and
-  // the odds at the precision they are shown, so the ledger lands on the board's figure
+  // the implied value, computed from the conditional value and the odds at the precision they
+  // are shown, so the ledger lands on the board's figure
   var shown = sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3);
   return {
    conditional: cond,
@@ -362,8 +359,8 @@
  el('tbody', null, c.bands.map(function (b) {
  var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
  b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—'];
- // The first cell of a row names the row, so it is a row header: a screen reader then reads the
- // age band with each of the four figures instead of four bare numbers.
+ // The first cell of a row names the row, so it is a row header: a reader then reads the age
+ // band with each of the four figures instead of four bare numbers.
  return el('tr', null, cells.map(function (c, i) {
  return i === 0 ? el('th', { scope: 'row' }, [c]) : t('td', c);
  }));
@@ -384,8 +381,8 @@
  ]);
  function catRow(k, v, n) {
  catTable.lastChild.appendChild(el('tr', null, [
- // The category names the row, so it is a row header: a screen reader then reads the category
- // with each of the two figures.
+ // The category names the row, so it is a row header: a reader then reads the category with
+ // each of the two figures.
  el('th', { scope: 'row' }, [k]),
  t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')'),
  // How many cohort members the correction rests on.
@@ -463,7 +460,7 @@
  var ns = 'http://www.w3.org/2000/svg';
  var svg = document.createElementNS(ns, 'svg');
  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-// The viewBox scales UNIFORMLY: a dot is a circle, a label is not.
+// The viewBox scales UNIFORMLY, so a dot is a circle and a label is not.
  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 // Each dot is a control, so the SVG is a GROUP, not an image.
  svg.setAttribute('role', 'group');
@@ -960,7 +957,7 @@
  var main = document.getElementById('board');
  if (!main) return;
  // The copy for the case where there is no data.js at all cannot come from the data -- the data
- // is what is missing -- so it is written here, where it is still there when it is needed.
+ // is what is missing -- so it is written here.
  main.appendChild(h('section','card prose missing', [
  h('h1', null, ['This page has no board yet']),
  t('p','The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.'),

@@ -1997,6 +1997,8 @@ for (const name of shots) {
     // where the table starts: how far down a phone has to scroll to reach the board
     const t = document.querySelector('.table-wrap');
     out.tableTop = t ? Math.round(t.getBoundingClientRect().top + window.scrollY) : null;
+    const first = document.querySelector('tbody tr.row') || document.querySelector('tbody tr');
+    out.firstRowTop = first ? Math.round(first.getBoundingClientRect().top + window.scrollY) : null;
     return out;
   });
   await browser.close();
@@ -2009,6 +2011,11 @@ for (const name of shots) {
   check("the page runs clean at a phone's width", phoneErrors.length === 0, phoneErrors.slice(0, 2).join(' | '));
   check('the board starts within two screens of a phone', st.tableTop !== null && st.tableTop < 1700,
     `${st.tableTop}px down`);
+  // The FIRST row is what a reader meets, and the header sits above it. The two screens the
+  // check above allows are 1,688px of a 844px screen; the first row has to land inside that too,
+  // not just the table's top edge, or the board starts on a third screen.
+  check('the first row of the board is inside two screens of a phone',
+    st.firstRowTop !== null && st.firstRowTop < 1688, `${st.firstRowTop}px down`);
 }
 
 // ---------------------------------------------------------------- the model tab's four unbacked figures

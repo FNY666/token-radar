@@ -72,7 +72,8 @@ rho(r) = c²/2 + c²·ln(|r|/c)     past it
 splits, paired split by split. The weighted fit misses fewer rows badly (fewer rows off by more
 than one log10) in about 150 of 300 splits, and it cuts the worst single row's influence on the
 intercept from 0.410 log10 to 0.273 — each the maximum over that fit's own worst row, and the row
-a plain fit leans on hardest moves the model's own fit by only 0.084, a fifth as much. Its
+a plain fit leans on hardest — Rain, priced at 400 times its deposits — moves the model's own fit
+by only 0.084, a fifth as much. Its
 advantage on *rank correlation* is **within noise**:
 across sixteen independent draws of the 300 splits the win count runs 136–156 against a plain
 least squares and 130–166 under a hash-of-slug folding, so half the time the plain fit ranks the

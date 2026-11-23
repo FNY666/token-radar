@@ -452,8 +452,10 @@ function influenceOfOneRow(cohort: SnapshotProtocol[]): {
   plain: number;
   weighted: number;
   worstRowOnWeighted: number;
+  /** How many times its deposits the row a plain fit leans on hardest is priced at. */
+  worstRowRatio: number;
 } {
-  if (cohort.length === 0) return { plain: 0, weighted: 0, worstRowOnWeighted: 0 };
+  if (cohort.length === 0) return { plain: 0, weighted: 0, worstRowOnWeighted: 0, worstRowRatio: 0 };
   // The intercept of a fit with one row left out, under each of the two weights.
   const interceptOf = (rows: SnapshotProtocol[], weighted: boolean): number => {
     const design = rows.map((p) => valueRow(p));
@@ -497,6 +499,7 @@ function influenceOfOneRow(cohort: SnapshotProtocol[]): {
   const weightedFull = interceptOf(cohort, true);
   let plainMax = 0;
   let worstSlug: string | null = null;
+  let worstRowRatio = 0;
   let weightedOfWorst = 0;
   for (const row of cohort) {
     const rest = cohort.filter((p) => p.slug !== row.slug);
@@ -505,6 +508,9 @@ function influenceOfOneRow(cohort: SnapshotProtocol[]): {
       plainMax = plainMove;
       worstSlug = row.slug;
       weightedOfWorst = Math.abs(weightedFull - interceptOf(rest, true));
+      // How many times its own deposits the row is priced at: the page names that multiple, so
+      // it has to come from the row rather than from a number typed in beside it.
+      worstRowRatio = Math.max(row.tvl_usd, 1) > 0 ? (row.mcap_usd ?? 0) / Math.max(row.tvl_usd, 1) : 0;
     }
   }
   let weightedMax = 0;
@@ -514,7 +520,7 @@ function influenceOfOneRow(cohort: SnapshotProtocol[]): {
     if (move > weightedMax) weightedMax = move;
   }
   void worstSlug;
-  return { plain: plainMax, weighted: weightedMax, worstRowOnWeighted: weightedOfWorst };
+  return { plain: plainMax, weighted: weightedMax, worstRowOnWeighted: weightedOfWorst, worstRowRatio };
 }
 
 /**
@@ -725,6 +731,8 @@ export interface Calibration {
   influence_plain: number;
   influence_weighted: number;
   influence_worst_row_weighted: number;
+  /** How many times its deposits the row a plain fit leans on hardest is priced at. */
+  influence_worst_row_ratio: number;
   /**
    * The launch model's growth coefficient under resampling: how many of the resamples left it
    * negative, out of how many, and the 95% interval the resamples put it in.
@@ -1001,6 +1009,7 @@ export function calibrate(snapshot: Snapshot): Calibration {
     influence_plain: influence.plain,
     influence_weighted: influence.weighted,
     influence_worst_row_weighted: influence.worstRowOnWeighted,
+    influence_worst_row_ratio: influence.worstRowRatio,
     launch_floor: 0.05,
   };
 }
@@ -1191,6 +1200,8 @@ export interface RadarData {
     influence_plain: number;
     influence_weighted: number;
     influence_worst_row_weighted: number;
+    /** How many times its deposits the row a plain fit leans on hardest is priced at. */
+    influence_worst_row_ratio: number;
     /** How many of the launch model's growth-coefficient resamples came out negative, and the interval. */
     launch_growth_negative: number;
     launch_growth_resamples: number;
@@ -2024,7 +2035,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       Math.pow(10, cal.held_out_mae_log10).toFixed(1) + '. The fit is a redescending-weight least squares, so no ' +
       'single row can drag it: the worst single row moves the intercept by ' + cal.influence_plain.toFixed(3) + ' log10 under a ' +
       'plain least squares, and by ' + cal.influence_weighted.toFixed(3) + ' log10 under the weight the model uses. The row that moves ' +
-      'a plain fit most — the one priced at four hundred times its deposits — moves the ' +
+      'a plain fit most — the one priced at ' + cal.influence_worst_row_ratio.toFixed(0) + ' times its deposits — moves the ' +
       'model\'s own fit by ' + cal.influence_worst_row_weighted.toFixed(3) + ', a fifth as much.',
     launch_odds_note:
       'How well the launch model separates the protocols that have issued a token of their own from those that have not, across the eligible universe less the ' +
@@ -2193,6 +2204,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       influence_plain: Math.round(cal.influence_plain * 1000) / 1000,
       influence_weighted: Math.round(cal.influence_weighted * 1000) / 1000,
       influence_worst_row_weighted: Math.round(cal.influence_worst_row_weighted * 1000) / 1000,
+      influence_worst_row_ratio: Math.round(cal.influence_worst_row_ratio),
       launch_auc: Math.round(cal.launch_auc * 1000) / 1000,
     },
     rows: board.map((r) => ({

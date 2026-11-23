@@ -2135,6 +2135,22 @@ for (const name of shots) {
     && !/by 0\.084, a fifth/.test(libSrc);
   check("no influence figure is typed into the copy source", noLiteral,
     'the copy source builds them from the calibration');
+
+  // "the one priced at four hundred times its deposits" names a row, and a multiple. The
+  // multiple has to be that row's own, recomputed from the cohort -- not a number typed in
+  // beside the row.
+  const worstRow = cohort.find((p) => p.slug === worstSlug);
+  const ownRatio = worstRow ? (worstRow.mcap_usd ?? 0) / Math.max(worstRow.tvl_usd, 1) : 0;
+  check("the multiple the copy prints is the worst row's own",
+    cal.influence_worst_row_ratio === Math.round(ownRatio),
+    `published ${cal.influence_worst_row_ratio} vs the row's own ${ownRatio.toFixed(2)}`);
+  const printedMultiple = /priced at (\d+) times its deposits/.exec(String(copy.value_fit_note ?? ''));
+  check("the copy prints that multiple",
+    printedMultiple !== null && Number(printedMultiple[1]) === cal.influence_worst_row_ratio,
+    printedMultiple ? printedMultiple[1] : 'none printed');
+  const noTypedMultiple = !/four hundred times its deposits/.test(libSrc);
+  check("no multiple is typed into the copy source", noTypedMultiple,
+    'the copy source builds it from the calibration');
 }
 
 // ---------------------------------------------------------------- the model's own tables, re-derived
@@ -2444,8 +2460,11 @@ for (const name of shots) {
   const worstRatio = (worst.mcap_usd ?? 1) / Math.max(worst.tvl_usd, 1);
   check("the row a plain fit leans on hardest is priced at 400 times its deposits",
     Math.abs(worstRatio - 400) < 5, `${worst.slug} at ${worstRatio.toFixed(1)}x`);
-  check('the copy names that row as four hundred times its deposits',
-    copy.value_fit_note.includes('four hundred times its deposits'), 'stated');
+  // The copy used to spell the multiple out in words. It now builds it from the calibration, so
+  // the check reads the number the copy prints rather than a phrase.
+  check('the copy names that row at the multiple the calibration holds',
+    new RegExp('priced at ' + cal.influence_worst_row_ratio + ' times its deposits')
+      .test(copy.value_fit_note), `${cal.influence_worst_row_ratio} printed`);
 
   // the precision claim: the printed coefficients and corrections against the exact ones
   const a = Math.round(cal.value_beta[0] * 1e4) / 1e4;

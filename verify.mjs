@@ -2244,6 +2244,32 @@ for (const name of shots) {
   check('59 board rows clear the $50M floor', watchlist.size + above.length === 59,
     `${watchlist.size + above.length}`);
 
+  // The protocols the board leaves off, and the reason for each. The board's own rule is
+  // structural, so a protocol off the board always has one; and "below the floor" is not a rule,
+  // so a small protocol the board KEEPS must not be counted among the ones it leaves off.
+  const offBoard = snapshot.protocols.filter((p) => isPre(p) && !board.some((b) => b.slug === p.slug));
+  const offReason = (p) => {
+    if (p.category === 'CEX') return 'exchanges';
+    if (['Bridge', 'Canonical Bridge', 'Cross Chain Bridge'].includes(p.category)) return 'bridges';
+    if (['Liquid Staking', 'Liquid Restaking', 'Restaked BTC', 'Anchor BTC'].includes(p.category)) return 'staking';
+    if (/\s(V\d+(\.\d+)?|v\d+(\.\d+)?|\d+\.\d+)$/.test(p.name)) return 'versioned';
+    if (/\b(wrapped|staked|staking)\b/i.test(p.name)) return 'wrapped';
+    if (/^(Binance|Coinbase|Bybit|Kraken|Bitget|OKX|Bitfinex|Gemini)\b/.test(p.name)) return 'exchanges';
+    return null;
+  };
+  const offWithReason = offBoard.filter((p) => offReason(p) !== null);
+  check('every protocol the board leaves off has a reason of its own',
+    offWithReason.length === offBoard.length, `${offWithReason.length} of ${offBoard.length}`);
+  check('the excluded list the page carries is every protocol left off above the floor',
+    (data.excluded ?? []).length === offBoard.filter((p) => p.tvl_usd >= 50_000_000).length,
+    `${(data.excluded ?? []).length}`);
+  check('the below-floor count is the ones the board leaves off, not every small protocol',
+    data.below_floor === offBoard.filter((p) => p.tvl_usd < 50_000_000).length,
+    `${data.below_floor} against ${offBoard.filter((p) => p.tvl_usd < 50_000_000).length}`);
+  check('the small protocols the board keeps are not counted among the ones it leaves off',
+    data.below_floor !== snapshot.protocols.filter((p) => isPre(p) && p.tvl_usd < 50_000_000).length,
+    `${data.below_floor}`);
+
   // the live tab, under the library's own rules
   const liveCandidates = snapshot.protocols
     .filter((p) => !isPre(p) && (p.mcap_usd ?? 0) > 0 && p.category !== 'CEX');

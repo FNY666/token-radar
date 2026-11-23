@@ -1198,7 +1198,13 @@ export interface RadarData {
   universe: UniverseRow[];
   /** The pre-token protocols the board's own rule leaves off, and which rule left each one. */
   excluded: ExcludedRow[];
-  /** The pre-token protocols below the house's TVL floor: too small to rank, not ruled out. */
+  /**
+   * The pre-token protocols below the house's TVL floor: too small to rank, not ruled out.
+   *
+   * This counts the ones the board LEAVES OFF for being below the floor. It is not the number of
+   * small pre-token protocols in the snapshot: 136 of the small ones are off the watchlist and the
+   * board keeps them anyway, because a floor is a house rule and a radar looks past it.
+   */
   below_floor: number;
   /** The counts the page's own prose is made of, so no claim can drift from the figures. */
   facts: Facts;
@@ -1838,7 +1844,13 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
   let belowFloor = 0;
   for (const p of snapshot.protocols) {
     if (!isPreToken(p)) continue;
-    if (p.tvl_usd < snapshot.floor_usd) { belowFloor++; continue; }
+    if (p.tvl_usd < snapshot.floor_usd) {
+      // Below the floor is not a rule: the board keeps the small ones it can rank and leaves off
+      // only those its own structural rule also rules out. A protocol that is small AND eligible
+      // is on the board, so it is not counted here.
+      if (offBoardReason(p) !== null) belowFloor++;
+      continue;
+    }
     const reason = offBoardReason(p);
     if (reason !== null) excluded.push({ slug: p.slug, reason });
   }

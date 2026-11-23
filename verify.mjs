@@ -2681,6 +2681,101 @@ for (const name of shots) {
     check('README.md claims the board is sortable on every column, and it is',
       readme.includes('Sortable on every column') && cols.every((c) => c.sortable),
       readme.includes('Sortable on every column') ? 'claimed, and true' : 'README does not claim it');
+
+    // The claim "sortable on every column" says the click ORDERS the rows. A sort control that
+    // fires, sets aria-sort and writes the URL but leaves the order alone would pass every check
+    // above. So the order itself is read back and compared with the column's own key, in BOTH
+    // directions: the rows must be monotone in the direction the header says.
+    {
+      const { createRequire } = await import('node:module');
+      const require = createRequire(import.meta.url);
+      const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+      const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+      const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1440, height: 900 });
+      await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+      await page.waitForSelector('tbody tr');
+      // The key each column sorts by, read from the page's OWN data for the row in that order.
+      const KEY = {
+        board: {
+          rank: (r) => r.rank,
+          name: (r) => r.name.toLowerCase(),
+          scope: (r) => (r.on_watchlist ? 0 : 1),
+          category: (r) => (r.category || '').toLowerCase(),
+          tvl: (r) => r.tvl_usd,
+          growth: (r) => r.change_7d,
+          odds: (r) => r.launch_probability,
+          conditional: (r) => r.conditional_value_usd,
+          value: (r) => r.implied_value_usd,
+        },
+        live: {
+          name: (r) => r.name.toLowerCase(),
+          category: (r) => (r.category || '').toLowerCase(),
+          mcap: (r) => r.mcap_usd,
+          tvl: (r) => r.tvl_usd,
+          ratio: (r) => r.ratio,
+          growth: (r) => r.change_7d,
+        },
+      };
+      const report = [];
+      const broken = [];
+      for (const view of ['board', 'live']) {
+        await page.evaluate((v) => { location.hash = '#view=' + v; }, view);
+        await new Promise((r) => setTimeout(r, 400));
+        const cols = await page.$$eval(`#view-${view} thead th button`, (bs) => bs.map((b) => b.getAttribute('data-col')));
+        for (const col of cols) {
+          for (let click = 0; click < 2; click++) {
+            await page.click(`#view-${view} thead th button[data-col="${col}"]`);
+            await new Promise((r) => setTimeout(r, 80));
+            const got = await page.evaluate((v) => {
+              const slugs = Array.from(document.querySelectorAll(`#view-${v} tbody tr`)).map((r) => r.getAttribute('data-slug'));
+              const ths = Array.from(document.querySelectorAll(`#view-${v} thead th`));
+              const rows = window.RADAR[v === 'board' ? 'rows' : 'live'];
+              const byslug = {};
+              rows.forEach((r) => { byslug[r.slug] = r; });
+              return {
+                slugs,
+                list: slugs.map((s) => byslug[s]),
+                // the column each header sorts by, and the direction it claims, read off the
+                // header that owns the button
+                headers: ths.map((t) => {
+                  const btn = t.querySelector('button');
+                  return btn ? { col: btn.getAttribute('data-col'), aria: t.getAttribute('aria-sort') } : null;
+                }),
+              };
+            }, view);
+            const key = KEY[view][col];
+            const head = got.headers.find((h) => h && h.col === col);
+            const aria = head ? head.aria : null;
+            if (!aria) { report.push(view + '/' + col + ' NO ARIA'); continue; }
+            if (typeof key !== 'function') { report.push(view + '/' + col + ' NO KEY'); continue; }
+            const vals = got.list.map(key);
+            // The direction the header claims, and the order the rows are actually in. The
+            // comparison is strict on the non-ties: the page breaks a tie by rank, so two rows
+            // with the SAME key are in any order -- but a row whose key is GREATER than the
+            // previous one, in the direction the header claims, is out of order.
+            const dir = aria === 'ascending' ? 1 : -1;
+            let mono = true;
+            for (let i = 1; i < vals.length; i++) {
+              const a = vals[i - 1];
+              const c = vals[i];
+              if (a === null || a === undefined || Number.isNaN(a)) continue;
+              if (c === null || c === undefined || Number.isNaN(c)) continue;
+              // ascending: c - a must not be negative. descending: dir is -1, so dir*(c-a) must
+              // not be negative either -- the same test for both directions.
+              if (dir * (c - a) < -1e-9) { mono = false; break; }
+            }
+            report.push(view + '/' + col + ' ' + aria);
+            if (!mono) broken.push(view + '/' + col + ' ' + aria);
+          }
+        }
+      }
+      await browser.close();
+      check('every sort really orders the rows, in the direction the header names',
+        broken.length === 0,
+        broken.length === 0 ? report.length + ' sorts, all monotone' : broken.join(', '));
+    }
   }
 
   // the clamps

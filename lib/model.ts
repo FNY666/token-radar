@@ -1310,6 +1310,8 @@ export interface Labels {
   refitted: string;
   curve_title: string;
   curve_issued: string;
+  /** The first column of the launch curve's table: the age band, not the model's cohort. */
+  curve_cohort: string;
   category_corrections: string;
   is_and_is_not: string;
   /** The board's states and its controls. */
@@ -2115,6 +2117,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       refitted: 'Refitted in this page',
       curve_title: 'How often a protocol issues a token, by how long it has run',
       curve_issued: 'Issued a token',
+      curve_cohort: 'Age band',
       category_corrections: 'Category corrections',
       is_and_is_not: 'What this is and is not',
       empty_board: 'No protocol matches these filters. Clear them to see the whole board.',

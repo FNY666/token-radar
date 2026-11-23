@@ -1125,7 +1125,13 @@ for (const name of shots) {
     seen.push(await page.evaluate(() => Array.from(document.querySelectorAll('main table')).map((t) => ({
       cls: t.className || '(the board)',
       headers: Array.from(t.querySelectorAll('thead th')).map((h) => h.textContent.trim()),
-      rows: t.querySelectorAll('tbody tr').length
+      rows: t.querySelectorAll('tbody tr').length,
+      // The scope of each column header, and the row headers under it: a table whose first
+      // column is a set of names needs those names to BE headers, or a screen reader reaches
+      // the numbers without the names they belong to.
+      colScopes: Array.from(t.querySelectorAll('thead th')).map((h) => h.getAttribute('scope')),
+      rowHeaders: t.querySelectorAll('tbody th[scope=row]').length,
+      firstCells: Array.from(t.querySelectorAll('tbody tr')).map((tr) => tr.firstElementChild.tagName)
     }))));
   }
   await browser.close();
@@ -1136,6 +1142,20 @@ for (const name of shots) {
   const mismatch = every.filter((t) => t.headers.length > 0 && t.rows === 0);
   check('every headed table has rows under its header', mismatch.length === 0,
     mismatch.length === 0 ? 'all have rows' : JSON.stringify(mismatch));
+  // The two model tables name a set in their first column -- an age band, a category -- and
+  // that name has to reach the reader as a header, or the figures beside it are bare numbers.
+  const modelTables = every.filter((t) => t.cls === 'bands' || t.cls === 'cat-table');
+  const noRowHeader = modelTables.filter((t) => t.rowHeaders !== t.rows);
+  check('the model tables name their first column in a row header', noRowHeader.length === 0,
+    noRowHeader.length === 0 ? modelTables.map((t) => `${t.cls}: ${t.rowHeaders} of ${t.rows}`).join(' | ')
+      : JSON.stringify(noRowHeader));
+  const notTh = modelTables.filter((t) => t.firstCells.some((tag) => tag !== 'TH'));
+  check('no model table row starts with a plain cell', notTh.length === 0,
+    notTh.length === 0 ? 'all rows start with a header' : JSON.stringify(notTh.map((t) => t.cls)));
+  // The header row's own cells are column headers, so they carry scope="col" like the board's.
+  const noColScope = every.filter((t) => t.colScopes.some((s) => s !== 'col'));
+  check('every column header is marked as a column header', noColScope.length === 0,
+    noColScope.length === 0 ? every.map((t) => t.cls).join(' | ') : JSON.stringify(noColScope.map((t) => t.cls)));
 }
 
 // ---------------------------------------------------------------- every control says what it is

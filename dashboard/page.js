@@ -356,13 +356,17 @@
  curve.appendChild(curveBox);
  var bandsTable = h('table','bands', [
  el('thead', null, [el('tr', null, [
- t('th','Cohort'), t('th','Protocols'),
- t('th',L.curve_issued), t('th','Rate')
+ colHead(L.curve_cohort), colHead('Protocols'),
+ colHead(L.curve_issued), colHead('Rate')
  ])]),
  el('tbody', null, c.bands.map(function (b) {
  var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
  b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—'];
- return el('tr', null, cells.map(function (c) { return t('td', c); }));
+ // The first cell of a row names the row, so it is a row header: a screen reader then reads the
+ // age band with each of the four figures instead of four bare numbers.
+ return el('tr', null, cells.map(function (c, i) {
+ return i === 0 ? el('th', { scope: 'row' }, [c]) : t('td', c);
+ }));
  }))
  ]);
  curve.appendChild(bandsTable);
@@ -374,13 +378,15 @@
  // The three columns are named in a header row, not only in the prose above it.
  var catTable = h('table','cat-table', [
  el('thead', null, [el('tr', null, [
- t('th','Category'), t('th',L.category_correction), t('th',L.category_evidence)
+ colHead('Category'), colHead(L.category_correction), colHead(L.category_evidence)
  ])]),
  el('tbody')
  ]);
  function catRow(k, v, n) {
  catTable.lastChild.appendChild(el('tr', null, [
- t('td', k),
+ // The category names the row, so it is a row header: a screen reader then reads the category
+ // with each of the two figures.
+ el('th', { scope: 'row' }, [k]),
  t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')'),
  // How many cohort members the correction rests on.
  e('td', 'num', n === undefined ? '—' : String(n))
@@ -811,6 +817,8 @@
  function h(tag, cls, children) {
  return el(tag, { class: cls }, children);
  }
+ // A column header, marked as one, as the board's headers are.
+ function colHead(text) { return el('th', { scope: 'col' }, [text]); }
  function t(tag, text) {
  return el(tag, { text: text });
  }

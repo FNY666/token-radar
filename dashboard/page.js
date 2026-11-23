@@ -380,7 +380,7 @@
  catTable.lastChild.appendChild(el('tr', null, [
  t('td', k),
  t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')'),
- // How many cohort members the correction rests on: one row and ten are different numbers.
+ // How many cohort members the correction rests on.
  e('td', 'num', n === undefined ? '—' : String(n))
  ]));
  }
@@ -433,7 +433,7 @@
  function renderPlot() {
  var host = into('plot-wrap');
  var list = visibleRows();
- // With no row to draw there is no picture, so the plot goes and the table's message stands.
+ // With no row to draw there is no picture, so the plot goes.
  host.hidden = !list.length;
  if (host.hidden) return;
 // The SVG is in CSS pixels, so the viewBox is the box's own size.
@@ -457,7 +457,7 @@
  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
 // The viewBox scales UNIFORMLY: a dot is a circle, a label is not.
  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-// Each dot is a control, so the SVG is a GROUP, not an image holding buttons.
+// Each dot is a control, so the SVG is a GROUP, not an image.
  svg.setAttribute('role', 'group');
  function add(tag, attrs, text) {
  var n = document.createElementNS(ns, tag);
@@ -481,7 +481,7 @@
  add('text', { x: 8, y: 11, class: 'axis-title' }, L.implied);
  var dots = [];
  list.slice().sort(function (a, b) { return b.tvl_usd - a.tvl_usd; }).forEach(function (r) {
- // One description for both the tooltip and the screen-reader name, so they cannot drift.
+ // One description for the tooltip and the screen-reader name, so they cannot drift.
  var dl = r.name + ': ' + money(r.implied_value_usd) + ' implied, ' +
  oddsText(launchP(r)) + ' odds, ' + money(r.tvl_usd) + ' TVL, ' +
  (r.on_watchlist ? 'on' : 'off') + ' the house watchlist';
@@ -560,7 +560,7 @@
  ])
  ]),
  e('td', 'cat', r.category || 'Uncategorised'),
- // Six figures, not three: a two-decimal multiple is not determined by a three-figure operand.
+ // Six figures, not three: a two-decimal multiple is not set by a three-figure operand.
  e('td', 'right num', money(r.mcap_usd, 6)),
  e('td', 'right num', money(r.tvl_usd, 6)),
  h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : r.ratio.toFixed(2))]),
@@ -654,7 +654,7 @@
  if (moved) moved.focus();
  }
  }, [
- // The space is in the label, not the badge: without it the tab's name is "Pre-token board195".
+ // The space is in the label, not the badge: without it the tab reads "Pre-token board195".
  document.createTextNode(TAB_LABELS[key] + (key === 'model' ? '' : ' ')),
  key === 'model' ? null : e('span', 'count', '0')
  ]));
@@ -692,8 +692,8 @@
  function renderMeta() {
  var host = into('bar-meta');
  var facts = [
- ['snapshot', D.as_of],
- ['universe', D.universe_size + ' protocols'],
+ ['snapshot', D.as_of + ' · ' + D.snapshot_size + ' protocols'],
+ ['eligible', D.eligible_size + ' protocols'],
  ['watchlist', D.watchlist_size + ' covered'],
  ['board', D.board_size + ' rows'],
  ['model', D.model_version]

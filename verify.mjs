@@ -2285,6 +2285,22 @@ for (const name of shots) {
     facts.live_out_reasons === '1 versioned pool, 18 bridges, 11 staking wrappers, 1 wrapped or staked name, 13 under the model\'s $1M floor',
     facts.live_out_reasons);
 
+  // The word "universe" has to mean one set at a time. The meta bar used to label the snapshot's
+  // 758 protocols "universe", while the model tab calls the 433 eligible protocols "the eligible
+  // universe" and the launch fit's 303 "its own universe" -- three sets, one word, one page.
+  check('the snapshot count is the snapshot, not a universe', data.snapshot_size === snapshot.protocols.length,
+    `${data.snapshot_size}`);
+  check('the eligible count is the protocols the radar may price',
+    data.eligible_size === eligible.length, `${data.eligible_size} against ${eligible.length}`);
+  check('the page names the eligible universe with its number',
+    copy.refit_lead.includes('eligible universe — the ' + data.eligible_size + ' protocols'),
+    copy.refit_lead.slice(0, 120));
+  check('the page names the eligible universe as a part of the snapshot',
+    copy.refit_lead.includes('of the snapshot\'s ' + data.snapshot_size),
+    copy.refit_lead.slice(0, 200));
+  check('the data carries no field that calls the snapshot a universe', !('universe_size' in data),
+    Object.keys(data).filter((k) => k.includes('universe')).join(', ') || 'none');
+
   // the clamps
   const clamped = rows.filter((r) => r.change_7d !== null && (r.change_7d < -60 || r.change_7d > 120)).length;
   const floored = rows.filter((r) => r.launch_probability <= 0.05).length;
@@ -2536,6 +2552,43 @@ for (const name of shots) {
     modelMd.includes('0.648') && modelMd.includes('1.312'), 'stated');
   check('MODEL.md names the factor band as the published corrections, not a deviation from the global',
     modelMd.includes('published corrections') && modelMd.includes('run from 0.648 to 1.312'), 'stated');
+}
+
+// ---------------------------------------------------------------- the page's own meta bar
+// The bar at the top of the page names the sets the radar works over. It used to call the
+// snapshot's 758 protocols "the universe", while the model tab calls the 433 eligible protocols
+// "the eligible universe" and the launch fit's 303 "its own universe": one word, three sets, one
+// page. The bar's labels are read out of the DOM, because a check that reads the data can only
+// see what the data says -- not what the reader sees.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  const bar = await page.evaluate(() => Array.from(document.querySelectorAll('#bar-meta div')).map((d) => ({
+    k: d.querySelector('dt').textContent.trim(),
+    v: d.querySelector('dd').textContent.trim(),
+  })));
+  await browser.close();
+  const labels = bar.map((b) => b.k);
+  const values = bar.map((b) => b.v);
+  check('the meta bar names the snapshot, the eligible set and the board',
+    labels.includes('snapshot') && labels.includes('eligible') && labels.includes('board'), labels.join(', '));
+  check('no label in the meta bar calls a set a universe',
+    !labels.some((l) => /universe/i.test(l)), labels.join(', '));
+  check('the meta bar says how many protocols the snapshot holds',
+    values.some((v) => v.includes('758')), values.join(' | '));
+  check('the meta bar says how many protocols are eligible',
+    values.some((v) => v.includes('433')), values.join(' | '));
+  check('the meta bar says how many rows are on the board',
+    values.some((v) => v.includes('195')), values.join(' | '));
+  check('the meta bar does not call the 758 a universe in its values either',
+    !values.some((v) => /universe/i.test(v)), values.join(' | '));
 }
 
 // ---------------------------------------------------------------- the page with no data at all

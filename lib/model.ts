@@ -1157,7 +1157,14 @@ export interface RadarData {
   board_size: number;
   early_size: number;
   live_size: number;
-  universe_size: number;
+  /**
+   * The protocols the snapshot holds. NOT the eligible universe: the model tab calls the 433
+   * eligible protocols "the eligible universe" and the launch fit's 303 "its own universe", so a
+   * third meaning for the same word would leave a reader unable to tell the sets apart.
+   */
+  snapshot_size: number;
+  /** The eligible protocols the model may price: 433 of the snapshot's protocols. */
+  eligible_size: number;
   calibration: {
     value_beta: number[];
     launch_beta: number[];
@@ -1371,6 +1378,8 @@ export interface Facts {
   /** The protocols the whole snapshot holds, and those of them that record a token of any kind. */
   snapshot_protocols: number;
   snapshot_tokens: number;
+  /** The protocols the radar may price: the eligible universe, less nothing. */
+  eligible_protocols: number;
 }
 
 /** One protocol the board leaves off, and the rule that left it off. */
@@ -1899,6 +1908,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     }).length,
     snapshot_protocols: snapshot.protocols.length,
     snapshot_tokens: snapshot.protocols.filter((p) => p.mcap_usd !== null || p.gecko_id !== null || p.symbol !== null).length,
+    eligible_protocols: snapshot.protocols.filter((p) => isEligible(p)).length,
   };
   // The page's prose, written here so the page's source holds each sentence once. Every figure in
   // it is interpolated from the data, so the words cannot drift from the numbers they describe.
@@ -2048,7 +2058,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       'multiplication needs.',
     refit_lead:
       'This page carries the raw snapshot figures for the ' + cal.cohort_size +
-      ' protocols whose tokens already trade and for the whole eligible universe, and it refits the model from them ' +
+      ' protocols whose tokens already trade and for the whole eligible universe — the ' + facts.eligible_protocols +
+      ' protocols the radar may price, of the snapshot\'s ' + facts.snapshot_protocols + ' — and it refits the model from them ' +
       'with the code in <code>model.js</code> — the same procedure <code>main.ts</code> used, not the same numbers pasted in. ' +
       'It then recomputes every row of the board from those figures. ',
     curve_note:
@@ -2140,7 +2151,8 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     board_size: board.length,
     early_size: board.filter((r) => !watchlist.has(r.slug)).length,
     live_size: live.length,
-    universe_size: snapshot.protocols.length,
+    snapshot_size: snapshot.protocols.length,
+    eligible_size: snapshot.protocols.filter((p) => isEligible(p)).length,
     calibration: {
       value_beta: cal.value_beta.map((b) => Math.round(b * 1e12) / 1e12),
       launch_beta: cal.launch_beta.map((b) => Math.round(b * 1e12) / 1e12),

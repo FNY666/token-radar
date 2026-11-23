@@ -71,7 +71,7 @@ const WIDTH = 1440;
   // 1: the board
   await page.goto(url, { waitUntil: 'networkidle0' });
   await page.waitForSelector('tbody tr');
-  await shot('1-board.png', 1440);
+  await shot('1-board.png', 1360);
 
   // 2: a protocol's detail view, with the board still visible behind the drawer.
   await page.evaluate(() => {
@@ -89,7 +89,7 @@ const WIDTH = 1440;
     if (steps) sheet.scrollTop = Math.max(0, steps.offsetTop - 90);
   });
   await new Promise((r) => setTimeout(r, 200));
-  await shot('2-detail.png', 1300);
+  await shot('2-detail.png', 1030);
   await page.evaluate(() => document.querySelector('.drawer .close').click());
   await new Promise((r) => setTimeout(r, 150));
 
@@ -116,7 +116,7 @@ const WIDTH = 1440;
     if (tvl) tvl.click();
   });
   await new Promise((r) => setTimeout(r, 300));
-  await shot('3-filtered.png', 1440);
+  await shot('3-filtered.png', 1380);
 
   if (errors.length) {
     console.log('CONSOLE ERRORS:');

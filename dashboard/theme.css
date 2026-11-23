@@ -38,7 +38,7 @@ main{padding:0 var(--e) var(--g)}
 .hero h1+.lede::first-line,.kpi .v.gold,.peer .pv,.tag.wl{color:var(--value)}
 .tag.wl{border-color:var(--v45)}
 thead th .arrow{color:var(--value);margin-left:var(--a)}
-.hero p.lede{margin-top:var(--b);color:var(--i2);max-width:74ch;font-size:14px}
+.hero p.lede{margin-top:var(--b);color:var(--i2);max-width:78ch;font-size:14px}
 .hero p.lede strong,.callout ol li strong{color:var(--ink);font-weight:600}
 .callout,.card,.table-wrap,.plot-wrap,.controls,.live-note,.kpi,.deriv,.peer{background:var(--panel);border:var(--bl);color:var(--ink)}
 .callout,.plot-wrap{border-radius:var(--rm)}
@@ -178,6 +178,7 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .chips{display:flex;flex-wrap:wrap;gap:var(--a);margin-top:var(--b)}
 .chip-static{background:var(--p2);color:var(--i2);border:var(--bl)}
 @media (max-width: 1000px){.hero-grid{grid-template-columns:1fr}.brand-tag{display:none}}
+@media (max-width: 460px){.hero p.lede{font-size:12.5px}}
 /* iOS Safari zooms the viewport when a focused input's text is under 16px and never zooms back
    out, so the fields hold 16px where the zoom happens. */
 @media (max-width: 1000px){.controls .q,.controls select{font-size:16px}}

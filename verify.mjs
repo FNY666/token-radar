@@ -2473,7 +2473,7 @@ for (const name of shots) {
   const above = offList.filter((p) => p.tvl_usd >= 50_000_000);
   const below = offList.filter((p) => p.tvl_usd < 50_000_000);
 
-  check('the board lede says 195 rows', copy.board_lede.includes('195 protocols'), 'stated');
+  check('the board lede says 195 rows', copy.board_lede.includes('195 eligible protocols'), 'stated');
   check('the board lede says 40 on the watchlist and 155 off it',
     copy.board_lede.includes('40 on the house watchlist and 155 off the list'), 'stated');
   check('19 board rows sit above the floor and off the list', above.length === 19, `${above.length}`);

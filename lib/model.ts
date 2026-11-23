@@ -1941,14 +1941,14 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
     live_headline: 'These protocols already have a token.',
     model_headline: 'The model, fitted here in the page.',
     board_lede:
-      'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol: ' +
+      'The board ranks ' + board.length + ' eligible protocols with no market cap, no CoinGecko id and no symbol: ' +
       snapshot.watchlist.length + ' on the house watchlist and ' + (board.length - snapshot.watchlist.length) +
       ' off the list. The watchlist is a floor, never a ceiling. ' + sep + ' ' +
       'A further ' + facts.off_total + ' clear the ' + FLOOR + ' floor with no token and are still left off: ' +
       offText + ' — a venue, a bridge or a wrapper of someone else\'s token, not a protocol of its own. ' +
       'Every figure here is fitted at run time on the snapshot itself; the <strong>model</strong> tab shows the arithmetic.',
     live_lede:
-      'The board ranks ' + board.length + ' protocols with no market cap, no CoinGecko id and no symbol. ' +
+      'The board ranks ' + board.length + ' eligible protocols with no market cap, no CoinGecko id and no symbol. ' +
       'This tab holds the other side of the line: the ' + live.length +
       ' protocols that <strong>do</strong> record a market cap of their own and are not an exchange venue, by market cap. ' +
       'Their value is the market\'s own, not a model\'s, so they are never mixed into the ranking — ' +

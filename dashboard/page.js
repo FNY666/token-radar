@@ -63,7 +63,6 @@
   headCtx.redraw = refresh;
   var head = el('thead', null, [
    el('tr', null, [
-    // The rank column shows "#", but a screen reader reads the header's text.
     sortHeader('rank', '#', false, 1, L.rank),
     sortHeader('name', 'Protocol', false, -1),
     sortHeader('scope', 'Scope', false, 1),
@@ -119,7 +118,6 @@
    'aria-sort': active ? (sort.dir === 1 ? 'ascending' : 'descending') : null
   }, [el('button', { type: 'button', onclick: on, 'data-col': key, 'aria-label': name || null }, [
    document.createTextNode(label),
-   // `aria-sort` on the header says the direction, so the arrow is hidden from the tree.
    active ? el('span', { class: 'arrow', 'aria-hidden': 'true', text: sort.dir === 1 ? '▲' : '▼' }) : null
   ])]);
  }
@@ -135,8 +133,7 @@
 
  var MODEL = window.RadarModel ? window.RadarModel.fit(D) : null;
 
- // The page refits the model and recomputes every row from its own figures, so the check is made
- // the way the board computes: does the row's arithmetic hold to the last digit the reader sees?
+ // The page refits the model and recomputes every row from its own figures.
  function sigRound(n, sig) {
   if (!isFinite(n) || n === 0) return n;
   var a = Math.abs(n);
@@ -152,7 +149,6 @@
   D.rows.forEach(function (r) {
    var cond = MODEL.conditional(r.tvl_usd, r.change_7d, r.category);
    var odds = MODEL.launchP(r.tvl_usd, r.change_7d, r.age_days);
-   // the row's own triple, at the precision the board shows it
    var ev = Math.max(1, Math.round(sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3)));
    if (ev === r.implied_value_usd) exact++;
    var gap = r.implied_value_usd > 0 ? Math.abs(ev - r.implied_value_usd) / r.implied_value_usd : 0;
@@ -213,20 +209,20 @@
   host.hidden = false;
 
   var kpis = h('div','kpis', [
-   kpi(L.implied, moneyExact(row.implied_value_usd), 'gold'),
-   kpi('If it issues', moneyExact(row.conditional_value_usd)),
+   kpi(L.implied, moneySig(row.implied_value_usd, 3), 'gold'),
+   kpi('If it issues', moneySig(row.conditional_value_usd, 5)),
    kpi(L.odds, oddsText(calc.launch), 'cyan'),
-   kpi('TVL', moneyExact(row.tvl_usd))
+   kpi('TVL', moneySig(row.tvl_usd, 3))
   ]);
   var deriv = h('div','deriv', [
-   line('TVL', moneyExact(row.tvl_usd)),
+   line('TVL', moneySig(row.tvl_usd, 3)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),
    line(L.category_correction, '×' + Math.pow(10, row.category_log).toPrecision(9)),
-   // How many cohort members the correction rests on.
    line(L.category_evidence, categoryEvidence(row)),
-   line(L.value_if_issues, moneyExact(calc.conditional)),
+   line(L.value_if_issues, moneySig(calc.conditional, 5)),
    line(L.odds_recomputed, oddsText(odds)),
-   line(L.implied, moneyExact(calc.expected), true)
+    // The board's OWN implied value, so the row must multiply out.
+   line(L.implied, moneySig(row.implied_value_usd, 3), true)
   ]);
 
   // The correction's evidence: how many cohort members it rests on.
@@ -359,8 +355,8 @@
  el('tbody', null, c.bands.map(function (b) {
  var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
  b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—'];
- // The first cell of a row names the row, so it is a row header: a reader then reads the age
- // band with each of the four figures instead of four bare numbers.
+ // The first cell names the row, so it is a row header: a reader reads the age band with the
+ // four figures instead of four bare numbers.
  return el('tr', null, cells.map(function (c, i) {
  return i === 0 ? el('th', { scope: 'row' }, [c]) : t('td', c);
  }));
@@ -372,7 +368,6 @@
  var catRows = Object.keys(c.category_log).map(function (k) {
  return { k: k, v: c.category_log[k], n: (c.category_sizes || {})[k] };
  }).sort(function (a, b) { return b.v - a.v; });
- // The three columns are named in a header row, not only in the prose above it.
  var catTable = h('table','cat-table', [
  el('thead', null, [el('tr', null, [
  colHead('Category'), colHead(L.category_correction), colHead(L.category_evidence)
@@ -381,11 +376,8 @@
  ]);
  function catRow(k, v, n) {
  catTable.lastChild.appendChild(el('tr', null, [
- // The category names the row, so it is a row header: a reader then reads the category with
- // each of the two figures.
  el('th', { scope: 'row' }, [k]),
  t('td', (v >= 0 ? '+' : '') + v.toFixed(5) + '  (×' + Math.pow(10, v).toFixed(3) + ')'),
- // How many cohort members the correction rests on.
  e('td', 'num', n === undefined ? '—' : String(n))
  ]));
  }
@@ -434,20 +426,17 @@
  ]);
  mountSheet(host, sheet, row);
  }
-// The visible rows as a scatter: value against odds, dot size is TVL.
  function renderPlot() {
  var host = into('plot-wrap');
  var list = visibleRows();
- // With no row to draw there is no picture, so the plot goes.
+ // With no row there is no picture, so the plot goes.
  host.hidden = !list.length;
  if (host.hidden) return;
-// The SVG is in CSS pixels, so the viewBox is the box's own size.
  var cs = getComputedStyle(document.querySelector('.plot-wrap'));
  var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
  var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
  var H = 150, padL = 54, padR = 16, padT = 22, padB = 30;
  var maxV = colExtreme(list, 'implied_value_usd', 'max');
- // The scale's top is the next power of ten, so the grid lines are even.
  var scaleTop = 1; while (scaleTop < maxV) scaleTop *= 10;
  var logMin = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'min'), 1));
  var logMax = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'max'), 1));
@@ -460,7 +449,6 @@
  var ns = 'http://www.w3.org/2000/svg';
  var svg = document.createElementNS(ns, 'svg');
  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-// The viewBox scales UNIFORMLY, so a dot is a circle and a label is not.
  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 // Each dot is a control, so the SVG is a GROUP, not an image.
  svg.setAttribute('role', 'group');
@@ -794,9 +782,16 @@
  if (a >= 1e3) return '$' + (n / 1e3).toPrecision(s) + 'K';
  return '$' + Math.round(n);
  }
- function moneyExact(n) {
+ // A figure at `sig` significant figures, as the board prints it. The board's implied value is
+ // computed from the conditional value at five significant figures and from the odds at four
+ // decimals of a percent, so the detail view prints that same figure: the row has to multiply out.
+ function moneySig(n, sig) {
  if (n === null || n === undefined) return '—';
- return '$' + Math.round(n).toLocaleString('en-US');
+ var a = Math.abs(n);
+ var scale = a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
+ var mant = n / scale;
+ var factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
+ return '$' + (Math.round(mant * factor) / factor * scale).toLocaleString('en-US');
  }
  function chg(r) {
  return e('td', 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), pct(r.change_7d));
@@ -918,7 +913,6 @@
  for (var j = 0; j < D.universe.length; j++) {
  var u = D.universe[j];
  if (u.slug === slug && (u.mcap_usd !== null || u.gecko_id !== null)) {
- // A CoinGecko id with no market cap is a token the snapshot does not price.
  if (u.gecko_id !== null && !(u.mcap_usd > 0)) return L.token_recorded_not_priced;
  return L.live_not_here_short;
  }
@@ -956,8 +950,8 @@
  function renderMissingData() {
  var main = document.getElementById('board');
  if (!main) return;
- // The copy for the case where there is no data.js at all cannot come from the data -- the data
- // is what is missing -- so it is written here.
+ // With no data.js the copy cannot come from the data -- the data is what is missing -- so it
+ // is written here.
  main.appendChild(h('section','card prose missing', [
  h('h1', null, ['This page has no board yet']),
  t('p','The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.'),

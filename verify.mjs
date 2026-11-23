@@ -497,6 +497,61 @@ for (const name of shots) {
   }
   check('every row\'s three displayed figures multiply out, in exact decimal', bad === 0,
     bad === 0 ? `${rows.length} rows agree` : `${bad} disagree: ` + JSON.stringify(examples));
+
+  // The DETAIL view prints the same three figures, and a reader who opens a row and divides
+  // what is on screen by the odds beside it must land on the implied value there. The detail
+  // view's figures are at a different precision from the board's -- the conditional value at
+  // five significant figures, the odds at four decimals of a percent, the implied value at
+  // three -- so this re-reads the drawer and does the division at that precision.
+  {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+    const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+    const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1440, height: 1200 });
+    await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+    await page.waitForSelector('tbody tr');
+    const names = await page.evaluate(() => Array.from(document.querySelectorAll('tbody tr.row')).map((r) => r.querySelector('.pname').childNodes[0].textContent));
+    const ledger = [];
+    for (const name of names) {
+      await page.evaluate((n) => {
+        const row = Array.from(document.querySelectorAll('tbody tr.row')).find((x) => x.querySelector('.pname').childNodes[0].textContent === n);
+        row.click();
+      }, name);
+      await page.waitForSelector('.sheet', { visible: true });
+      const lines = await page.evaluate(() => Array.from(document.querySelectorAll('.sheet .deriv .line')).map((l) => l.innerText.replace(/\n/g, ' = ')));
+      await page.evaluate(() => document.querySelector('.drawer .close').click());
+      await new Promise((r) => setTimeout(r, 15));
+      const dollars = (s) => { const m = /\$([\d,]+)/.exec(s); return m ? Number(m[1].replace(/,/g, '')) : null; };
+      const percent = (s) => { const m = /= ([\d.]+)%/.exec(s); return m ? Number(m[1]) : null; };
+      const cond = dollars(lines[4]);
+      const odds = percent(lines[5]);
+      const implied = dollars(lines[6]);
+      ledger.push({ name, cond, odds, implied });
+    }
+    await browser.close();
+    // three significant figures, the way the board prints them
+    const sig3 = (x) => {
+      const a = Math.abs(x);
+      const scale = a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
+      const m = x / scale;
+      const f = Math.pow(10, 2 - Math.floor(Math.log10(Math.abs(m))));
+      return Math.round(m * f) / f * scale;
+    };
+    const off = [];
+    for (const r of ledger) {
+      if (r.cond === null || r.odds === null || r.implied === null) { off.push({ name: r.name, why: 'unparsed' }); continue; }
+      const product = sig3(r.cond * (r.odds / 100));
+      if (Math.abs(product - r.implied) > Math.max(1, r.implied * 1e-6)) {
+        off.push({ name: r.name, cond: r.cond, odds: r.odds, implied: r.implied, computed: Math.round(product) });
+      }
+    }
+    check("the detail view's own figures multiply out: the conditional value times the odds is the implied value",
+      off.length === 0,
+      off.length === 0 ? `${ledger.length} rows agree` : `${off.length} disagree: ` + JSON.stringify(off.slice(0, 4)));
+  }
 }
 
 // ---------------------------------------------------------------- the board's scroll cue

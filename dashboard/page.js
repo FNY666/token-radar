@@ -403,7 +403,7 @@
  var kpis = h('div','kpis', [
  kpi(L.market_cap, moneyWhole(row.mcap_usd), 'gold'),
  kpi('TVL', moneyWhole(row.tvl_usd)),
- kpi(L.cap_over_tvl, row.ratio === null ? '—' : row.ratio.toFixed(2), 'cyan'),
+ kpi(L.cap_over_tvl, row.ratio === null ? '—' : row.ratio.toFixed(4), 'cyan'),
  kpi('7d change', pct(row.change_7d))
  ]);
  var record = h('div','deriv', [
@@ -556,7 +556,7 @@
  // Six figures, not three: a two-decimal multiple is not set by a three-figure operand.
  e('td', 'right num', money(r.mcap_usd, 6)),
  e('td', 'right num', money(r.tvl_usd, 6)),
- h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : r.ratio.toFixed(2))]),
+ h('td','right num', [e('span', 'pill live', r.ratio === null ? '—' : ratioText(r.ratio))]),
  chg(r)
  ]));
  });
@@ -782,9 +782,8 @@
  if (a >= 1e3) return '$' + (n / 1e3).toPrecision(s) + 'K';
  return '$' + Math.round(n);
  }
- // A figure at `sig` significant figures, as the board prints it. The board's implied value is
- // computed from the conditional value at five significant figures and from the odds at four
- // decimals of a percent, so the detail view prints that same figure: the row has to multiply out.
+ // A figure at `sig` significant figures, as the board prints it: the board's implied value is
+ // computed from the conditional value at five and the odds at four decimals of a percent.
  function moneySig(n, sig) {
  if (n === null || n === undefined) return '—';
  var a = Math.abs(n);
@@ -793,12 +792,16 @@
  var factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
  return '$' + (Math.round(mant * factor) / factor * scale).toLocaleString('en-US');
  }
- // The dollars the snapshot carries, with the thousands a reader reads them with. The live
- // drawer's market cap and TVL are its own operands for the multiple beside them, so they print
- // in full: the reader's own division of the two has to land on that multiple.
+ // The dollars the snapshot carries: the live drawer's market cap and TVL are its own operands
+ // for the multiple beside them, so the reader's own division has to land on that multiple.
  function moneyWhole(n) {
  if (n === null || n === undefined) return '—';
  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+ }
+ // A multiple at two decimals, or a bound: a ratio of 0.0006 at two decimals reads as "none".
+ function ratioText(r) {
+ if (r < 0.005) return '<0.01';
+ return r.toFixed(2);
  }
  function chg(r) {
  return e('td', 'right num ' + (r.change_7d === null ? 'muted' : r.change_7d >= 0 ? 'up' : 'down'), pct(r.change_7d));

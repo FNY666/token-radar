@@ -619,6 +619,101 @@ for (const name of shots) {
     off.length === 0 ? `${ledger.length} live rows agree` : `${off.length} disagree: ` + JSON.stringify(off.slice(0, 4)));
 }
 
+// ---------------------------------------------------------------- no figure prints as a zero
+// A multiple printed at two decimals can come out as "0.00" for a ratio of 0.0006, and a reader
+// reads "0.00" as NO ratio rather than as a very small one. The live table's five smallest
+// ratios all fell into that. A figure that would print as a zero must print a bound instead.
+//
+// This reads every live row's printed multiple and every drawer's own multiple, and fails if
+// any of them is a bare zero -- in the table, in the drawer's KPI, or in the drawer's line.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1200 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  await page.evaluate(() => document.getElementById('tab-live').click());
+  await page.waitForFunction(() => document.querySelectorAll('#view-live tbody tr.row').length > 0);
+  // the TABLE's printed multiples
+  const cells = await page.evaluate(() => Array.from(document.querySelectorAll('#view-live tbody tr.row')).map((r) => {
+    const t = Array.from(r.querySelectorAll('td')).map((td) => td.innerText.replace(/\n/g, ' '));
+    // the name cell carries the slug on a second line, so the name is its first text node
+    return { name: r.querySelector('.pname').childNodes[0].textContent, ratio: t[4].trim() };
+  }));
+  const zeros = cells.filter((c) => /^0(\.0+)?$/.test(c.ratio));
+  check("no live row's multiple prints as a bare zero in the table",
+    zeros.length === 0,
+    zeros.length === 0 ? `${cells.length} rows, smallest ${cells.map((c) => c.ratio).sort()[0]}` : `${zeros.length} print as zero: ` + JSON.stringify(zeros.slice(0, 4)));
+  // the DRAWER's KPI and line, which must print the same figure
+  const names = cells.map((c) => c.name);
+  // The row's OWN multiple, from the data the page was given, at the precision the drawer
+  // prints: the drawer must not round it away or print it differently from the line.
+  const truthRatio = {};
+  {
+    const src = fs.readFileSync(path.join(out, 'data.js'), 'utf8');
+    const win = {};
+    new Function('window', src)(win);
+    for (const r of win.RADAR.live) {
+      const c = cells.find((x) => x.name === r.name);
+      if (c) truthRatio[c.name] = r.ratio === null ? null : r.ratio.toFixed(4);
+    }
+  }
+  const disagree = [];
+  for (const name of names) {
+    await page.evaluate((n) => {
+      const row = Array.from(document.querySelectorAll('#view-live tbody tr.row')).find((x) => x.querySelector('.pname').childNodes[0].textContent === n);
+      row.click();
+    }, name);
+    const opened = await page.waitForFunction(() => {
+      const s = document.querySelector('.drawer .sheet');
+      return !!(s && !s.closest('.drawer').hidden);
+    }, { timeout: 2000 }).then(() => true).catch(() => false);
+    // the KPI's own value span, and the line's own value span: not the whole block's text
+    const got = opened ? await page.evaluate(() => ({
+      kpi: (() => {
+        const k = Array.from(document.querySelectorAll('.sheet .kpi')).find((x) => {
+          const lab = x.querySelector('.k');
+          return lab && lab.textContent === 'Cap / TVL';
+        });
+        return k && k.querySelector('.v') ? k.querySelector('.v').textContent : '';
+      })(),
+      line: (() => {
+        const l = Array.from(document.querySelectorAll('.sheet .deriv .line')).find((x) => {
+          const lab = x.querySelector('span');
+          return lab && lab.textContent === 'Cap / TVL';
+        });
+        return l && l.querySelectorAll('span')[1] ? l.querySelectorAll('span')[1].textContent : '';
+      })()
+    })) : { kpi: '', line: '' };
+    await page.evaluate(() => {
+      const c = document.querySelector('.drawer .close');
+      if (c) c.click();
+    });
+    await new Promise((r) => setTimeout(r, 8));
+    const kv = (got.kpi || '').trim();
+    const lv = (got.line || '').trim();
+    // The KPI and the line must print the SAME figure: a reader who sees "0.00" in one and
+    // "0.0006" in the other has two numbers for one quantity. And neither may be a bare zero,
+    // which reads as no ratio at all rather than as a very small one.
+    if (/^0(\.0+)?$/.test(kv) || /^0(\.0+)?$/.test(lv) || (kv && lv && kv !== lv)) {
+      disagree.push({ name, kpi: kv, line: lv });
+    }
+    // and the drawer's multiple must be the row's own multiple, at the row's own precision
+    const truth = truthRatio[name];
+    if (truth !== undefined && lv !== truth) {
+      disagree.push({ name, kpi: kv, line: lv, expected: truth });
+    }
+  }
+  await browser.close();
+  check("every live drawer's multiple is the same figure in its KPI and its line, and never a bare zero",
+    disagree.length === 0,
+    disagree.length === 0 ? `${names.length} drawers agree` : `${disagree.length} disagree: ` + JSON.stringify(disagree.slice(0, 4)));
+}
+
 // ---------------------------------------------------------------- no row's drawer throws
 // A row's drawer is a function call away from the row, and a name that no longer exists fails
 // only when a reader opens THAT row -- the page still loads, the table still renders, and every

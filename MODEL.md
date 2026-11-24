@@ -276,6 +276,14 @@ on the multiple beside them on all 119 rows. A check opens all 119 live rows and
 division; planting the six-figure rounding back into the built page makes it report exactly those
 3 rows.
 
+**A multiple printed as zero is a figure that reads as no figure.** Five of the 119 live rows
+have a Cap/TVL below 0.005 — Obol at 0.0006, xDAI Stake Bridge at 0.0003 — and the table printed
+them at two decimals, so all five read **0.00**. A reader reads 0.00 as *no ratio at all* rather
+than as a ratio of six ten-thousandths, and one of them, Obol, carries $717,446 of market cap
+against $1.15 billion of TVL — a real number the page was throwing away. The table prints a bound
+(`<0.01`) instead, and the drawer's KPI prints the same four decimals as the line under it: they
+were printing **0.00** and **0.0006** for one quantity, which is two numbers for one thing.
+
 **And a row's drawer is a call away from its row.** A helper was renamed in the place that
 defines it and left in the four places that call it, so every live row's drawer threw a
 `ReferenceError` and **did not open at all** — while the whole suite stayed green, because every

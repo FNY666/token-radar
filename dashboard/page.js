@@ -212,10 +212,11 @@
    kpi(L.implied, moneySig(row.implied_value_usd, 3), 'gold'),
    kpi('If it issues', moneySig(row.conditional_value_usd, 5)),
    kpi(L.odds, oddsText(calc.launch), 'cyan'),
-   kpi('TVL', moneySig(row.tvl_usd, 3))
+   kpi('TVL', moneyWhole(row.tvl_usd))
   ]);
   var deriv = h('div','deriv', [
-   line('TVL', moneySig(row.tvl_usd, 3)),
+   // The TVL in whole dollars: it is the row's own operand for the multiplier beside it.
+   line('TVL', moneyWhole(row.tvl_usd)),
    line(L.fitted_multiplier, calc.mult.toPrecision(9)),
    line(L.category_correction, '×' + Math.pow(10, row.category_log).toPrecision(9)),
    line(L.category_evidence, categoryEvidence(row)),

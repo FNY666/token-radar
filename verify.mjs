@@ -714,6 +714,74 @@ for (const name of shots) {
     disagree.length === 0 ? `${names.length} drawers agree` : `${disagree.length} disagree: ` + JSON.stringify(disagree.slice(0, 4)));
 }
 
+// ---------------------------------------------------------------- the drawer's own chain
+// The detail drawer prints the row's derivation: the TVL, the fitted multiplier, the category
+// correction, and then the conditional value those three multiply to. A reader who does that
+// multiplication must land on the conditional value -- the copy in the model tab promises "the
+// exact arithmetic ... in the drawer, where each figure is printed at the precision the
+// multiplication needs".
+//
+// The TVL printed at THREE significant figures does not determine a nine-digit multiplier's
+// product: the reader's own multiplication missed the printed conditional value on 68 of the 195
+// rows, by up to 0.2%. The TVL in whole dollars is the snapshot's own figure, and with it the
+// product lands on the printed conditional value on every row.
+//
+// This opens every board row, reads the drawer's own three operands and its own result, and
+// does the multiplication the reader would do.
+{
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+  const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+  const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1200 });
+  await page.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+  await page.waitForSelector('tbody tr');
+  const names = await page.evaluate(() => Array.from(document.querySelectorAll('tbody tr.row')).map((r) => r.querySelector('.pname').childNodes[0].textContent));
+  const chain = [];
+  for (const name of names) {
+    await page.evaluate((n) => {
+      const row = Array.from(document.querySelectorAll('tbody tr.row')).find((x) => x.querySelector('.pname').childNodes[0].textContent === n);
+      row.click();
+    }, name);
+    const opened = await page.waitForFunction(() => {
+      const s = document.querySelector('.drawer .sheet');
+      return !!(s && !s.closest('.drawer').hidden);
+    }, { timeout: 2000 }).then(() => true).catch(() => false);
+    const L = opened ? await page.evaluate(() => Array.from(document.querySelectorAll('.sheet .deriv .line')).map((l) => l.innerText.replace(/\n/g, ' = '))) : [];
+    await page.evaluate(() => {
+      const c = document.querySelector('.drawer .close');
+      if (c) c.click();
+    });
+    await new Promise((r) => setTimeout(r, 8));
+    const dollars = (s) => { const m = /\$([\d,]+)/.exec(s); return m ? Number(m[1].replace(/,/g, '')) : null; };
+    const num = (s) => { const m = /([\d.]+(?:e[+-]?\d+)?)$/.exec(s); return m ? Number(m[1]) : null; };
+    chain.push({ name, tvl: dollars(L[0]), mult: num(L[1]), cat: num(L[2]), cond: dollars(L[4]) });
+  }
+  await browser.close();
+  // The conditional value is printed at five significant figures, so the reader's product has to
+  // ROUND to it, not equal it: the product of the printed operands carries a little more.
+  const sig5 = (x) => {
+    const a = Math.abs(x);
+    const scale = a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
+    const m = x / scale;
+    const f = Math.pow(10, 4 - Math.floor(Math.log10(Math.abs(m))));
+    return Math.round(m * f) / f * scale;
+  };
+  const off = [];
+  for (const r of chain) {
+    if (r.tvl === null || r.mult === null || r.cat === null || r.cond === null) { off.push({ name: r.name, why: 'unparsed' }); continue; }
+    const product = sig5(r.tvl * r.mult * r.cat);
+    if (Math.abs(product - r.cond) > Math.max(1, r.cond * 1e-9)) {
+      off.push({ name: r.name, tvl: r.tvl, mult: r.mult, cat: r.cat, printed: r.cond, computed: product });
+    }
+  }
+  check("the detail view's own chain multiplies out: the TVL times the multiplier times the correction is the conditional value",
+    off.length === 0,
+    off.length === 0 ? `${chain.length} rows agree` : `${off.length} disagree: ` + JSON.stringify(off.slice(0, 4)));
+}
+
 // ---------------------------------------------------------------- no row's drawer throws
 // A row's drawer is a function call away from the row, and a name that no longer exists fails
 // only when a reader opens THAT row -- the page still loads, the table still renders, and every

@@ -276,6 +276,17 @@ on the multiple beside them on all 119 rows. A check opens all 119 live rows and
 division; planting the six-figure rounding back into the built page makes it report exactly those
 3 rows.
 
+**The drawer's TVL was too coarse for its own multiplication.** The drawer prints the row's
+derivation — the TVL, the fitted multiplier, the category correction, and then the conditional
+value those three multiply to. It printed the TVL at **three significant figures** while the
+multiplier beside it carried **nine digits**, and three figures do not determine a nine-digit
+multiplier's product: the reader's own multiplication missed the printed conditional value on
+**68 of the 195 rows**, by up to 0.2%. The TVL is whole dollars in the snapshot, so the drawer
+now prints it whole, and the reader's own multiplication lands on the conditional value under it
+on **every** row. The model tab's copy already promised "the exact arithmetic ... in the drawer,
+where each figure is printed at the precision the multiplication needs"; it was doing the
+arithmetic, but not printing the figures that make it exact.
+
 **A multiple printed as zero is a figure that reads as no figure.** Five of the 119 live rows
 have a Cap/TVL below 0.005 — Obol at 0.0006, xDAI Stake Bridge at 0.0003 — and the table printed
 them at two decimals, so all five read **0.00**. A reader reads 0.00 as *no ratio at all* rather

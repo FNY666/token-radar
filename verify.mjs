@@ -402,7 +402,7 @@ for (const name of shots) {
   }
   await browser.close();
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shotfresh-'));
+  const tmpDir = process.env.SHOT_FRESH_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'shotfresh-'));
   const counts = [];
   for (const name of Object.keys(rendered)) {
     const freshPath = path.join(tmpDir, name);
@@ -1573,6 +1573,12 @@ for (const name of shots) {
       cls: t.className || '(the board)',
       headers: Array.from(t.querySelectorAll('thead th')).map((h) => h.textContent.trim()),
       rows: t.querySelectorAll('tbody tr').length,
+      // Where the header row ends and where the first data row begins, so a header that
+      // overlaps its data is caught rather than read. It is the CELL's box, not the row's:
+      // a sticky cell is offset by its own `top` INSIDE its row, so the row never moves and
+      // measuring the row would see nothing.
+      headerBottom: Math.round(t.querySelector('thead th').getBoundingClientRect().bottom),
+      firstRowTop: Math.round(t.querySelector('tbody tr').getBoundingClientRect().top),
       // The scope of each column header, and the row headers under it: a table whose first
       // column is a set of names needs those names to BE headers, or a screen reader reaches
       // the numbers without the names they belong to.
@@ -1581,6 +1587,70 @@ for (const name of shots) {
       firstCells: Array.from(t.querySelectorAll('tbody tr')).map((tr) => tr.firstElementChild.tagName)
     }))));
   }
+  // The control: a check that cannot fail proves nothing. Plant the old rule -- every
+  // `thead th` sticky, not just the board's -- and require the SAME measurement to catch it.
+  {
+    const page2 = await browser.newPage();
+    await page2.setViewport({ width: 1440, height: 900 });
+    await page2.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+    await page2.waitForSelector('tbody tr');
+    await page2.evaluate(() => {
+      const st = document.createElement('style');
+      st.textContent = 'thead th{position:sticky;top:var(--bar-h,63px)}';
+      document.head.appendChild(st);
+    });
+    // The rule the old theme had is broken on the MODEL tab, where the age-band table does
+    // not scroll under the page's bar. Measuring only the board would find nothing, and a
+    // control that measures the wrong view cannot fail.
+    const planted = [];
+    const ptabs = await page2.$$('[role=tab]');
+    for (const i of [0, 1, 2]) {
+      if (ptabs[i]) { await ptabs[i].click(); await new Promise((r) => setTimeout(r, 350)); }
+      planted.push(...await page2.evaluate(() => Array.from(document.querySelectorAll('main table')).map((t) => ({
+        cls: t.className || '(the board)',
+        headerBottom: Math.round(t.querySelector('thead th').getBoundingClientRect().bottom),
+        firstRowTop: Math.round(t.querySelector('tbody tr').getBoundingClientRect().top),
+      }))));
+    }
+    await page2.close();
+    const hit = planted.filter((t) => t.headerBottom > t.firstRowTop && t.firstRowTop > 0);
+    check('the overlap measure can fail: the old sticky rule is caught', hit.length > 0,
+      hit.length ? `the planted rule overlaps ${hit.map((t) => t.cls).join(', ')}` : 'the planted rule overlapped nothing');
+  }
+  // The other half of the fix: the BOARD's header IS meant to stick, because the board's
+  // table scrolls under the page's bar. Scoping the rule to `.table-wrap` must not have
+  // taken that away -- so scroll the board and ask the header where it is.
+  {
+    // The board's table, on a FRESH page: the tab above left the URL on #view=model, and
+    // switching back pushes a history entry, which detaches the frame mid-evaluation.
+    const page3 = await browser.newPage();
+    await page3.setViewport({ width: 1440, height: 900 });
+    await page3.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+    await page3.waitForSelector('tbody tr');
+    const stick = await page3.evaluate(async () => {
+      const t = document.querySelector('#table-wrap table');
+      const th = t.querySelector('thead th');
+      const before = Math.round(th.getBoundingClientRect().top);
+      const y = Math.round(t.getBoundingClientRect().top + window.scrollY) + 600;
+      window.scrollTo({ top: y, behavior: 'instant' });
+      await new Promise((r) => {
+        let last = -1;
+        const tick = () => { const n = Math.round(window.scrollY); if (n === last) { r(); return; } last = n; requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+      });
+      const after = Math.round(th.getBoundingClientRect().top);
+      const bar = Math.round(document.querySelector('.bar').getBoundingClientRect().bottom);
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return { before, after, bar, pos: getComputedStyle(th).position };
+    });
+    await page3.close();
+    // Scrolled 600px down, the header's TOP must be pinned to the bar's bottom: that is what
+    // `top: var(--bar-h)` means, and it is what keeps the header clear of the bar.
+    check('the board\'s own header still sticks under the bar when the board scrolls',
+      stick.pos === 'sticky' && Math.abs(stick.after - stick.bar) <= 2 && stick.after < stick.before,
+      `position ${stick.pos}, header top ${stick.before} -> ${stick.after} (the bar ends at ${stick.bar})`);
+  }
+
   await browser.close();
   const every = seen.flat();
   const noHeader = every.filter((t) => t.headers.length === 0);
@@ -1599,6 +1669,16 @@ for (const name of shots) {
   const notTh = modelTables.filter((t) => t.firstCells.some((tag) => tag !== 'TH'));
   check('no model table row starts with a plain cell', notTh.length === 0,
     notTh.length === 0 ? 'all rows start with a header' : JSON.stringify(notTh.map((t) => t.cls)));
+  // The header row must sit ABOVE its data, not on top of it. A sticky cell is offset by its
+  // own `top` inside its row, so on the model's tables -- which do not scroll under the page's
+  // bar -- the header was pushed 63px down and overlapped the first data row. The board's
+  // table is the one that scrolls, so it is the only one that should be sticky.
+  const overlapped = every.filter((t) => t.headerBottom > t.firstRowTop && t.firstRowTop > 0);
+  check('no table\'s header row overlaps its first data row', overlapped.length === 0,
+    overlapped.length === 0 ? every.map((t) => `${t.cls}: header ${t.headerBottom}, row ${t.firstRowTop}`).join(' | ')
+      : JSON.stringify(overlapped.map((t) => `${t.cls}: header ${t.headerBottom} > row ${t.firstRowTop}`)));
+
+
   // The header row's own cells are column headers, so they carry scope="col" like the board's.
   const noColScope = every.filter((t) => t.colScopes.some((s) => s !== 'col'));
   check('every column header is marked as a column header', noColScope.length === 0,

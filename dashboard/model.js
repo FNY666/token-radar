@@ -51,8 +51,7 @@
     return s;
   }
 
-  // The value fit: a redescending-weight least squares, so outliers cannot drag it. The weight
-  // goes into the normal equations SQUARED: the quadratic-core, logarithmic-tail loss.
+  // The value fit: a redescending-weight least squares, so outliers cannot drag it -- the weight goes into the normal equations SQUARED: the quadratic-core, logarithmic-tail loss.
   function fitValue(rows) {
     var data = rows.map(function (p) {
       return { x: valueRow(p.tvl_usd), y: Math.log10(p.mcap_usd / Math.max(p.tvl_usd, 1)) };
@@ -90,8 +89,7 @@
     if (data.length === 0) return { beta: new Array(launchRow(1, 0, 365).length).fill(0), auc: 0.5 };
     var k = data[0].x.length;
     var beta = new Array(k).fill(0);
-    // The fit runs until the gradient is flat. The design is rank-deficient -- the intercept and
-    // the band dummies span the same space -- so a fixed step count catches it mid-crawl.
+    // The fit runs until the gradient is flat. The design is rank-deficient -- the intercept and the band dummies span the same space -- so a fixed step count catches it mid-crawl.
     for (var it = 0; it < 50000; it++) {
       var gradient = new Array(k).fill(0);
       data.forEach(function (row) {
@@ -116,8 +114,7 @@
     return { beta: beta, auc: pos.length && neg.length ? hits / (pos.length * neg.length) : 0.5 };
   }
 
-  // The per-category correction: the category's residual, shrunk toward the global mean and
-  // winsorized, so a thin category cannot speak for itself.
+  // The per-category correction: the category's residual, shrunk toward the global mean and winsorized, so a thin category cannot speak for itself.
   function fitCategories(cohort, beta) {
     var byCat = {};
     var all = [];

@@ -11,7 +11,7 @@ button,tbody tr.row{cursor:pointer}
 .skip{position:absolute;left:-9999px;top:0;z-index:90;padding:var(--b) var(--d);background:var(--panel)}
 .skip:focus{left:var(--c);top:var(--c)}
 html{scroll-padding-block-start:calc(var(--bar-h,63px) + var(--c))}
-a,.kpi .v.cyan{color:var(--odds)}
+a,.kpi .v.cyan,.callout ol li:nth-child(2) strong{color:var(--odds)}
 .num{font-variant-numeric:tabular-nums}
 .num,.val,.plot .tick,.plot .q,.formula,.bands,.bands td,.cat-table td,.curve-row .v,.deriv .line span:last-child,code{font-family:var(--mono)}
 code{font-size:.92em}
@@ -31,9 +31,9 @@ main{padding:0 var(--e) var(--g)}
 .hero{padding:var(--d) 0 var(--c);border-bottom:var(--bl)}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,0.5fr);gap:var(--e)}
 .hero h1{font-size:28px;line-height:1.12;letter-spacing:-0.025em;color:var(--ink)}
-/* At a phone's width the headline takes two lines and the lede nineteen, past two screens. */
+/* At a phone's width the headline and the lede run past two screens. */
 @media (max-width: 460px){.hero h1{font-size:16px;line-height:1.3}}
-.hero h1+.lede::first-line,.kpi .v.gold,.peer .pv,.tag.wl{color:var(--value)}
+.hero h1+.lede::first-line,.kpi .v.gold,.peer .pv,.tag.wl,.callout ol li:last-child strong{color:var(--value)}
 .tag.wl{border-color:var(--v45)}
 thead th .arrow{color:var(--value);margin-left:var(--a)}
 .hero p.lede{margin-top:var(--b);color:var(--i2);max-width:78ch;font-size:14px}
@@ -42,13 +42,12 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 .callout,.plot-wrap{border-radius:var(--rm)}
 .table-wrap{border-radius:0;border-left:none;border-right:none}
 .callout{padding:var(--c) var(--d)}
-.callout h2{font-size:13px;color:var(--i2)}
+.callout h2,.plot-head h3,.card h3{font-size:13px;color:var(--i2)}
 .live-note strong,.prose strong,.sheet .close:hover,thead th button:hover{color:var(--ink)}
 .live-note strong.lead{color:var(--live)}
 .callout ol{margin:var(--b) 0 0;padding-left:1.1em;color:var(--i2);font-size:12px;line-height:1.4}
 .callout ol li{margin-bottom:var(--a)}
 .callout ol li:last-child strong{color:var(--value)}
-.callout ol li:nth-child(2) strong{color:var(--odds)}
 .tabs{display:flex;gap:var(--a);padding:var(--c) 0 var(--b);flex-wrap:wrap}
 .tab,.controls .q,.controls select{border-radius:var(--rs);font-size:14px}
 .tab{background:transparent;border:1px solid transparent;color:var(--i3);padding:var(--a) var(--d)}
@@ -62,7 +61,6 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 .controls .q,.controls select,.chip,.controls button.ghost,.sheet .close,.skip,.tag{border:var(--bv)}
 .controls .q,.controls select{border-color:var(--i3);color:var(--ink);padding:var(--a) var(--c)}
 .controls .q{min-width:200px}
-.controls .q::placeholder{color:var(--i3)}
 .controls select{min-width:140px}
 .chip,.controls button.ghost{border-radius:var(--rs);font-size:13px}
 .chip{color:var(--i2);padding:var(--a) var(--c)}
@@ -73,7 +71,8 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 /* The wrapper paints a shadow on whichever edge still has table beyond it. */
 .table-wrap{overflow-x:auto;overflow-y:clip;background-image:linear-gradient(var(--panel),var(--panel)),linear-gradient(var(--panel),var(--panel)),linear-gradient(to right,var(--shadow),transparent),linear-gradient(to left,var(--shadow),transparent);background-position:0 50%,100% 50%,0 50%,100% 50%;background-repeat:no-repeat;background-size:16px;background-attachment:local,local,scroll,scroll}
 table{width:100%;border-collapse:collapse}
-thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--b);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
+/* Only the board's table scrolls under the bar: a sticky cell elsewhere sits 63px below its row, over the first data row. */
+.table-wrap thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--b);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
 thead th button{background:none;border:none;padding:0;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit}
 thead th.right,td.right{text-align:right}
 tbody tr{border-bottom:var(--bl)}
@@ -98,9 +97,8 @@ td{padding:var(--b) var(--b);vertical-align:middle}
 .pill,.chip-static{display:inline-block;padding:2px var(--b);border-radius:3px}
 .pill{background:var(--o12);color:var(--odds)}
 .pill.live{background:var(--l13);color:var(--live)}
-.muted,.cond,.controls .result,.rk,.tab .count,.plot-head .hint,.plot-legend,.sheet .slug{color:var(--i3)}
-.empty{text-align:center;color:var(--i3)}
-.empty{padding:var(--f)}
+.muted,.cond,.controls .result,.rk,.tab .count,.plot-head .hint,.plot-legend,.sheet .slug,.controls .q::placeholder{color:var(--i3)}
+.empty{text-align:center;color:var(--i3);padding:var(--f)}
 .plot-wrap{padding:var(--c) var(--d);margin-bottom:var(--c)}
 .plot-head{display:flex;justify-content:space-between;align-items:baseline;gap:var(--d);margin-bottom:var(--b)}
 .plot-head .hint{font-size:12.5px}
@@ -120,13 +118,12 @@ td{padding:var(--b) var(--b);vertical-align:middle}
 .live-note{border-radius:var(--rm);padding:var(--d);margin-bottom:var(--d);color:var(--i2);font-size:14px;max-width:92ch}
 .model-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:var(--d)}
 .card.stack{margin-top:var(--d)}
-.plot-head h3,.card h3{font-size:13px;color:var(--i2)}
 .card .big{font-family:var(--mono);font-size:26px;color:var(--value);margin:var(--b) 0 var(--a)}
 .card p{font-size:13.5px;color:var(--i2)}
 .formula{font-size:12.5px;color:var(--ink);border:var(--bl);border-radius:var(--rs);padding:var(--c);margin-top:var(--c);overflow-x:auto;white-space:pre;line-height:1.6}
-.bands{display:block;overflow-x:auto}
-.bands,.bands td,.bands tbody th,.cat-table td,.cat-table tbody th{padding:var(--b) 0;border-top:var(--bl)}
-.bands thead th,.cat-table thead th{text-align:left;color:var(--i2);font-weight:500;font-size:12px;padding-bottom:var(--b)}
+.bands-wrap{overflow-x:auto}
+/* The border belongs to the cells: on the table it pushes the header into the first row. */
+.bands td,.bands tbody th,.cat-table td,.cat-table tbody th{padding:var(--b) 0;border-top:var(--bl)}.bands thead th,.cat-table thead th{text-align:left;color:var(--i2);font-weight:500;font-size:12px;padding-bottom:var(--b)}
 .bands tbody th,.cat-table tbody th{text-align:left;font-weight:400;color:var(--ink);font-family:var(--font)}
 .curve{margin-top:var(--c)}
 .curve-row{display:flex;align-items:center;gap:var(--c);margin-bottom:var(--b);font-size:13px}

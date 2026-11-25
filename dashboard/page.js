@@ -163,8 +163,7 @@
    : row.conditional_value_usd;
   var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
   var odds = launchP(row);
-  // the implied value, computed from the conditional value and the odds at the precision they
-  // are shown, so the ledger lands on the board's figure
+  // the implied value, from the conditional value and the odds at the precision shown, so the ledger lands on the board's figure
   var shown = sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3);
   return {
    conditional: cond,
@@ -356,14 +355,14 @@
  el('tbody', null, c.bands.map(function (b) {
  var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
  b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—'];
- // The first cell names the row, so it is a row header: a reader reads the age band with the
- // four figures instead of four bare numbers.
+ // The first cell names the row, so it is a row header: the age band is read with the four figures, not four bare numbers.
  return el('tr', null, cells.map(function (c, i) {
  return i === 0 ? el('th', { scope: 'row' }, [c]) : t('td', c);
  }));
  }))
  ]);
- curve.appendChild(bandsTable);
+ // The WRAPPER scrolls, not the table: a table with display:block is not a table, and its header ends up over its first data row.
+ curve.appendChild(h('div','bands-wrap', [bandsTable]));
  host.appendChild(curve);
  var catCard = card(L.category_corrections, [t('p', D.copy.category_note)]);
  var catRows = Object.keys(c.category_log).map(function (k) {
@@ -572,7 +571,7 @@
  CTL.search = el('input', {
  class: 'q', type: 'search', placeholder: L.search_placeholder,
  'aria-label': L.search_label,
- // The name is what a form posts and what a password manager keys on.
+ // The name is what a form posts and a password manager keys on.
  name: 'q', autocomplete: 'off', spellcheck: false,
  oninput: function () { state.q = CTL.search.value; writeHash('refine'); renderControlsResult(); renderTabs(); renderTable(); renderPlot(); }
  });
@@ -651,7 +650,7 @@
  if (moved) moved.focus();
  }
  }, [
- // The space is in the label, not the badge: without it the tab reads "Pre-token board195".
+ // The space is in the label, not the badge: else the tab reads "Pre-token board195".
  document.createTextNode(TAB_LABELS[key] + (key === 'model' ? '' : ' ')),
  key === 'model' ? null : e('span', 'count', '0')
  ]));
@@ -786,21 +785,17 @@
  if (a >= 1e3) return '$' + (n / 1e3).toPrecision(s) + 'K';
  return '$' + Math.round(n);
  }
- // A figure at `sig` significant figures, as the board prints it.
+ // A figure at `sig` significant figures, as the board prints it: `sigRound`'s number, so the drawer and the board round alike, and a zero stays a zero.
  function moneySig(n, sig) {
  if (n === null || n === undefined) return '—';
- var a = Math.abs(n);
- var scale = a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
- var mant = n / scale;
- var factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
- return '$' + (Math.round(mant * factor) / factor * scale).toLocaleString('en-US');
+ return '$' + sigRound(n, sig).toLocaleString('en-US');
  }
- // The dollars the snapshot carries: the live drawer's own operands, so its own division lands.
+ // The dollars the snapshot carries: the live drawer's own operands, so its division lands.
  function moneyWhole(n) {
  if (n === null || n === undefined) return '—';
  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });
  }
- // A multiple at two decimals, or a bound: a ratio of 0.0006 at two decimals reads as "none".
+ // A multiple at two decimals, or a bound: a ratio of 0.0006 reads as "none".
  function ratioText(r) {
  if (r < 0.005) return '<0.01';
  return r.toFixed(2);
@@ -944,12 +939,9 @@
  var next = parts.length ? '#' + parts.join('&') : '';
  if (next === location.hash) return;
  var url = next || location.pathname + location.search;
- if (mode === 'push') {
- history.pushState(null, '', url);
- pushed = true;
- } else if (mode === 'refine' && pushed) {
- history.replaceState(null, '', url);
- } else if (mode === 'refine') {
+ // 'push' always adds a history entry; 'refine' replaces the last one this drawer pushed; 'replace' replaces whatever is there.
+ var doPush = mode === 'push' || (mode === 'refine' && !pushed);
+ if (doPush) {
  history.pushState(null, '', url);
  pushed = true;
  } else {
@@ -962,8 +954,7 @@
  function renderMissingData() {
  var main = document.getElementById('board');
  if (!main) return;
- // With no data.js the copy cannot come from the data -- the data is what is missing -- so it
- // is written here.
+ // With no data.js the copy cannot come from the data -- the data is what is missing -- so it is written here.
  main.appendChild(h('section','card prose missing', [
  h('h1', null, ['This page has no board yet']),
  t('p','The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.'),

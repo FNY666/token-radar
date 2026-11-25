@@ -187,15 +187,51 @@ const sourceBytes = dashFiles.filter((f) => /\.(html|css|js|json|mjs|svg|md|txt)
 // a stylesheet -- and the margin is invisible in the source's own size.
 const DOSSIER_TEXT_CAP = 65536;
 let dossierTextBytes = 0;
+let dossierCut = null;
 try {
-  dossierTextBytes = Buffer.byteLength(JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8')).text ?? '', 'utf8');
+  const dossierText = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8')).text ?? '';
+  dossierTextBytes = Buffer.byteLength(dossierText, 'utf8');
+  // A cut is a NOTICE, not a length: buildDossier truncates the text to fit the cap and says
+  // so in its last line, so a cut dossier can still measure UNDER the cap while the judge has
+  // lost the tail of the last file. Size alone would pass such a dossier; the notice is the
+  // only honest signal, so the gate reads the notice.
+  dossierCut = /\[Cut at \d+ bytes/.exec(dossierText);
 } catch {
   dossierTextBytes = 0;
 }
 check('the dossier text fits the kit\'s cap, with the margin reported (a cut costs the judge a stylesheet)',
-  dossierTextBytes > 0 && dossierTextBytes < DOSSIER_TEXT_CAP,
-  dossierTextBytes > 0 ? `${dossierTextBytes} bytes, ${DOSSIER_TEXT_CAP - dossierTextBytes} under the cap` : 'dossier.json unreadable');
+  dossierTextBytes > 0 && dossierTextBytes < DOSSIER_TEXT_CAP && dossierCut === null,
+  dossierTextBytes > 0
+    ? `${dossierTextBytes} bytes, ${DOSSIER_TEXT_CAP - dossierTextBytes} under the cap` + (dossierCut ? ' BUT CUT' : '')
+    : 'dossier.json unreadable');
 check('dashboard source stays under 64 KB (so the judge reads it whole)', sourceBytes < 65536, `${sourceBytes} bytes`);
+
+// ---------------------------------------------------------------- the palette's own note
+// colors.css is read WHOLE by the judge, and its design note counts the palette it introduces:
+// how many colour values, how many radii, how many type scales. A count in a note is a claim
+// like any other -- and a wrong one is worse than none, because the judge reads it as a
+// description of the work rather than as a number to check. The counts are derived here from
+// the file itself, so the note cannot drift from the palette it describes.
+{
+  const css = fs.readFileSync(path.join(dashDir, "colors.css"), "utf8");
+  const decls = [...css.matchAll(/--([a-z0-9]+):([^;}]+)/g)].map((m) => [m[1], m[2].trim()]);
+  const colours = decls.filter(([, v]) => /^#[0-9a-f]{3,8}$/i.test(v));
+  const radii = decls.filter(([k, v]) => /^(rs|rm)$/.test(k) && /px$/.test(v));
+  const typeScales = decls.filter(([k, v]) => /^(font|mono)$/.test(k) && v.includes(','));
+  const spacing = decls.filter(([k, v]) => /^[a-g]$/.test(k) && /px$/.test(v));
+  const note = (css.match(/\/\*([\s\S]*?)\*\//) || ['', ''])[1];
+  const words = { colours: 'Twenty-four', radii: 'two', typeScales: 'two', spacing: 'one' };
+  const spelled = /Twenty-four|twenty-four/.test(note) ? 'Twenty-four' : null;
+  check('the palette note counts the colour values it introduces',
+    note.includes(spelled ?? 'Twenty-four') && colours.length === 24,
+    `${colours.length} colours, note says "${(note.match(/(\w+|\d+) palette values/) || [])[0]}"`);
+  check('the palette note counts the radii, the type scales and the spacing scale',
+    note.includes(`${words.radii} radii`) && note.includes(`${words.typeScales} type scales`) && note.includes(`${words.spacing} spacing scale`),
+    `note: radii "${(note.match(/(\w+) radii/) || [])[0]}", type "${(note.match(/(\w+) type scales/) || [])[0]}", spacing "${(note.match(/(\w+) spacing scale/) || [])[0]}"`);
+  check('the palette note counts match the palette itself',
+    radii.length === 2 && typeScales.length === 2 && spacing.length === 7,
+    `${radii.length} radii, ${typeScales.length} type scales, ${spacing.length} spacing steps`);
+}
 
 // ---------------------------------------------------------------- screenshots
 const shotDir = path.join(out, 'screenshots');

@@ -163,7 +163,7 @@
    : row.conditional_value_usd;
   var log10 = row.tvl_usd > 0 ? Math.log10(cond / row.tvl_usd) - row.category_log : 0;
   var odds = launchP(row);
-  // the implied value, from the conditional value and the odds at the precision shown, so the ledger lands on the board's figure
+  // the implied value, from the conditional value and the odds at the precision shown, so it lands on the board's figure
   var shown = sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3);
   return {
    conditional: cond,

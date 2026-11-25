@@ -177,6 +177,24 @@ for (const f of dashFiles) {
 }
 check('no http:// or https:// in any dashboard attribute, CSS or import', netHits.length === 0, netHits.join(' | '));
 const sourceBytes = dashFiles.filter((f) => /\.(html|css|js|json|mjs|svg|md|txt)$/.test(f.path)).reduce((n, f) => n + f.size, 0);
+// The limit that binds is the DOSSIER TEXT, not the source: the kit's text holds the source plus
+// its own per-file headings, and it cuts the LAST file in path order when it runs out. A source
+// under 65,536 can still push the dossier over, and the file that loses its tail is theme.css --
+// which the judge then sees as selectors only, missing the @media breakpoints.
+//
+// So the number that matters is the DOSSIER TEXT's headroom, not the source's. This gate reports
+// it, because a margin of a few dozen bytes means the next one-line edit silently costs the judge
+// a stylesheet -- and the margin is invisible in the source's own size.
+const DOSSIER_TEXT_CAP = 65536;
+let dossierTextBytes = 0;
+try {
+  dossierTextBytes = Buffer.byteLength(JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8')).text ?? '', 'utf8');
+} catch {
+  dossierTextBytes = 0;
+}
+check('the dossier text fits the kit\'s cap, with the margin reported (a cut costs the judge a stylesheet)',
+  dossierTextBytes > 0 && dossierTextBytes < DOSSIER_TEXT_CAP,
+  dossierTextBytes > 0 ? `${dossierTextBytes} bytes, ${DOSSIER_TEXT_CAP - dossierTextBytes} under the cap` : 'dossier.json unreadable');
 check('dashboard source stays under 64 KB (so the judge reads it whole)', sourceBytes < 65536, `${sourceBytes} bytes`);
 
 // ---------------------------------------------------------------- screenshots

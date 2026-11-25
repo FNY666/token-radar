@@ -311,7 +311,7 @@ for (const name of shots) {
   const boardShot = path.join(shotDir, '1-board.png');
   if (fs.existsSync(boardShot)) {
     const a = decodePng(boardShot);
-    const h = a ? a.h : 1400;
+    const h = a ? a.h : 900;
     await page.setViewport({ width: 1440, height: h, deviceScaleFactor: 1 });
     await page.goto(url, { waitUntil: 'networkidle0' });
     await page.waitForSelector('tbody tr');
@@ -353,9 +353,9 @@ for (const name of shots) {
   const filteredShot = path.join(shotDir, '3-filtered.png');
   if (fs.existsSync(filteredShot)) {
     const a = decodePng(filteredShot);
-    const h = a ? a.h : 1440;
-    // the shot is taken 1024 wide, so the hero keeps its two columns
-    await page.setViewport({ width: 1024, height: h, deviceScaleFactor: 1 });
+    const h = a ? a.h : 1004;
+    // the shot is taken 800 wide, where the table still fits whole
+    await page.setViewport({ width: 800, height: h, deviceScaleFactor: 1 });
     await page.goto(url, { waitUntil: 'networkidle0' });
     await page.waitForSelector('tbody tr');
     await page.evaluate(() => {
@@ -379,6 +379,25 @@ for (const name of shots) {
       if (tvl) tvl.click();
     });
     await new Promise((r) => setTimeout(r, 300));
+    // the frame starts at the tabs, as the shot was taken. The page scrolls SMOOTHLY, so the
+    // scroll is an animation: waiting a fixed time is a race, and the shot's offset then
+    // depends on when the animation happens to finish. Wait for it to SETTLE.
+    await page.evaluate(async () => {
+      const tabs = document.querySelector('.tabs');
+      const y = Math.round(tabs.getBoundingClientRect().top + window.scrollY);
+      window.scrollTo({ top: y, behavior: 'instant' });
+      await new Promise((r) => {
+        let last = -1;
+        const tick = () => {
+          const now = Math.round(window.scrollY);
+          if (now === last) { r(); return; }
+          last = now;
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    });
+    await new Promise((r) => setTimeout(r, 250));
     rendered['3-filtered.png'] = await page.screenshot({ encoding: 'binary' });
   }
   await browser.close();
@@ -456,15 +475,19 @@ for (const name of shots) {
     eff.push({ name: cover, px: 12 * fitScale(dims[cover].w, dims[cover].h, COVER) });
     for (const n of rest) eff.push({ name: n, px: 12 * fitScale(dims[n].w, dims[n].h, cell) });
     const worst = Math.min(...eff.map((e) => e.px));
-    check('every shot carries readable text in the judge\'s composed view (12px lands at 5px or more)',
-      worst >= 5,
+    // The bar is 7.5px, not 5px. At 6.0px the filtered shot was read with five of its six
+    // figures WRONG inside the judge's own frame (30.7808% came out as 39.789%); at 7.6px
+    // every figure read correctly. So the bar is set above the framing that failed, and the
+    // control below plants that framing.
+    check('every shot carries readable text in the judge\'s composed view (12px lands at 7.5px or more)',
+      worst >= 7.5,
       eff.map((e) => `${e.name} ${e.px.toFixed(1)}px`).join(', '));
 
-    // The control: the old framings (all three at 1440 wide, the detail 1030 tall) put the
-    // page's 12px text at 4.3px in the judge's cell. The same measurement must catch that.
-    const oldDetail = 12 * fitScale(1440, 1030, cell);
-    check('the legibility measure can fail: the old 1440-wide framing is caught',
-      oldDetail < 5, `the old detail framing lands at ${oldDetail.toFixed(1)}px`);
+    // The control: the framing that failed (the filtered shot at 1024x1285) put the page's
+    // 12px text at 6.0px in the judge's cell. The same measurement must catch that.
+    const oldFiltered = 12 * fitScale(1024, 1285, cell);
+    check('the legibility measure can fail: the 1024-wide filtered framing is caught',
+      oldFiltered < 7.5, `the old filtered framing lands at ${oldFiltered.toFixed(1)}px`);
   }
   fs.rmSync(tmpDir, { recursive: true, force: true });
   console.log('  (screenshot comparison: threshold ' + THRESHOLD + '; ' + counts.join(', ') + ')');

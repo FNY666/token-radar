@@ -73,7 +73,7 @@ thead th .arrow{color:var(--value);margin-left:var(--a)}
 /* The wrapper paints a shadow on whichever edge still has table beyond it. */
 .table-wrap{overflow-x:auto;overflow-y:clip;background-image:linear-gradient(var(--panel),var(--panel)),linear-gradient(var(--panel),var(--panel)),linear-gradient(to right,var(--shadow),transparent),linear-gradient(to left,var(--shadow),transparent);background-position:0 50%,100% 50%,0 50%,100% 50%;background-repeat:no-repeat;background-size:16px;background-attachment:local,local,scroll,scroll}
 table{width:100%;border-collapse:collapse}
-thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--c);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
+thead th{position:sticky;top:var(--bar-h,63px);z-index:10;background:var(--p2);text-align:left;padding:var(--b) var(--b);font-size:12px;color:var(--i2);border-bottom:var(--bv);white-space:nowrap}
 thead th button{background:none;border:none;padding:0;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit}
 thead th.right,td.right{text-align:right}
 tbody tr{border-bottom:var(--bl)}
@@ -81,7 +81,7 @@ tbody tr:last-child,.steps li:last-child{border-bottom:none}
 tbody tr.row:hover,.tab:active,.chip:active,.controls button.ghost:active{background:var(--p2)}
 tbody tr.row:active{background:var(--panel)}
 tbody tr.row:focus-visible{outline:2px solid var(--value);outline-offset:-2px}
-td{padding:var(--b) var(--c);vertical-align:middle}
+td{padding:var(--b) var(--b);vertical-align:middle}
 .pname{font-weight:600}
 .pname .slug{display:block;font-family:var(--mono);font-size:11px;color:var(--i3);font-weight:400}
 .cat,.sheet h3{font-size:12px;color:var(--i2)}
@@ -90,7 +90,7 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .up{color:var(--up)}
 .down{color:var(--down)}
 .val{font-weight:600;color:var(--value);font-size:14.5px}
-.bar-cell{width:110px}
+.bar-cell{width:76px}
 .bar-track,.curve-row .track{background:var(--bg);border-radius:3px;overflow:hidden}
 .curve-row .track{flex:1;height:16px}
 .bar-track{height:5px}

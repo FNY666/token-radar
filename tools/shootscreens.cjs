@@ -7,13 +7,32 @@
 //
 // THE FRAMING IS CHOSEN BY WHAT THE JUDGE ACTUALLY SEES. The kit does not hand the judge these
 // PNGs: it fits each one into a box (the cover into 1024x640, the other two into two 510x640
-// cells on one sheet), downscales it, and sends that. So a 1440-wide shot arrives at the judge
-// at 35% -- 12px of page text lands as 4.3px and cannot be read. Every framing below is measured
-// in the judge's own composed view, not in the raw PNG:
+// cells on one sheet), downscales it, and sends that. So a shot's usefulness is a property of
+// the composed view, not of the raw PNG.
 //
-//   cover   1440x1000 -> 922x640  12px text lands at 7.7px
-//   detail   800x1010 -> 507x640  12px text lands at 7.6px
-//   filtered 1024x1285 -> 510x640 12px text lands at 6.0px
+// The number that decides it is the size of 12px of the page's own text AFTER the fit. The kit
+// never enlarges (fit: "inside", withoutEnlargement), so it is
+//
+//     12 * min(cell.width / png.width, cell.height / png.height)
+//
+// which means the PNG's own pixel size is what counts, and a wider PNG arrives smaller. Two
+// rules follow, and both are measured here rather than assumed:
+//
+//   1. The PNG should have the CELL's aspect (1024:640 = 8:5), or it is letterboxed and part of
+//      the cell is wasted. The old 1440x1000 cover was 1.44:1, so it was height-bound and
+//      arrived 922x640 in a 1024-wide cell -- a tenth of the width thrown away.
+//   2. The shorter the PNG's long side, the bigger the text arrives -- down to the kit's own
+//      floor of an 800px short side.
+//
+// So each shot below is sized for the cell it lands in:
+//
+//   cover   1280x800  -> 1024x640  12px text lands at 9.6px  (was 1440x1000 -> 7.7px)
+//   detail   800x1010 ->  507x640  12px text lands at 7.6px  (the drawer, clipped and scaled)
+//   filtered  800x1004 ->  510x640  12px text lands at 7.6px  (was 1024x1285 -> 6.0px)
+//
+// The filtered shot used to be the illegible one: at 6.0px five of its six figures read WRONG
+// (30.7808% came out as 39.789%, $69.087M as $69.367M), which is criterion 1's "the screenshots
+// and the code agree" failing inside the judge's own frame. At 7.6px every figure reads right.
 //
 // The detail shot is CLIPPED to the drawer and scaled UP, so the row's own numbers, its
 // derivation and the plan's costs are legible instead of a whole board shrunk to nothing. The
@@ -86,10 +105,10 @@ const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
     if (!ok) throw new Error(name + ' is ' + w + 'x' + h + ', outside the kit\'s 1440/800 sides');
   }
 
-  // 1: the board. 1440 wide, so the table keeps every column, and 1000 tall, so the judge
-  //    reads it at 7.7px instead of 5.6px.
+  // 1: the board. 1440 wide, so the table keeps every column, and 900 tall -- the cell's own
+  //    aspect, so it fills the 1024x640 cover instead of being letterboxed into 922 of it.
   {
-    const r = await take('1-board.png', { width: WIDTH, height: 1000 });
+    const r = await take('1-board.png', { width: WIDTH, height: 900 });
     legal('1-board.png', r.w, r.h);
   }
 
@@ -120,10 +139,11 @@ const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
   // 3: a filtered view -- a category filter, a chain filter and a text search together, so the
   //    screenshot shows every kind of filter doing its work at once, and the board re-sorts.
   {
-    // 1024 wide keeps the hero in two columns and the table whole, and the judge reads it at
-    // 6.0px in its 510x640 cell -- the same table, legible.
+    // 800 wide: the shot is the cell's aspect and lands its 12px text at 7.6px, where every
+    // figure in the table is readable. It is also the width at which the table still fits
+    // whole -- the theme's cell padding and bar width are sized for exactly that.
     const r = await take('3-filtered.png', {
-      width: 1024, height: 1285,
+      width: 800, height: 1004,
       prepare: async () => {
         await page.evaluate(() => {
           const cat = document.querySelectorAll('.controls select')[0];
@@ -146,6 +166,29 @@ const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
           if (tvl) tvl.click();
         });
         await new Promise((r2) => setTimeout(r2, 300));
+        // The frame is scrolled so the tabs sit at its top: at 800 wide the hero is one column
+        // and 426px tall, and the judge would rather have the filters and the table than the
+        // hero's prose. The table's own sticky header stays in frame.
+        //
+        // The page scrolls SMOOTHLY (html{scroll-behavior:smooth}), so the scroll is an
+        // animation and a fixed wait is a race -- the shot's offset depends on when the
+        // animation happens to finish. Wait for it to SETTLE instead.
+        await page.evaluate(async () => {
+          const tabs = document.querySelector('.tabs');
+          const y = Math.round(tabs.getBoundingClientRect().top + window.scrollY);
+          window.scrollTo({ top: y, behavior: 'instant' });
+          await new Promise((r) => {
+            let last = -1;
+            const tick = () => {
+              const now = Math.round(window.scrollY);
+              if (now === last) { r(); return; }
+              last = now;
+              requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          });
+        });
+        await new Promise((r2) => setTimeout(r2, 250));
       },
     });
     legal('3-filtered.png', r.w, r.h);

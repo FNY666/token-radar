@@ -3,12 +3,21 @@
 //   node tools/shootscreens.cjs <out-dir> <shots-dir>
 //
 // The kit's rules for a screenshot: a whole PNG or JPEG, its long side at most 1440 and its
-// short side at least 800, and the entry's own target is 300 to 350 KB per image.
+// short side at least 800.
 //
-// The framing is 1440 wide with the device scale at 1, which fills the judge's 1024x640 cover
-// box without letterboxing. The HEIGHT is tuned per shot until the PNG lands inside the band:
-// a screenshot's size in bytes is a function of how much ink it carries, and the page changed
-// since the last shoot, so the height is measured rather than assumed.
+// THE FRAMING IS CHOSEN BY WHAT THE JUDGE ACTUALLY SEES. The kit does not hand the judge these
+// PNGs: it fits each one into a box (the cover into 1024x640, the other two into two 510x640
+// cells on one sheet), downscales it, and sends that. So a 1440-wide shot arrives at the judge
+// at 35% -- 12px of page text lands as 4.3px and cannot be read. Every framing below is measured
+// in the judge's own composed view, not in the raw PNG:
+//
+//   cover   1440x1000 -> 922x640  12px text lands at 7.7px
+//   detail   800x1010 -> 507x640  12px text lands at 7.6px
+//   filtered 1024x1285 -> 510x640 12px text lands at 6.0px
+//
+// The detail shot is CLIPPED to the drawer and scaled UP, so the row's own numbers, its
+// derivation and the plan's costs are legible instead of a whole board shrunk to nothing. The
+// drawer's header is sticky, so the row's name stays on screen while the frame shows the plan.
 //
 // The PNG is then re-encoded losslessly (tools/pngopt.cjs) with per-scanline filter selection
 // and deflate level 9, which makes the file smaller without changing a pixel.
@@ -18,8 +27,14 @@ const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 
 const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
-const LO = 300 * 1024, HI = 350 * 1024;
+// The board is captured wide, so its table keeps every column.
 const WIDTH = 1440;
+// The drawer is clipped out of the board's frame and captured at this device scale, so the
+// clipped PNG is 800 wide: the smallest short side the kit accepts, and the largest the
+// judge's cell can show at full legibility.
+const DRAWER_CSS_W = 660;
+const DRAWER_SCALE = 800 / DRAWER_CSS_W;
+const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
 
 (async () => {
   const outDir = path.resolve(process.argv[2] || 'out');
@@ -27,9 +42,18 @@ const WIDTH = 1440;
   fs.mkdirSync(shotDir, { recursive: true });
   const url = 'file://' + path.join(outDir, 'dashboard', 'index.html');
 
+  // The entry's build COPIES screenshots/ into out/, so the images the judge sees are the
+  // repository's, not the ones this script just took. The build therefore has to run again
+  // after the shoot, or the dossier carries the previous shots. This script says so out loud
+  // rather than leaving a stale set to be shipped.
+  console.log('shots written to ' + shotDir);
+  console.log('REBUILD the entry now, so out/ and the dossier carry THESE shots.');
+
   const browser = await puppeteer.launch({
     executablePath: CHROME,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--force-device-scale-factor=1', '--hide-scrollbars', '--allow-file-access-from-files'],
+    // No --force-device-scale-factor: the detail shot needs a device scale above 1, and the
+    // flag would pin the scale at 1 for every shot.
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'],
   });
   const page = await browser.newPage();
 
@@ -37,86 +61,95 @@ const WIDTH = 1440;
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 
-  // Take the shot at a given height, optimise it, and report the size.
-  async function take(name, height) {
-    await page.setViewport({ width: WIDTH, height, deviceScaleFactor: 1 });
-    await new Promise((r) => setTimeout(r, 200));
+  // Take the shot: set the viewport, LOAD the page at that size, prepare the view, and shoot.
+  // The order matters: a device scale above 1 reflows the page, so the view is prepared only
+  // after the page has loaded at the scale the shot is taken at.
+  async function take(name, opts) {
+    await page.setViewport({ width: opts.width, height: opts.height, deviceScaleFactor: opts.scale || 1 });
+    await page.goto(url, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('tbody tr');
+    if (opts.prepare) await opts.prepare();
+    await new Promise((r) => setTimeout(r, 250));
     const raw = path.join('/tmp', 'raw-' + name);
-    await page.screenshot({ path: raw });
+    await page.screenshot({ path: raw, ...(opts.clip ? { clip: opts.clip } : {}) });
     const opt = path.join(shotDir, name);
     execFileSync(process.execPath, [path.join(__dirname, 'pngopt.cjs'), raw, opt]);
     fs.unlinkSync(raw);
-    return fs.statSync(opt).size;
+    const b = fs.readFileSync(opt);
+    return { size: fs.statSync(opt).size, w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
   }
 
-  // Tune the height until the PNG lands in the band. The page is scrollable, so a shorter
-  // frame still shows the same top of the page, just less of it.
-  async function shot(name, startHeight) {
-    let h = startHeight;
-    let size = await take(name, h);
-    for (let i = 0; i < 24 && (size < LO || size > HI); i++) {
-      h += size > HI ? -20 : 20;
-      if (h < 900) { h = 900; }
-      if (h > 1440) { h = 1440; }
-      const next = await take(name, h);
-      if ((size >= LO && size <= HI)) break;
-      if (Math.abs(next - size) < 512 && (next < LO || next > HI)) { size = next; break; }
-      size = next;
-    }
-    const band = size >= LO && size <= HI ? 'in band' : 'OUT OF BAND';
-    console.log(name, size + ' bytes', band, 'at ' + h + 'px');
-    return size;
+  // The kit's own limits, checked here so a framing that breaks one is caught at the shoot.
+  function legal(name, w, h) {
+    const ok = Math.max(w, h) <= 1440 && Math.min(w, h) >= 800;
+    console.log('  ' + name + ' ' + w + 'x' + h, (fs.statSync(path.join(shotDir, name)).size / 1024).toFixed(0) + ' KB', ok ? 'legal' : 'ILLEGAL');
+    if (!ok) throw new Error(name + ' is ' + w + 'x' + h + ', outside the kit\'s 1440/800 sides');
   }
 
-  // 1: the board
-  await page.goto(url, { waitUntil: 'networkidle0' });
-  await page.waitForSelector('tbody tr');
-  await shot('1-board.png', 1360);
+  // 1: the board. 1440 wide, so the table keeps every column, and 1000 tall, so the judge
+  //    reads it at 7.7px instead of 5.6px.
+  {
+    const r = await take('1-board.png', { width: WIDTH, height: 1000 });
+    legal('1-board.png', r.w, r.h);
+  }
 
-  // 2: a protocol's detail view, with the board still visible behind the drawer.
-  await page.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll('tbody tr.row'));
-    const target = rows.find((r) => r.querySelector('.pname') && r.querySelector('.pname').textContent.indexOf('Gauntlet') !== -1) || rows[0];
-    target.click();
-  });
-  await page.waitForSelector('.sheet', { visible: true });
-  await new Promise((r) => setTimeout(r, 250));
-  // The judge has to SEE the farm plan, with its costs and its times: scroll the plan into the
-  // drawer before the shot, so the frame shows the steps rather than the header above them.
-  await page.evaluate(() => {
-    const sheet = document.querySelector('.sheet');
-    const steps = sheet.querySelector('.steps');
-    if (steps) sheet.scrollTop = Math.max(0, steps.offsetTop - 90);
-  });
-  await new Promise((r) => setTimeout(r, 200));
-  await shot('2-detail.png', 1030);
-  await page.evaluate(() => document.querySelector('.drawer .close').click());
-  await new Promise((r) => setTimeout(r, 150));
+  // 2: a protocol's detail view. The judge has to SEE the row's numbers AND the farm plan,
+  //    with its costs and its times. Scrolled so the pricing table, the snapshot record and the
+  //    plan's first steps are all in frame; the drawer's header is sticky, so the row's name
+  //    stays on screen above them.
+  {
+    // The frame is CLIPPED to the drawer and captured at a device scale above 1, so the PNG
+    // is 800 wide: the judge's cell shows it at 7.6px, where 12px of page text is readable.
+    const r = await take('2-detail.png', {
+      width: WIDTH, height: 900, scale: DRAWER_SCALE,
+      clip: { x: DRAWER_LEFT, y: 0, width: DRAWER_CSS_W, height: 833 },
+      prepare: async () => {
+        await page.evaluate(() => {
+          const rows = Array.from(document.querySelectorAll('tbody tr.row'));
+          const target = rows.find((r) => r.querySelector('.pname') && r.querySelector('.pname').textContent.indexOf('Gauntlet') !== -1) || rows[0];
+          target.click();
+        });
+        await page.waitForSelector('.sheet', { visible: true });
+        await new Promise((r2) => setTimeout(r2, 250));
+        await page.evaluate(() => { document.querySelector('.sheet').scrollTop = 240; });
+      },
+    });
+    legal('2-detail.png', r.w, r.h);
+  }
 
   // 3: a filtered view -- a category filter, a chain filter and a text search together, so the
   //    screenshot shows every kind of filter doing its work at once, and the board re-sorts.
-  await page.evaluate(() => {
-    const cat = document.querySelectorAll('.controls select')[0];
-    for (const o of cat.options) if (o.value === 'Risk Curators') { cat.value = 'Risk Curators'; break; }
-    cat.dispatchEvent(new Event('change'));
-  });
-  await page.evaluate(() => {
-    const chain = document.querySelectorAll('.controls select')[1];
-    for (const o of chain.options) if (o.value === 'Ethereum') { chain.value = 'Ethereum'; break; }
-    chain.dispatchEvent(new Event('change'));
-  });
-  await page.evaluate(() => {
-    const search = document.querySelector('input[type=search]');
-    search.value = 'a';
-    search.dispatchEvent(new Event('input'));
-  });
-  await page.evaluate(() => {
-    const headers = Array.from(document.querySelectorAll('thead th button'));
-    const tvl = headers.find((h) => h.textContent.indexOf('TVL') === 0);
-    if (tvl) tvl.click();
-  });
-  await new Promise((r) => setTimeout(r, 300));
-  await shot('3-filtered.png', 1380);
+  {
+    // 1024 wide keeps the hero in two columns and the table whole, and the judge reads it at
+    // 6.0px in its 510x640 cell -- the same table, legible.
+    const r = await take('3-filtered.png', {
+      width: 1024, height: 1285,
+      prepare: async () => {
+        await page.evaluate(() => {
+          const cat = document.querySelectorAll('.controls select')[0];
+          for (const o of cat.options) if (o.value === 'Risk Curators') { cat.value = 'Risk Curators'; break; }
+          cat.dispatchEvent(new Event('change'));
+        });
+        await page.evaluate(() => {
+          const chain = document.querySelectorAll('.controls select')[1];
+          for (const o of chain.options) if (o.value === 'Ethereum') { chain.value = 'Ethereum'; break; }
+          chain.dispatchEvent(new Event('change'));
+        });
+        await page.evaluate(() => {
+          const search = document.querySelector('input[type=search]');
+          search.value = 'a';
+          search.dispatchEvent(new Event('input'));
+        });
+        await page.evaluate(() => {
+          const headers = Array.from(document.querySelectorAll('thead th button'));
+          const tvl = headers.find((h) => h.textContent.indexOf('TVL') === 0);
+          if (tvl) tvl.click();
+        });
+        await new Promise((r2) => setTimeout(r2, 300));
+      },
+    });
+    legal('3-filtered.png', r.w, r.h);
+  }
 
   if (errors.length) {
     console.log('CONSOLE ERRORS:');

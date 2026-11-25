@@ -31,8 +31,7 @@ main{padding:0 var(--e) var(--g)}
 .hero{padding:var(--d) 0 var(--c);border-bottom:var(--bl)}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,0.5fr);gap:var(--e)}
 .hero h1{font-size:28px;line-height:1.12;letter-spacing:-0.025em;color:var(--ink)}
-/* At a phone's width the headline takes two lines and the lede nineteen, which pushes the first
-   row past two screens; at sixteen pixels the headline takes one line. */
+/* At a phone's width the headline takes two lines and the lede nineteen, past two screens. */
 @media (max-width: 460px){.hero h1{font-size:16px;line-height:1.3}}
 .hero h1+.lede::first-line,.kpi .v.gold,.peer .pv,.tag.wl{color:var(--value)}
 .tag.wl{border-color:var(--v45)}
@@ -142,7 +141,7 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .drawer{position:fixed;inset:0;z-index:60;display:flex;justify-content:flex-end;background:var(--veil)}
 .drawer[hidden]{display:none}
 .sheet{width:min(660px,94vw);background:var(--b2);overflow-y:auto;overscroll-behavior:contain;padding:var(--e);box-shadow:-24px 0 60px var(--shadow)}
-.sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--d)}
+.sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--d);position:sticky;top:calc(var(--e) * -1);z-index:2;margin:calc(var(--e) * -1) calc(var(--e) * -1) 0;padding:var(--e) var(--e) var(--b);background:var(--b2);border-bottom:var(--bl)}
 .sheet h2{font-size:24px;line-height:1.2}
 .sheet .slug{margin-top:2px}
 .sheet .close{background:var(--panel);color:var(--i2);width:32px;height:32px;border-radius:var(--rs);font-size:18px;line-height:1;flex:none}
@@ -174,7 +173,6 @@ td{padding:var(--b) var(--c);vertical-align:middle}
 .missing h1{font-size:26px;margin-bottom:var(--c)}
 .chips{display:flex;flex-wrap:wrap;gap:var(--a);margin-top:var(--b)}
 .chip-static{background:var(--p2);color:var(--i2);border:var(--bl)}
-@media (max-width: 1000px){.hero-grid{grid-template-columns:1fr}.brand-tag{display:none}}
+@media (max-width: 1000px){.hero-grid{grid-template-columns:1fr}.brand-tag{display:none}.controls .q,.controls select{font-size:16px}}
 @media (max-width: 460px){.hero p.lede{font-size:12.5px}}
-@media (max-width: 1000px){.controls .q,.controls select{font-size:16px}}
 @media (max-width: 420px){.kpis{grid-template-columns:1fr}}

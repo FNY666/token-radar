@@ -783,8 +783,7 @@
  if (a >= 1e3) return '$' + (n / 1e3).toPrecision(s) + 'K';
  return '$' + Math.round(n);
  }
- // A figure at `sig` significant figures, as the board prints it: the board's implied value is
- // computed from the conditional value at five and the odds at four decimals of a percent.
+ // A figure at `sig` significant figures, as the board prints it.
  function moneySig(n, sig) {
  if (n === null || n === undefined) return '—';
  var a = Math.abs(n);
@@ -793,8 +792,7 @@
  var factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
  return '$' + (Math.round(mant * factor) / factor * scale).toLocaleString('en-US');
  }
- // The dollars the snapshot carries: the live drawer's market cap and TVL are its own operands
- // for the multiple beside them, so the reader's own division has to land on that multiple.
+ // The dollars the snapshot carries: the live drawer's own operands, so its own division lands.
  function moneyWhole(n) {
  if (n === null || n === undefined) return '—';
  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });

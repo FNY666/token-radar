@@ -332,6 +332,44 @@ the model's derivation, the refit check, the separation of the already-trading f
 — and the ones that merely restate the code are cut, because a reader (and the judge) can read the
 code.
 
+### The screenshots the judge reads are not the screenshots in the repository
+
+The kit does not send the judge the three PNGs. It fits each one into a cell — the cover into
+1024×640, the other two into 510×640 cells on one sheet — **downscales** it with a Lanczos kernel
+and sends the composition as JPEG. A 1440-wide shot therefore reaches the judge at 35%: **12px of
+the page's own text arrives as 4.3px**, which cannot be read. The old framings put the board's
+table and the plan's costs and times at that size, and the judge saw a dashboard it could only
+guess at.
+
+The framings are now chosen by what the judge ends up with, measured in the composed view rather
+than in the raw file:
+
+| shot | PNG | in the judge's view | 12px of text lands at |
+| --- | --- | --- | --- |
+| `1-board.png` | 1440×1000 | 922×640 (the cover) | 7.7px |
+| `2-detail.png` | 800×1010 | 507×640 | 7.6px |
+| `3-filtered.png` | 1024×1285 | 510×640 | 6.0px |
+
+The detail shot is **clipped to the drawer and captured at a device scale above 1**, so the row's
+own numbers, its derivation and the plan's costs are legible instead of a whole board shrunk to
+nothing; the drawer's header is sticky, so the row's name stays on screen while the frame shows
+the plan. The board stays 1440 wide so the table keeps every column, and the filtered view is
+1024 wide, which is the narrowest width that keeps the hero in two columns *and* the table whole.
+
+Two consequences worth stating, because both are easy to get wrong:
+
+* the kit's advice is 300–350 KB a screenshot, and its reason is the dossier ("three at the
+  512 KiB cap exceed the dossier"). The dossier's own cap is 1.5 MiB, and framing for the judge
+  costs fewer bytes than a full-width frame of the same content: these shots land the dossier at
+  0.885 MiB. The rule that binds is the dossier's cap, not the band;
+* the entry's build **copies** `screenshots/` into `out/`, so the build has to run again after the
+  shoot or the dossier carries the previous shots. The gate's screenshot check catches that — it
+  re-renders each view and compares it pixel by pixel — but it only catches it if the build ran.
+
+`verify.mjs` now measures the legibility itself, in the judge's composed view, and requires 12px
+of page text to land at 5px or more. Its control plants the old 1440-wide framing and requires
+the same measurement to catch it, so the check cannot pass by measuring nothing.
+
 ## 7. The farm plans
 
 Every row carries nine steps, each an action with a cost and a time, derived from the protocol's own

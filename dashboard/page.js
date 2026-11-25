@@ -437,15 +437,17 @@
  var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
  var W = Math.max(320, Math.round((host.getBoundingClientRect().width || 1000) - padX));
  var H = 150, padL = 54, padR = 16, padT = 22, padB = 30;
- var maxV = colExtreme(list, 'implied_value_usd', 'max');
- var scaleTop = 1; while (scaleTop < maxV) scaleTop *= 10;
- var logMin = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'min'), 1));
- var logMax = Math.log10(Math.max(colExtreme(list, 'tvl_usd', 'max'), 1));
+ // The scale brackets the DATA, not the number line: the values span two decades, so an axis from $1 up left every row in one decade.
+ function lg(v) { return Math.log10(Math.max(v, 1)); }
+ var logTop = Math.ceil(lg(colExtreme(list, 'implied_value_usd', 'max')));
+ var logBottom = Math.min(logTop - 1, Math.floor(lg(colExtreme(list, 'implied_value_usd', 'min'))));
+ var logMin = lg(colExtreme(list, 'tvl_usd', 'min'));
+ var logMax = lg(colExtreme(list, 'tvl_usd', 'max'));
  function xOf(p) { return padL + (p - 0.05) / 0.9 * (W - padL - padR); }
- function yOf(v) { return padT + (1 - Math.log10(Math.max(v, 1)) / Math.log10(scaleTop)) * (H - padT - padB); }
+ function yOf(v) { return padT + (1 - (lg(v) - logBottom) / (logTop - logBottom)) * (H - padT - padB); }
   function rOf(tvl) {
  if (logMax <= logMin) return 5;
- return 3.5 + (Math.log10(Math.max(tvl, 1)) - logMin) / (logMax - logMin) * 8.5;
+ return 3.5 + (lg(tvl) - logMin) / (logMax - logMin) * 8.5;
  }
  var ns = 'http://www.w3.org/2000/svg';
  var svg = document.createElementNS(ns, 'svg');
@@ -460,7 +462,8 @@
  svg.appendChild(n);
  return n;
  }
- for (var v = 1; v <= scaleTop; v *= 10) {
+ for (var d = logBottom; d <= logTop; d++) {
+  var v = Math.pow(10, d);
  var y = yOf(v);
  add('line', { x1: padL, y1: y, x2: W - padR, y2: y, class: 'grid' });
  add('text', { x: padL - 8, y: y + 3.5, class: 'tick', 'text-anchor': 'end' }, money(v));

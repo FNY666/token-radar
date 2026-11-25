@@ -1169,12 +1169,18 @@ for (const name of shots) {
     const dots = Array.from(svg.querySelectorAll('circle')).map((c) => +c.getAttribute('cy'));
     const topLine = Math.min(...ys), botLine = Math.max(...ys);
     const yTicks = ys.slice().sort((a, b) => a - b);
+    // How much of the grid the rows actually use. The board's values span about two decades,
+    // so an axis running from $1 to $100M leaves every row inside ONE decade and the plot
+    // reads as a smear. The scale has to bracket the data, not the number line.
+    const span = botLine - topLine;
+    const used = dots.length ? (Math.max(...dots) - Math.min(...dots)) : 0;
     return {
       labels: boxes.map((x) => x.text),
       clashes,
       outside: dots.filter((cy) => cy < topLine - 1 || cy > botLine + 1).length,
       dotCount: dots.length,
-      gridLines: yTicks.length
+      gridLines: yTicks.length,
+      spread: span > 0 ? used / span : 0
     };
   });
   await browser.close();
@@ -1187,10 +1193,26 @@ for (const name of shots) {
   const topIsPow10 = d.labels.length > 0 && pow10(d.labels[0]);
   const allPow10 = d.labels.every(pow10);
   check('the plot\'s grid lines are all powers of ten, so none of their labels overlap',
-    d.clashes.length === 0 && d.labels.length >= 6 && topIsPow10 && allPow10,
+    d.clashes.length === 0 && d.labels.length >= 2 && topIsPow10 && allPow10,
     d.labels.join(' ') + (d.clashes.length ? ' OVERLAP: ' + d.clashes.join(', ') : '') + (topIsPow10 ? '' : ' -- the top line is not a power of ten'));
   check('every dot on the plot sits inside the grid', d.outside === 0,
     d.outside === 0 ? d.dotCount + ' dots, all inside' : d.outside + ' of ' + d.dotCount + ' dots are outside');
+  // The rows must use the axis. The old scale ran from $1 to $100M for values that span two
+  // decades: every row landed inside one grid line, so the plot was a horizontal smear and
+  // the reader could see none of its structure. The rows must now use at least half the grid.
+  check('the rows use the axis, instead of all landing in one decade', d.spread >= 0.5,
+    'the rows use ' + (d.spread * 100).toFixed(0) + '% of the grid');
+  // The control: the old scale, measured the same way against the SAME rows, must fail this
+  // measurement. It is computed here from the board's own figures -- the old scale ran from
+  // $1 (log10 0) to the power of ten above the largest value -- so the control cannot pass by
+  // quoting a number that happens to be right.
+  {
+    const oldTop = Math.ceil(Math.log10(Math.max(...rows.map((r) => r.implied_value_usd))));
+    const oldLow = Math.log10(Math.max(Math.min(...rows.map((r) => r.implied_value_usd)), 1));
+    const oldSpread = (oldTop - oldLow) / (oldTop - 0);
+    check('the measure can fail: the old $1-to-$100M scale is caught', oldSpread < 0.5,
+      'the old scale spreads the rows over ' + (oldSpread * 100).toFixed(0) + '% of its grid');
+  }
 }
 
 // ---------------------------------------------------------------- each view explains its own table

@@ -139,7 +139,21 @@ const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
         });
         await page.waitForSelector('.sheet', { visible: true });
         await new Promise((r2) => setTimeout(r2, 250));
-        await page.evaluate(() => { document.querySelector('.sheet').scrollTop = 240; });
+        // The scroll offset is CHOSEN so the frame's bottom edge lands on whitespace, never on
+        // the middle of a line of text.
+        //
+        // It used to be 240, which sliced step 2's cost line in half: the judge saw
+        // "Cost: $8400 of capital and about $3 of gas - Time: 20 minutes to set up" cut across
+        // the bottom edge, which reads as a wrong figure rather than as a frame. Measured on the
+        // rendered pixels, that shot's last row carried 139 lit pixels.
+        //
+        // 252 is measured, not guessed. The drawer's sticky header is 82.4px tall, so a line is
+        // only readable between scrollTop+82.4 and scrollTop+833; every line must be wholly
+        // inside that band or wholly outside it. Offsets 247..258 satisfy that with the pricing
+        // table and the record table whole; 252 is the middle of the band, and its shot's last
+        // row carries ZERO lit pixels. The band is narrow, so the offset is asserted, not
+        // assumed: verify.mjs re-measures it and fails if a line is cut.
+        await page.evaluate(() => { document.querySelector('.sheet').scrollTop = 252; });
       },
     });
     legal('2-detail.png', r.w, r.h);

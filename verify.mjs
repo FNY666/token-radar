@@ -410,7 +410,10 @@ for (const name of shots) {
     await page.waitForSelector('.sheet', { visible: true });
     await new Promise((r) => setTimeout(r, 250));
     await page.evaluate(() => {
-      document.querySelector('.sheet').scrollTop = 240;
+      // The same offset the shoot script uses: the frame's bottom edge lands on whitespace,
+      // never on the middle of a line of text. The two must agree or the comparison below
+      // compares two different frames.
+      document.querySelector('.sheet').scrollTop = 252;
     });
     await new Promise((r) => setTimeout(r, 200));
     rendered['2-detail.png'] = await page.screenshot({ encoding: 'binary', clip: { x: 1440 - 660, y: 0, width: 660, height: clipH } });
@@ -511,6 +514,64 @@ for (const name of shots) {
     const n = bigDiffs(decodePng(pp), decodePng(path.join(shotDir, '1-board.png')), THRESHOLD);
     check('the screenshot check can fail: one changed letter in one label is caught', changed && n > 0,
       changed ? `${n} pixels differ` : 'the label was not found');
+  }
+
+  // ---------------------------------------------------------------- no shot cuts a line of text
+  // The detail shot is CLIPPED to the drawer at a fixed height, and the clip is a hard edge: a
+  // line of text that straddles it is drawn half in and half out. The judge reads the fragment,
+  // and a fragment of "Cost: $8400 of capital and about $3 of gas - Time: 20 minutes to set up"
+  // reads as a wrong figure rather than as a frame.
+  //
+  // It used to happen. The shot was taken at a scroll offset of 240, and step 2's cost line ran
+  // across the bottom edge. Measured on the rendered pixels, that shot's LAST ROW carried 139
+  // lit pixels: text, sliced. The shot now lands on whitespace, and its last row carries none.
+  //
+  // This is measured from the PIXELS, not from the DOM: a line of text is "lit" if it is
+  // brighter than the panel behind it. The control takes the same measurement on a frame
+  // scrolled onto a line, and requires it to find lit pixels -- a measure that finds nothing
+  // always would prove nothing.
+  {
+    const detail = decodePng(path.join(shotDir, '2-detail.png'));
+    // A row is "lit" if any pixel in it is well above the panel's own background.
+    const litInRow = (img, y) => {
+      if (!img) return -1;
+      const r = y * img.stride;
+      let lit = 0;
+      for (let x = 0; x < img.w; x++) {
+        const i = r + x * img.ch;
+        if (img.px[i] + img.px[i + 1] + img.px[i + 2] > 150) lit++;
+      }
+      return lit;
+    };
+    const lastLit = detail ? litInRow(detail, detail.h - 1) : -1;
+    check('no shot cuts a line of text at its edge: the detail shot ends on whitespace',
+      detail !== null && lastLit === 0,
+      detail === null ? 'the shot could not be decoded'
+        : `${lastLit} lit pixels in the last row of ${detail.w}x${detail.h}`);
+
+    // The control: the same measurement on a frame scrolled onto a line of text.
+    const page3 = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+    const p3 = await page3.newPage();
+    await p3.setViewport({ width: 1440, height: 900, deviceScaleFactor: 800 / 660 });
+    await p3.goto(url, { waitUntil: 'networkidle0' });
+    await p3.waitForSelector('tbody tr');
+    await p3.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll('tbody tr.row'));
+      const t = rows.find((r) => r.querySelector('.pname') && r.querySelector('.pname').textContent.indexOf('Gauntlet') !== -1) || rows[0];
+      t.click();
+    });
+    await p3.waitForSelector('.sheet', { visible: true });
+    await new Promise((r) => setTimeout(r, 250));
+    // The offset that used to cut the line: 240.
+    await p3.evaluate(() => { document.querySelector('.sheet').scrollTop = 240; });
+    await new Promise((r) => setTimeout(r, 200));
+    const cutShot = await p3.screenshot({ clip: { x: 1440 - 660, y: 0, width: 660, height: 833 } });
+    await page3.close();
+    const cutPath = path.join(tmpDir, 'cut-control.png');
+    fs.writeFileSync(cutPath, cutShot);
+    const cutLit = litInRow(decodePng(cutPath), 1009);
+    check('the cut-line measure can fail: a frame scrolled onto a line is caught', cutLit > 0,
+      `${cutLit} lit pixels in the last row of the old framing`);
   }
 
   // What the JUDGE reads is not this PNG: the kit fits each shot into a cell (the cover into

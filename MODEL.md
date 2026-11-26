@@ -614,6 +614,40 @@ the *checker* was not: the first dot-overlap count assumed a uniform radius (the
 money formatter instead of the page's (28 rows "mismatched" until it used `toPrecision(3)`).
 A count that disagrees with the artifact is a question about the count.
 
+#### The formula card, and the claim it makes about itself (2026-11-26)
+
+The formula card is the model's central evidence and the judge never sees it in a screenshot, so
+every figure in it was re-derived: `a = 4.4042`, `b = -0.6443`, all **eleven** launch
+coefficients, AUC 0.753, the 0.337 median error, the 0.414 held-out error, the growth coefficient
+negative in 300 of 300 bootstrap resamples with its −0.98 to −0.20 interval, the permutation
+p = 0.52, the four growth quartiles, the 0.410 / 0.273 / 0.084 influence figures, the 400×
+ratio, the 4 rows on the growth clamp and the 26 on the 5% odds floor. **All twenty exact.**
+
+The card also makes a claim *about its own precision*:
+
+> The two coefficients are printed to four decimals here, and the category corrections are
+> printed to five, so the sum above lands on the conditional value to within one part in a
+> thousand rather than exactly.
+
+That is checkable, and it was checked: recomputing the conditional value from the **printed**
+coefficients for all 195 rows gives a worst relative error of **7.937 × 10⁻⁴**, on Sentora
+Curator — just inside the stated bound, with **no** row exceeding it. A card that says "to within
+one part in a thousand" and means 1.1 parts would be a lie told to a reader who checks it.
+
+#### The refit is a measurement, not a sentence (2026-11-26)
+
+The model tab's card reads "**195 / 195**", and the copy says "All 195 rows reproduce exactly".
+That claim is the entry's strongest single piece of evidence — it is what makes criterion 1
+("the screenshots and the code agree") checkable by a reader — so it was tested for vacuity the
+way a gate would be: **one** shipped row's implied value was changed by **one dollar** in a copy
+of `data.js`, and the card became "**194 / 195**" with the verdict turning red and naming the
+largest gap. The number is computed from the rows; it is not a string that happens to say 195.
+
+The page was also degraded to prove it does not depend on what it does not have: with `model.js`
+removed entirely, the board still renders all **195** rows, the page raises **no** error, and
+the refit card is simply absent — because `page.js` reads `window.RadarModel` behind a guard and
+falls back. With the shipped tree, the card is present and reads 195 / 195.
+
 #### The levers that were measured and closed
 
 * **A fourth screenshot.** The kit composes the cover alone on one sheet and the rest on a

@@ -3107,7 +3107,7 @@ for (const name of shots) {
       if (dm[1] !== (listed ?? '')) dateBad++;
     }
     // the hold window, from the row's age
-    const hm = s.match(/for at least (\d+) days/);
+    const hm = s.match(/Hold the position for (\d+) days/);
     if (hm) {
       const age = r.age_days === null || r.age_days === undefined ? null : r.age_days;
       if (Number(hm[1]) !== holdDaysFor(age)) holdBad++;
@@ -3289,7 +3289,7 @@ for (const name of shots) {
     for (const r of rows) {
       if (r.age_days === null || r.age_days === undefined) continue;
       const band = bandOf(r.age_days);
-      const hold = Number(/for at least (\d+) days/.exec(r.farm_steps.join(' | '))?.[1]);
+      const hold = Number(/Hold the position for (\d+) days/.exec(r.farm_steps.join(' | '))?.[1]);
       if (!Number.isFinite(hold)) continue;
       if (!byBand.has(band)) byBand.set(band, []);
       byBand.get(band).push({ r, hold });
@@ -3319,6 +3319,225 @@ for (const name of shots) {
     }
   }
 
+  // The plan must not contradict itself about when the position ends.
+  //
+  // The hold step said "hold the position for AT LEAST N days" while the exit step said to unwind
+  // "on the same day you claim". A claim can open on day five of a ninety-day window, so two
+  // steps of one plan told the reader to hold past the day the plan told them to leave. The
+  // exit step also gated the exit on "the claim window closes" -- a window the record does not
+  // carry, and one that never closes for the majority of protocols on the board, which never
+  // issue a token at all. A reader following that literally would never have unwound.
+  //
+  // The rule now: the exit must name the hold window as one of its two endings, and must not
+  // make the exit conditional on a claim alone.
+  {
+    let exitBad = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const s = r.farm_steps.join(' | ');
+      const hold = /Hold the position for (\d+) days/.exec(s);
+      const exit = r.farm_steps.find((x) => /unwind the position/.test(x));
+      if (!hold || !exit) { exitBad++; if (offenders.length < 3) offenders.push(`${r.name}: no hold step or no exit step`); continue; }
+      const days = Number(hold[1]);
+      // the exit must name the same window the hold step set
+      if (!new RegExp(`end of the ${days}-day window`).test(exit)) {
+        exitBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the exit does not name the ${days}-day window`);
+        continue;
+      }
+      // and the exit must not be conditional on a claim ALONE
+      if (/never move funds out before/i.test(exit) || /the claim window closes/i.test(exit)) {
+        exitBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the exit is conditional on a claim window`);
+      }
+    }
+    check('every farm plan\'s exit names the hold window the plan set', exitBad === 0,
+      exitBad === 0 ? 'all 195 agree' : `${exitBad} do not: ${offenders.join('; ')}`);
+
+    // The control: the SAME check over a plan whose exit was the old wording. It must fire.
+    {
+      const r = rows[0];
+      const planted = r.farm_steps.slice();
+      const idx = planted.findIndex((x) => /unwind the position/.test(x));
+      planted[idx] = 'Log the wallet, the deposit dates and the transaction hashes, then unwind the position on the same day you claim, and never move funds out before the claim window closes. Cost: about $3 of gas to unwind. Time: 30 minutes.';
+      const s = planted.join(' | ');
+      const hold = /Hold the position for (\d+) days/.exec(s);
+      const exit = planted.find((x) => /unwind the position/.test(x));
+      const fires = !!(hold && exit
+        && !new RegExp(`end of the ${Number(hold[1])}-day window`).test(exit)
+        && /the claim window closes/i.test(exit));
+      check('the exit gate can fail: the old exit wording is caught', fires,
+        fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
+  // A CHAIN must never stand where a VENUE belongs.
+  //
+  // The derivatives templates read "Post $1050 of USDC as margin on Antarctic and open one small
+  // long position on Arbitrum." A position is not opened ON Arbitrum: it is opened on the
+  // protocol, on Arbitrum. The chain had taken the venue's slot, so the plan told the reader to
+  // open a position on a piece of infrastructure. The same shape appeared in the basis-trading
+  // line. The chain belongs after the protocol, and the position is opened THERE.
+  //
+  // The slot that matters is the one the reader OPENS a position in. A chain after a position
+  // that is merely HELD -- "into Arrakis Modular's managed liquidity position on Ethereum" --
+  // is right: that position does live on Ethereum. The two are told apart by the verb, not by
+  // the noun, so the gate must key on the verb too.
+  {
+    // every chain name the snapshot knows, so a chain can be recognised wherever it appears
+    const chainNames = new Set();
+    for (const p of snapshot.protocols) for (const c of (p.chains ?? [])) chainNames.add(c);
+    // the slot where the plan OPENS a position: "open one small long position on X", or
+    // "open a $5250 USDC position on X". X is the VENUE there, and a chain is not a venue.
+    const VENUE_SLOT = /open (?:one small [a-z-]+|a \$[0-9]+ USDC) position on ([^.,]+?)(?:\.|,| and|$)/;
+    // the slot where the plan HOLDS a position: "a <kind> position on X". X is where the
+    // position lives, so a chain is correct there.
+    let venueBad = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const t = r.farm_steps[1] ?? '';
+      const m = VENUE_SLOT.exec(t);
+      if (!m) continue;
+      const slot = m[1];
+      if (chainNames.has(slot)) {
+        venueBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: "${slot}" is a chain, not a venue`);
+      }
+    }
+    check('no farm plan opens a position on a chain, where it means a venue', venueBad === 0,
+      venueBad === 0 ? 'none do' : `${venueBad} do: ${offenders.join('; ')}`);
+
+    // The control: the SAME check over a plan with the old wording. It must fire.
+    {
+      const r = rows.find((x) => x.category === 'Derivatives') ?? rows[0];
+      const planted = 'Post $1050 of USDC as margin on Antarctic and open one small long position on Arbitrum. Cost: $1050 of capital and about $3 of gas. Time: 20 minutes to set up.';
+      const m = VENUE_SLOT.exec(planted);
+      const fires = !!(m && chainNames.has(m[1]));
+      check('the venue gate can fail: a chain in the venue slot is caught', fires,
+        fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
+  // The plan must not offer a weekly action its own action rules out.
+  //
+  // The weekly-action step offered the same four options to every row: "a deposit, a swap, a
+  // borrow or a vote". On the 25 rows whose action says "borrow nothing against it" or "draw no
+  // debt against it" -- the lending markets and the CDPs, where the whole point of the position
+  // is that it is unlevered -- that offered the reader a borrow, in the very step that told them
+  // to keep it unlevered. Two steps of one plan gave opposite instructions.
+  {
+    let menuBad = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const action = r.farm_steps[1] ?? '';
+      const weekly = r.farm_steps[2] ?? '';
+      const unlevered = /borrow nothing|draw no debt/i.test(action);
+      const offersBorrow = /a borrow/.test(weekly);
+      if (unlevered && offersBorrow) {
+        menuBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the action forbids borrowing, the weekly menu offers it`);
+      }
+      if (!unlevered && !offersBorrow) {
+        menuBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the weekly menu is missing the borrow`);
+      }
+    }
+    check('every farm plan\'s weekly action menu agrees with its own action', menuBad === 0,
+      menuBad === 0 ? 'all 195 agree' : `${menuBad} do not: ${offenders.join('; ')}`);
+
+    // The control: the SAME check over a plan whose menu was the old one. It must fire.
+    {
+      const r = rows.find((x) => /borrow nothing|draw no debt/i.test(x.farm_steps[1] ?? '')) ?? rows[0];
+      const planted = r.farm_steps.slice();
+      planted[2] = 'Make one qualifying action every week: a deposit, a swap, a borrow or a vote, so the wallet keeps showing activity for as long as the position is open. The snapshot carries no points schedule for ' + r.name + ', so a week is the cadence that cannot be too slow, and the gas is priced at that cadence. Cost: about $3 of gas a week, so $39 across the 13 weeks of the hold window. Time: 10 minutes a week.';
+      const unlevered = /borrow nothing|draw no debt/i.test(planted[1] ?? '');
+      const offersBorrow = /a borrow/.test(planted[2] ?? '');
+      const fires = unlevered && offersBorrow;
+      check('the weekly-menu gate can fail: a borrow on an unlevered row is caught', fires,
+        fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
+  // The hold step must describe the position's SHAPE, and the shape is not the yield.
+  //
+  // One flag decided both, and the wording picked the wrong one for 24 rows: the RWA rows BUY a
+  // yield-bearing note and hold it, which is not a deposit, but the step still told the reader to
+  // keep "the balance deposited rather than idle" -- because the flag that chose the wording was
+  // the YIELD flag. The same held for the staking, restaking and BTC-vault rows. The shape now
+  // comes from the row's own action, separately from whether the position pays.
+  {
+    const isDepositAction = (a) => /^(Deposit|Lend|Supply|Provide|Route)/.test(a);
+    let shapeBad = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const action = r.farm_steps[1] ?? '';
+      const hold = r.farm_steps[3] ?? '';
+      const saysDeposited = /keeping the balance deposited/.test(hold);
+      const saysHeld = /keeping it open rather than closed out/.test(hold);
+      if (!saysDeposited && !saysHeld) {
+        shapeBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the hold step describes neither shape`);
+        continue;
+      }
+      if (saysDeposited !== isDepositAction(action)) {
+        shapeBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the action is ${isDepositAction(action) ? 'a deposit' : 'not a deposit'}, the step says ${saysDeposited ? 'deposited' : 'held'}`);
+      }
+    }
+    check('every farm plan\'s hold step describes the shape its own action opens', shapeBad === 0,
+      shapeBad === 0 ? 'all 195 agree' : `${shapeBad} do not: ${offenders.join('; ')}`);
+
+    // The control: the SAME check over a plan whose step 4 was the old wording. It must fire.
+    {
+      const r = rows.find((x) => !/^(Deposit|Lend|Supply|Provide|Route)/.test(x.farm_steps[1] ?? '')) ?? rows[0];
+      const planted = r.farm_steps.slice();
+      planted[3] = 'Hold the position for 60 days, keeping the balance deposited rather than idle, so it is open for more than one of the weekly actions you make. Cost: the $3150 stays deposited, and the yield it earns is yours. Time: 60 days.';
+      const fires = /keeping the balance deposited/.test(planted[3] ?? '')
+        && !/^(Deposit|Lend|Supply|Provide|Route)/.test(planted[1] ?? '');
+      check('the hold-shape gate can fail: a deposit claimed for a non-deposit action is caught', fires,
+        fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
+  // The exit step must ask the reader to log what they actually did.
+  //
+  // It asked every row to log "the deposit dates" -- but on 66 rows the action never deposited
+  // anything: the position was bought, posted as margin, bridged, staked or wrapped. A reader
+  // following that step would have gone looking for a deposit they had never made.
+  {
+    const isDepositAction = (a) => /^(Deposit|Lend|Supply|Provide|Route)/.test(a);
+    let dateBad = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const action = r.farm_steps[1] ?? '';
+      const exit = r.farm_steps[6] ?? '';
+      const saysDeposit = /the deposit dates/.test(exit);
+      const saysEntry = /the entry dates/.test(exit);
+      if (!saysDeposit && !saysEntry) {
+        dateBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the exit step names no dates`);
+        continue;
+      }
+      if (saysDeposit !== isDepositAction(action)) {
+        dateBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the action is ${isDepositAction(action) ? 'a deposit' : 'not a deposit'}, the exit says ${saysDeposit ? 'deposit dates' : 'entry dates'}`);
+      }
+    }
+    check('every farm plan\'s exit step asks the reader to log what its action actually made', dateBad === 0,
+      dateBad === 0 ? 'all 195 agree' : `${dateBad} do not: ${offenders.join('; ')}`);
+
+    // The control: the SAME check over a plan whose exit step was the old wording. It must fire.
+    {
+      const r = rows.find((x) => !/^(Deposit|Lend|Supply|Provide|Route)/.test(x.farm_steps[1] ?? '')) ?? rows[0];
+      const planted = r.farm_steps.slice();
+      planted[6] = 'Log the wallet, the deposit dates and the transaction hashes, then unwind the position at the end of the 60-day window — or on the day a claim opens, if one opens before then. Cost: about $3 of gas to unwind. Time: 30 minutes.';
+      const fires = /the deposit dates/.test(planted[6] ?? '')
+        && !/^(Deposit|Lend|Supply|Provide|Route)/.test(planted[1] ?? '');
+      check('the exit-dates gate can fail: deposit dates claimed for a non-deposit action are caught', fires,
+        fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
   // The plan must not assert a cadence the record cannot carry.
   //
   // The hold step used to say the position "is open across more than one of the protocol's own
@@ -3331,11 +3550,22 @@ for (const name of shots) {
     // vault", "the deepest pool" or "the best-scoring strategy" is asserting something the entry
     // cannot know -- and "its app" and "the settlement" and "the term" name a cadence and a
     // product the record does not carry either.
+    // The table is read out of the library's OWN source, so the check below sees every line of it
+    // -- including the categories the board does not rank today.
+    const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
     const UNSUPPORTED = [
       /\blargest\b/i, /\bdeepest\b/i, /best-scoring/i, /\bcurated\b/i,
       /the settlement/i, /\bthe term\b/i, /until it claims/i, /to the unlock/i,
       /the next rebalance/i, /incentive programme/i, /incentive program/i,
       /\bthe protocol's own checkpoints\b/i, /checkpoint|epoch/i,
+      // A season is a named cycle, of the kind the record carries nowhere -- the same defect as
+      // the checkpoint sentence, which was corrected while this one survived.
+      /\ba season\b/i, /\bthe season\b/i,
+      // A claim window is a schedule the record does not carry, and naming it made the exit
+      // conditional on a claim that most protocols never open.
+      /claim window/i,
+      // An expiry is the same kind of date: the record carries no expiry for any protocol.
+      /to the expiry/i, /until it settles/i,
     ];
     let claimBad = 0;
     const offenders = [];
@@ -3352,6 +3582,40 @@ for (const name of shots) {
     check('no farm plan asserts a superlative, a product or a cadence the record cannot carry',
       claimBad === 0,
       claimBad === 0 ? 'none do' : `${claimBad} do: ${offenders.join('; ')}`);
+
+    // The TABLE, not just the shipped rows. The gate above walks the 195 rows the board
+    // publishes, so a category the board does not rank today is not covered by it -- and a
+    // template can sit there for months before a board reaches it. The Options line still said
+    // "hold it to the expiry", a cadence the record cannot carry, on a category with no rows on
+    // the board. The whole table is checked here, so a defect cannot hide in a category the
+    // board has not reached yet.
+    {
+      const tableBad = [];
+      const tableRe = /^\s*(?:'([^']+)'|([A-Za-z][A-Za-z ]*?))\s*:\s*"((?:[^"\\]|\\.)*)"/;
+      const tableBody = libSrc.slice(
+        libSrc.indexOf('const CATEGORY_ACTIONS'),
+        libSrc.indexOf('const NON_YIELDING_CATEGORIES'),
+      );
+      for (const line of tableBody.split('\n')) {
+        const m = tableRe.exec(line);
+        if (!m) continue;
+        const cat = m[1] ?? m[2];
+        const tpl = m[3];
+        const hit = UNSUPPORTED.find((re) => re.test(tpl));
+        if (hit) tableBad.push(`${cat}: ${tpl.slice(0, 70)}`);
+      }
+      check('no action template asserts a superlative, a product or a cadence the record cannot carry',
+        tableBad.length === 0,
+        tableBad.length === 0 ? 'the whole table is clean' : `${tableBad.length} do: ${tableBad.join('; ')}`);
+
+      // The control: a template that DOES assert one must be caught.
+      {
+        const planted = '  Options: "Write {cap} of USDC into one {name} option on {chain} and hold it to the expiry.",';
+        const hit = UNSUPPORTED.find((re) => re.test(planted));
+        check('the action-table gate can fail: an unsupported cadence in a template is caught', !!hit,
+          hit ? `caught (${hit})` : 'NOT CAUGHT -- the gate measures nothing');
+      }
+    }
 
     // The control: the SAME check over a plan that DOES assert one. It must fire.
     {
@@ -3377,7 +3641,7 @@ for (const name of shots) {
       const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
       const nm = /the plan holds it for (\d+) days/.exec(note);
       if (!nm) { noteBad++; if (offenders.length < 3) offenders.push(`${r.name}: the note quotes no window`); continue; }
-      const hm = /for at least (\d+) days/.exec(r.farm_steps.join(' | '));
+      const hm = /Hold the position for (\d+) days/.exec(r.farm_steps.join(' | '));
       if (!hm || Number(nm[1]) !== Number(hm[1])) {
         noteBad++;
         if (offenders.length < 3) offenders.push(`${r.name}: the note says ${nm[1]} days, the hold step says ${hm?.[1]}`);
@@ -3393,7 +3657,7 @@ for (const name of shots) {
         (r.farm_steps[r.farm_steps.length - 1] ?? '').replace(/the plan holds it for \d+ days/, 'the plan holds it for 7 days'),
       ]);
       const pm = /the plan holds it for (\d+) days/.exec(planted[planted.length - 1] ?? '');
-      const hm = /for at least (\d+) days/.exec(planted.join(' | '));
+      const hm = /Hold the position for (\d+) days/.exec(planted.join(' | '));
       const fires = !!(pm && hm && Number(pm[1]) !== Number(hm[1]));
       check('the note-window gate can fail: a note that quotes a different window is caught', fires,
         fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');

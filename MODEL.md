@@ -720,6 +720,54 @@ record and never from a hand-written list of names:
   of the weekly actions the plan already tells the reader to make, which is the only cadence the
   plan knows. `verify.mjs` gates it: no plan may assert a checkpoint or a cycle, and the gate's
   control plants the old sentence and requires the gate to fire.
+* **the plan's own steps contradicted each other about when to leave.** The hold step said "hold
+  the position for **at least** N days", and the exit step said to unwind "on the same day you
+  claim" — but a claim can open on day five of a ninety-day window, and the reader had been told
+  both to hold past that day and to leave on it. The word "at least" made the window a floor the
+  reader could not leave early; it is now the length of the hold, and the exit step names the one
+  thing that ends it early, a claim that opens.
+* **the exit step named a window the record does not carry.** It used to end "…never move funds
+  out before the claim window closes". The snapshot holds no claim schedule and no claim window
+  for any protocol, so this was unsupported — and worse than unsupported: it made the exit
+  *conditional* on a claim. Most protocols on the board never issue a token, so for them no
+  claim opens, no claim window closes, and the rule as written never released the position at
+  all. A reader following the plan literally would have left money in a position they had been
+  told to unwind, and the hold step said nothing about how the position ends. The exit now names
+  the two endings the plan itself sets up: the hold window runs out, or a claim opens first and
+  the position is unwound that day. All **195** rows carried the contradiction.
+* **the watch step watches for a token claim, not for a season.** It used to say "watch its own
+  announcements for a token or a season". A season is a named cycle of the kind the record
+  carries nowhere — the same defect as the checkpoint sentence, two steps away, and it had
+  survived the correction of that one.
+* **a chain never stands where a venue belongs.** The derivatives and basis-trading lines read
+  "Post $1050 of USDC as margin on Antarctic and open one small long position on Arbitrum". A
+  position is not opened *on Arbitrum* — it is opened on the protocol, on Arbitrum. The chain
+  had taken the venue's slot, so the plan told the reader to open a position on a piece of
+  infrastructure. The chain now follows the protocol and the position is opened *there*, on all
+  **8** affected rows.
+* **the weekly action's menu agrees with the row's own action.** The menu was the same four
+  options for every row — "a deposit, a swap, a borrow or a vote" — but on the **25** rows whose
+  action says "borrow nothing against it" or "draw no debt against it", that offered the reader a
+  borrow in the very step that told them to keep the position unlevered. Two steps of one plan
+  gave opposite instructions. The menu is now derived from the row's own action: the borrow is
+  on the menu only when the action does not rule it out.
+* **the hold step describes the position's SHAPE, which is not the same fact as its yield.** One
+  flag decided both, and the wording picked the wrong one for **24** rows: the RWA rows *buy* a
+  yield-bearing note and hold it, which is not a deposit, but the step still told the reader to
+  keep "the balance deposited rather than idle" — because the flag that chose the wording was the
+  **yield** flag. The same held for the staking, restaking and BTC-vault rows. The shape now
+  comes from the row's own action, separately from whether the position pays: 129 rows open a
+  deposit and say "deposited", and the other 66 say "kept open rather than closed out".
+* **the gate covers the WHOLE action table, not only the 195 rows the board publishes.** The
+  unsupported-claim gate walks the shipped board, so a category the board does not rank today was
+  not covered by it — and the `Options` line still said "hold it to the expiry", a cadence the
+  record cannot carry, on a category with **no rows on the board at all**. A defect can sit in an
+  unreached category for months. The gate now reads every line of the table out of the library's
+  own source, so nothing hides there; it says "and hold it", like every other line.
+* **the exit step asks the reader to log what the reader actually did.** It asked every row to
+  log "the deposit dates" — but on **66** rows the action never deposited anything: the position
+  was bought, posted as margin, bridged, staked or wrapped. The record of what was done is now
+  named after what was done.
 * **the whole bill** is stated in one line, so the reader can check the position against the fees
   instead of adding five costs up in their head. The plan spends gas at five points, and step 8
   says what that comes to and what share of the stake it is. Across the 195 rows the share runs

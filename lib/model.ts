@@ -1668,8 +1668,8 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   'Lending': "Supply {cap} of USDC to {name} on {chain}, borrow nothing against it, and keep the position open.",
   'RWA': "Buy {cap} of {poss} yield-bearing note on {chain} and hold it.",
   'Chain': "Bridge {cap} of USDC onto {chain} and spend it in {name}'s own products, keeping the bridged balance open.",
-  'Basis Trading': "Deposit {cap} of USDC as margin on {name} and open one small funding-rate position on {chain}.",
-  'Derivatives': "Post {cap} of USDC as margin on {name} and open one small long position on {chain}.",
+  'Basis Trading': "Deposit {cap} of USDC as margin on {name} on {chain}, and open one small funding-rate position there.",
+  'Derivatives': "Post {cap} of USDC as margin on {name} on {chain}, and open one small long position there.",
   'Interest Rate Derivatives': "Post {cap} of USDC as margin on {name} on {chain} and open one small fixed-rate position.",
   'Restaking': "Buy {cap} of the chain's native asset and restake it through {name} on {chain}, keeping the liquid restaking receipt.",
   'Staking Pool': "Buy {cap} of the chain's native asset and delegate it to a {poss} pool on {chain}, keeping the pool receipt.",
@@ -1689,7 +1689,7 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   'Crypto Card Issuer': "Open a {name} card on {chain}, fund it with {cap} of USDC, and keep the balance in the card account.",
   // Categories the snapshot holds that the board does not rank today, kept here so a board that
   // reaches them still reads like a plan and not like a slogan.
-  Options: "Write {cap} of USDC into one {name} option on {chain} and hold it to the expiry.",
+  Options: "Write {cap} of USDC into one {name} option on {chain} and hold it.",
   'Options Vault': "Deposit {cap} of USDC into {poss} vault on {chain} and hold the vault shares.",
   Synthetics: "Mint {cap} of the synthetic asset on {name} on {chain} and hold it against the underlying.",
   'Algo-Stables': "Mint {cap} of the algorithmic dollar on {name} on {chain} and hold it through the peg.",
@@ -1813,6 +1813,18 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
   // The row's own launch odds, as the board prints them. The closing note quotes the row's
   // number so the note cannot say anything the board's own column does not say.
   const oddsPct = launchP === null ? 'not modelled' : (launchP * 100).toFixed(1) + '%';
+  // The weekly action's menu, derived from the row's OWN action and not from a name list: a
+  // borrow is only on the menu when the row's action does not rule borrowing out. The lending
+  // and CDP lines say "borrow nothing against it" and "draw no debt against it", so on those
+  // rows the menu is a deposit, a swap or a vote.
+  const weeklyActions = /borrow nothing|draw no debt/i.test(action)
+    ? 'a deposit, a swap or a vote'
+    : 'a deposit, a swap, a borrow or a vote';
+  // Whether the position is a DEPOSIT -- the capital is put into the protocol and stays there --
+  // as opposed to a position that was bought, swapped or bridged into and is simply held. This is
+  // read off the row's OWN action, not off the category: an RWA row BUYS a note, so its balance
+  // is held, not deposited, even though that note pays the protocol's own yield.
+  const deposited = /^(Deposit|Lend|Supply|Provide|Route)/.test(action);
   return [
     {
       text: `Open a fresh wallet for ${p.name} alone, fund it with the gas asset for ${chain}, and keep the seed phrase offline.`,
@@ -1830,7 +1842,14 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
       // often a protocol measures activity. It says so, and prices the gas at the cadence that
       // cannot be too slow: a week. More acts never lose a count, so if the protocol's own
       // schedule is slower the bill comes down, but it can never come up.
-      text: `Make one qualifying action every week: a deposit, a swap, a borrow or a vote, so the wallet keeps showing activity for as long as the position is open. The snapshot carries no points schedule for ${p.name}, so a week is the cadence that cannot be too slow, and the gas is priced at that cadence.`,
+      //
+      // The menu of weekly actions used to be the same four for every row: "a deposit, a swap, a
+      // borrow or a vote". On the 25 rows whose step 2 says "borrow nothing against it" or "draw
+      // no debt against it" -- the lending markets and the CDPs -- that offered the reader a
+      // borrow, in the very step that told them to keep the position unlevered. Two steps of one
+      // plan gave opposite instructions. The menu now drops the borrow on exactly those rows,
+      // because the plan's own action already rules it out.
+      text: `Make one qualifying action every week: ${weeklyActions}, so the wallet keeps showing activity for as long as the position is open. The snapshot carries no points schedule for ${p.name}, so a week is the cadence that cannot be too slow, and the gas is priced at that cadence.`,
       // The weekly action costs what any transaction on that chain costs, and the plan holds the
       // position for the whole window step 4 sets -- so the gas is priced for THOSE weeks, not for
       // four of them. A plan that budgeted four weeks of gas and then held for thirteen was
@@ -1839,12 +1858,22 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
       time: '10 minutes a week',
     },
     {
-      // What "hold" means follows the position: a deposit stays deposited, and a position that
-      // was bought or swapped into is simply held. And what the position earns follows the same
-      // line: a deposit into the protocol's own product earns that product's yield, and a swap
-      // into an asset or an outcome share earns nothing but the asset itself. The window is set
-      // by the protocol's own age, so the plan says how long it waits without claiming a streak it
-      // cannot see: the snapshot records no points programme and no activity series.
+      // Two DIFFERENT facts used to live in one flag, and the step's wording picked the wrong
+      // one for 24 rows. "DEPOSITED" is about the shape of the position -- a deposit stays put,
+      // and a position that was bought or swapped into is simply held. "EARNS" is about whether
+      // that position pays the protocol's own yield. The two are not the same question: an RWA
+      // row's action is "buy a yield-bearing note and hold it", which is NOT a deposit, but the
+      // step still told the reader to keep "the balance deposited rather than idle", because the
+      // flag that decided the wording was the YIELD one. The same held for the staking and
+      // restaking rows, where the balance is bought, delegated and restaked.
+      //
+      // So the two are now read off the row's OWN action, separately: DEPOSITED from what the
+      // action does with the capital, EARNS from whether the category's product pays. The step
+      // says the shape it means and pays the yield it means, and never borrows one for the other.
+      //
+      // The window is set by the protocol's own age, so the plan says how long it waits without
+      // claiming a streak it cannot see: the snapshot records no points programme and no
+      // activity series.
       //
       // The step used to end "...so the position is open across more than one of the protocol's own
       // checkpoints." That asserts the protocol HAS checkpoints, and the snapshot records none: its
@@ -1852,14 +1881,21 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
       // promise what the record cannot support -- was broken in the one place a reader would act on
       // it. It now says what IS true of the window the model chose: the position stays open long
       // enough to cover more than one weekly action, which is the only cadence the plan knows.
-      text: earns
-        ? `Hold the position for at least ${hold} days, keeping the balance deposited rather than idle, so it is open for more than one of the weekly actions you make.`
-        : `Hold the position for at least ${hold} days, keeping it open rather than closed out, so it is open for more than one of the weekly actions you make.`,
+      //
+      // It also used to say "for at least N days". The word "at least" made the window a floor the
+      // reader could not leave early, which contradicted the plan's own exit: a claim can open on
+      // day five of a ninety-day window, and the reader is told to unwind that day. Two steps of
+      // one plan told the reader to hold past the day the plan told them to leave. The window is
+      // now stated as the length of the hold, and the exit rule -- in the last step -- names the
+      // one thing that ends it early: a claim that opens.
+      text: `Hold the position for ${hold} days, ${deposited ? 'keeping the balance deposited rather than idle' : 'keeping it open rather than closed out'}, so it is open for more than one of the weekly actions you make.`,
       // What the position earns depends on what the step-2 action did: a deposit into a vault or
       // a market earns the protocol's own yield, but a swap, a purchase or a bridged position does
       // not, and promising a yield there would be promising something the protocol never pays.
+      // The cost line names the SHAPE the position has, not the shape the yield has: a bought
+      // note that pays yield is still held, not deposited.
       cost: earns
-        ? `the $${capital} stays deposited, and the yield it earns is yours`
+        ? `the $${capital} stays ${deposited ? 'deposited' : 'where the protocol keeps it'}, and the yield it earns is yours`
         : `the $${capital} stays where the protocol keeps it, and what it earns, if anything, is yours`,
       time: `${hold} days`,
     },
@@ -1867,7 +1903,14 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
       // The plan does not claim the protocol HAS a points programme -- the snapshot records no
       // points schedule for any protocol -- it only tells the reader where a token would be
       // announced if one opens, and to check weekly so the claim week is not missed.
-      text: `Watch ${possessive(p.name)} own announcements for a token or a season, and check it weekly so you act the week it opens.`,
+      //
+      // It used to watch "for a token or a season". A season is a named cycle of the kind the
+      // snapshot records nowhere: no epoch, no cycle, no season, no schedule. The plan had already
+      // been corrected for exactly this -- the hold step's "the protocol's own checkpoints" -- and
+      // the same word survived two steps later. What the reader can be told is that a token
+      // announcement is what to watch for, because a claim is the only thing the rest of the plan
+      // acts on.
+      text: `Watch ${possessive(p.name)} own announcements for a token claim, and check it weekly so you act the week it opens.`,
       cost: `no fee to read, no fee to claim, and about $${gas} of gas if you act on the claim`,
       time: '15 minutes a week',
     },
@@ -1877,7 +1920,24 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
       time: '20 minutes',
     },
     {
-      text: `Log the wallet, the deposit dates and the transaction hashes, then unwind the position on the same day you claim, and never move funds out before the claim window closes.`,
+      // How the position ends. The step used to end "...never move funds out before the claim
+      // window closes". That named a window the record does not carry -- the snapshot holds no
+      // claim schedule and no claim window for any protocol -- and it was worse than
+      // unsupported: it made the exit CONDITIONAL on a claim. Most protocols in the board never
+      // issue a token, so for them no claim opens, no claim window closes, and the rule as
+      // written never released the position at all. A reader following the plan literally would
+      // have left money in a position they had been told to unwind, and the plan's own hold window
+      // said nothing about how it ends.
+      //
+      // The exit now names the two ways a position actually ends, both of which the plan itself
+      // set up: the hold window runs out, or a claim opens first and the position is unwound the
+      // day it does. Nothing is asserted about a claim window, because the record has none.
+      //
+      // It also used to ask the reader to log "the deposit dates", on every row -- but on 66 of
+      // them the action never deposited anything: the position was bought, posted as margin,
+      // bridged or wrapped. The record of what the reader did is named after what the reader
+      // actually did, and the shape flag decides it.
+      text: `Log the wallet, the ${deposited ? 'deposit dates' : 'entry dates'} and the transaction hashes, then unwind the position at the end of the ${hold}-day window — or on the day a claim opens, if one opens before then.`,
       cost: `about $${gas} of gas to unwind`,
       time: '30 minutes',
     },

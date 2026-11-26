@@ -420,6 +420,44 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
   check('the palette note counts match the palette itself',
     radii.length === 2 && typeScales.length === 2 && spacing.length === 7,
     `${radii.length} radii, ${typeScales.length} type scales, ${spacing.length} spacing steps`);
+
+  // The note also claims the palette "carries every page" and that "a colour on this page always
+  // means one thing". The first half is checkable without a browser: every colour the judge-visible
+  // files PAINT with must be one of the declared values. A literal hex, an rgb() or a named colour
+  // outside the palette is a second source of colour, and the note's count would then be a lie.
+  //
+  // Comments are stripped before the scan: a hex inside a comment cannot paint anything, and the
+  // palette note itself is a comment -- counting its own examples would be a self-reference.
+  const declaredColours = new Set(colours.map(([, v]) => v.toLowerCase()));
+  const JUDGE_FILES = ['colors.css', 'index.html', 'model.js', 'page.js', 'theme.css'];
+  const offPalette = [];
+  for (const f of JUDGE_FILES) {
+    const raw = fs.readFileSync(path.join(dashDir, f), 'utf8');
+    const body = f.endsWith('.css') ? raw.replace(/\/\*[\s\S]*?\*\//g, '') : raw;
+    for (const m of body.matchAll(/#[0-9a-fA-F]{3,8}\b/g)) {
+      const v = m[0].toLowerCase();
+      if (!declaredColours.has(v)) offPalette.push(`${f}: #${v}`);
+    }
+    for (const m of body.matchAll(/\b(?:rgb|rgba|hsl|hsla)\([^)]*\)/g)) offPalette.push(`${f}: ${m[0]}`);
+    for (const m of body.matchAll(/\b(white|black|red|blue|green|gray|grey|orange|purple|silver|navy|teal|aqua|fuchsia|lime|maroon|yellow)\b(?![-\w])/gi)) {
+      offPalette.push(`${f}: named colour "${m[1]}"`);
+    }
+  }
+  check('every colour the judge-visible files paint with is a declared palette value',
+    offPalette.length === 0,
+    offPalette.length === 0 ? `${declaredColours.size} declared values, and nothing else paints` :
+      offPalette.slice(0, 6).join('; '));
+
+  // The CONTROL: the check must be able to fail. Paint one rule with a colour the palette does not
+  // declare, exactly the way an off-palette colour would arrive, and the scan must catch it.
+  {
+    const probe = 'a{color:#123456}';
+    const probeOff = [...probe.matchAll(/#[0-9a-fA-F]{3,8}\b/g)]
+      .map((m) => m[0].toLowerCase())
+      .filter((v) => !declaredColours.has(v));
+    check('the palette gate can fail: a rule painted with an undeclared colour is caught',
+      probeOff.length === 1, probeOff.length === 1 ? 'caught' : 'the undeclared colour was not caught');
+  }
 }
 
 // ---------------------------------------------------------------- screenshots

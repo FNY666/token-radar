@@ -661,8 +661,8 @@ record and never from a hand-written list of names:
 * **the hold** follows from the age, and it **rises** with it — the same five age bands the launch
   curve is fitted on, so the plan and the odds column cannot disagree about what an age means:
   **30 days** for the youngest band (0–182 days, 49 rows), **45** (182–365, 30 rows), **60**
-  (365–730, 81 rows), **75** (730–1460, 30 rows) and **90** for the oldest (1460+, 5 rows). A
-  protocol with no first-tracked date — seven of the 195 rows, all of them untracked in the
+  (365–730, 74 dated rows), **75** (730–1460, 30 rows) and **90** for the oldest (1460+, 5 rows).
+  A protocol with no first-tracked date — seven of the 195 rows, all of them untracked in the
   snapshot — gets 60 days, the middle of the ladder rather than either end.
 
   The ladder used to run the other way: 90 days under 180 days old, down to 30 beyond two years,
@@ -703,10 +703,17 @@ record and never from a hand-written list of names:
   also no longer tells the reader to watch "its points page" or to keep "the streak" going. The
   rule the whole entry follows is that it never promises what the record cannot support, and the
   farm plan is where a reader would act on that promise.
+* **the hold step claims no checkpoint.** It used to end "…so the position is open across more than
+  one of the protocol's own checkpoints", which asserts that the protocol *has* checkpoints — and
+  the snapshot's ten fields carry no epoch, no cycle, no season and no schedule of any kind. It
+  now says what is true of the window the model chose: the position stays open for more than one
+  of the weekly actions the plan already tells the reader to make, which is the only cadence the
+  plan knows. `verify.mjs` gates it: no plan may assert a checkpoint or a cycle, and the gate's
+  control plants the old sentence and requires the gate to fire.
 * **the whole bill** is stated in one line, so the reader can check the position against the fees
   instead of adding five costs up in their head. The plan spends gas at five points, and step 8
   says what that comes to and what share of the stake it is. Across the 195 rows the share runs
-  from 0.2% to 19.4%, and no row spends more than a quarter of its stake on gas.
+  from 0.2% to 17.1%, and no row spends more than a quarter of its stake on gas.
 * **what the position earns** follows from the action, not from the category's name. A deposit
   into a vault, a lending market, a pool or a strategy earns the protocol's own yield, and the
   plan says so. A swap, a purchase, a bridge, a collateral lock, a margin position, a wrapper or
@@ -719,8 +726,12 @@ record and never from a hand-written list of names:
   188 dated rows, tracked for under 182 days — is described as early, with the launch curve's own
   finding quoted back: protocols this young issue *least* often. The other 139 dated rows quote
   their **own** odds figure and then the curve's direction: the older a protocol is, the likelier
-  it is to issue. A protocol with no first-tracked date — 7 rows — is told that the house cannot
-  tell how long it has run, and is not told anything it cannot support.
+  it is to issue. Every dated row quotes **both** its odds and the window the plan holds it for,
+  because the window now follows the curve: a row the curve reads as likelier to issue is held
+  longer, to catch a claim if one opens. A reader can see the plan's reasoning in one place
+  instead of inferring it from two steps nine apart, and `verify.mjs` requires the note and the
+  hold step to quote the same window. A protocol with no first-tracked date — 7 rows — is told
+  that the house cannot tell how long it has run, and is not told anything it cannot support.
 
   The note used to call every long-tracked, token-less protocol "a slow one". That was the
   entry's own model turned upside down: the launch curve's fitted age logits are monotone in the

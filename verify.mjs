@@ -3028,7 +3028,7 @@ for (const name of shots) {
 }
 
 // ---------------------------------------------------------------- the farm plans agree with their rows
-// Every board row carries eight farm steps, and each step's figures come from that row's own
+// Every board row carries nine farm steps, and each step's figures come from that row's own
 // record: the capital from its TVL, the gas from the chain the plan names, the hold window from
 // its age, the streak from the hold window, and the tracked-since date from its own listing.
 // This check re-derives all of them from the snapshot and the built rows.
@@ -3184,6 +3184,26 @@ for (const name of shots) {
     gasOverQuarter === 0 ? `the worst is ${(worstGasShare * 100).toFixed(0)}%` : `${gasOverQuarter} over a quarter`);
   check('every farm plan states its own gas bill and what share of the stake it is', billBad === 0,
     billBad === 0 ? 'all agree' : `${billBad} differ`);
+
+  // MODEL.md prints the RANGE the gas share runs across, and a number in a document is a claim.
+  // The range moved when the hold ladder moved (the longer windows price more gas), so the
+  // document's number is re-derived here and compared.
+  {
+    let lo = Infinity, hi = -Infinity;
+    for (const r of rows) {
+      const m = /which is about ([\d.]+)% of the \$(\d+) stake/.exec(r.farm_steps[7] ?? '');
+      if (!m) continue;
+      const s = Number(m[1]);
+      if (s < lo) lo = s;
+      if (s > hi) hi = s;
+    }
+    const modelMd = fs.readFileSync(path.join(process.cwd(), 'MODEL.md'), 'utf8');
+    const claim = modelMd.match(/the share runs\s*\n?\s*from ([\d.]+)% to ([\d.]+)%/);
+    const same = claim && Math.abs(Number(claim[1]) - lo) < 0.05 && Math.abs(Number(claim[2]) - hi) < 0.05;
+    check('the gas-share range MODEL.md prints is the range the board produces', same,
+      claim ? `the board runs ${lo}% to ${hi}%; MODEL.md says ${claim[1]}% to ${claim[2]}%`
+        : `the board runs ${lo}% to ${hi}%, and MODEL.md states no range at all`);
+  }
 
   // The plan must not contradict the entry's own model.
   //

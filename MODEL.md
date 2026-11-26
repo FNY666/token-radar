@@ -377,6 +377,16 @@ at offset 240, which sliced step 2's cost line across the bottom edge — the ju
 cost line reads as a wrong figure rather than as a frame. Measured on the rendered pixels, that
 shot's last row carried **139 lit pixels**: text, cut in half.
 
+The cover has the same kind of edge: it is the page at 1280×800, and the page scrolls, so the
+fold at y=800 is a hard edge too. It used to fall 5px into the first table row's glyphs — the
+judge saw the **tops of a row's letters** and nothing else of it, 143 lit pixels in the last
+row. Scrolling the page to clear it was measured and rejected: the headline needs at most 16px
+of scroll to stay whole and the fold needs at least 24px, so scrolling always costs the
+headline. The gap between the plot and the table is one spacing step wider instead
+(`--c` 12px + `--d` 16px → `--e` 24px), which moves the whole table down 4px and lands the
+fold in the padding **above** row 1's text: the column headers are the last thing in frame, and
+nothing is cut. Measured on the rendered pixels: **0 lit pixels** in the cover's last row.
+
 Two consequences worth stating, because both are easy to get wrong:
 
 * the kit's advice is 300–350 KB a screenshot, and its reason is the dossier ("three at the

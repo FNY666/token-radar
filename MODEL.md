@@ -648,6 +648,49 @@ removed entirely, the board still renders all **195** rows, the page raises **no
 the refit card is simply absent — because `page.js` reads `window.RadarModel` behind a guard and
 falls back. With the shipped tree, the card is present and reads 195 / 195.
 
+#### The judge's ACTUAL frames, rendered by the kit's own code (2026-11-26)
+
+Until now the composed view had been described from the kit's *arithmetic* — the cell sizes, the
+text scale, the legibility floor — but nobody had looked at the picture the judge sees. It is
+now rendered: the kit's `dossierJudgeViewAt` is run against the real `out/dossier.json` at the
+entry's 12,288 tokens, using the kit's own `fit2` (sharp, `lanczos3`, `withoutEnlargement`), its
+own `sheetCell` / `restCell` / `composed`, and its own JPEG options (q82, 4:2:0, progressive
+off, `optimiseCoding` on). The kit's figures come back:
+
+```
+text_bytes_in 65513   text_bytes_out 29158   decl_lines 310   bodies 4
+images_in 3           images_out 2           image_tokens 2240
+est_tokens 12278      entry_tokens 12288
+```
+
+so the entry is **10 tokens under** its budget, and the judge receives **two** images: the cover
+at **1024×640** and the sheet at **1021×640** (two cells of 507 and 510 with a 4px gap).
+
+The frames were then read against the data, and **every figure in them is correct**:
+
+| in the frame | the board says | |
+| --- | --- | --- |
+| cover, row 1: Polymarket International, 70.5577%, $35.31M, $24.9M | the same | ✓ |
+| cover, row 2: Steakhouse Financial, 35.9132%, $69.08M, $24.8M | the same | ✓ |
+| sheet, row 1: Sentora Curator, $69.120M, $21.3M | the same | ✓ |
+| sheet, row 3: Gauntlet, 27.3568%, $56.667M, $15.5M | the same | ✓ |
+| the drawer's "Fund $5250 of USDC" and "$51 of gas over the 13 weeks" | the same | ✓ |
+
+Two readings looked wrong at thumbnail scale and were **not** wrong: a launch odds that read
+"36.7808%" where the data says 30.7808%, and a capital that read "$250" where the board says
+"$5250". Both were settled **numerically** rather than by eye, which is the only way to settle
+them: the glyph-column pattern of the suspect region in the judge's frame is
+`29-34 36-40 42-44 46-50 52-56 59-63 65-73`, and the same region in the source, resized by the
+kit's own pipeline to the same scale, gives **the same pattern exactly**. The frames carry the
+source's pixels faithfully; the misreads were mine, at a thumbnail's resolution, on 6-pixel-tall
+glyphs.
+
+That is the legibility floor measured from the other end. The earlier work established that at
+6.0px the filtered shot's figures came out wrong inside the judge's frame; the render now shows
+the *upside*: at 8.53px on the cover and 7.6px on the sheet, the digits are right — a reader can
+check the cover's row 1 against the detail shot's drawer, which is criterion 1 made checkable
+rather than asserted.
+
 #### The levers that were measured and closed
 
 * **A fourth screenshot.** The kit composes the cover alone on one sheet and the rest on a

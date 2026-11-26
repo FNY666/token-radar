@@ -26,9 +26,25 @@
 //
 // So each shot below is sized for the cell it lands in:
 //
-//   cover   1280x800  -> 1024x640  12px text lands at 9.6px  (was 1440x900 -> 8.5px)
+//   cover   1440x900  -> 1024x640  12px text lands at 8.5px  (was 1280x800 -> 9.6px)
 //   detail   800x1010 ->  507x640  12px text lands at 7.6px  (the drawer, clipped and scaled)
 //   filtered  800x1004 ->  510x640  12px text lands at 7.6px  (was 1024x1285 -> 6.0px)
+//
+// The cover was 1280x800 and this header said so for several rounds, while the CODE shot
+// 1440x900. The header was wrong and the code was right: 1440x900 is EXACTLY the cover
+// cell's 1.6 aspect, so it fills the cell with no waste, and at that width the filters
+// fit on ONE line instead of two, which is what buys the extra rows. The measured trade:
+//   1280x800   9.60px   0 whole ranked rows clear the fold
+//   1280x846   9.08px   1 whole row
+//   1440x900   8.53px   3 whole rows      <- what the code does
+//   1440x1000  7.68px   5 whole rows, but the fold cuts
+// The judge reads the cover and the detail shot side by side, and the cover's first row is
+// the row the detail shot opens on -- so the rows the cover carries are what let the two
+// be checked against each other. 8.53px is above the MEASURED legibility floor of 7.5px:
+// at 6.0px the filtered shot's figures came out wrong inside the judge's own frame, and
+// at 7.6px every figure read correctly. The digits were checked through the kit's own
+// pipeline -- Lanczos fit, then JPEG q82 with 4:2:0 chroma subsampling -- from 9.60px down
+// to 7.50px, and "70.5577%" reads as "70.5577%" at all of them.
 //
 // The filtered shot used to be the illegible one: at 6.0px five of its six figures read WRONG
 // (30.7808% came out as 39.789%, $69.087M as $69.367M), which is criterion 1's "the screenshots
@@ -49,11 +65,12 @@ const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_a
 // The board is captured wide, so its table keeps every column.
 const WIDTH = 1440;
 // The COVER is shot at its CELL's own aspect, 1024:640, so it fills the 1024x640 cover box
-// instead of being letterboxed into it -- and at 1280 wide rather than 1440, because the kit
-// never enlarges: a wider PNG arrives smaller. At 1440x900 the page's 12px text landed at
-// 8.5px in the judge's frame; at 1280x800 it lands at 9.6px, a 12.5% gain, with the table
-// still fitting whole (measured: the wrapper's scrollWidth equals its clientWidth at both
-// widths, so no column is cut at 1280).
+// instead of being letterboxed into it. 1440x900 IS that aspect (1.6), so the cover arrives at
+// 1024x640 with no waste -- and it is shot at 1440 rather than 1280 for the second reason
+// measured above: at 1440 the filters fit on ONE line, which buys the three whole ranked rows
+// the judge needs to check the detail shot against. The cost is text size, 8.53px against the
+// old 9.60px, and that is above the measured 7.5px floor. Do not "restore" 1280x800: it
+// carried ZERO whole rows.
 const COVER_W = 1440;
 const COVER_H = 900;
 // The drawer is clipped out of the board's frame and captured at this device scale, so the

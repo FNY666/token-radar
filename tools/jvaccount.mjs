@@ -139,8 +139,26 @@ export function instrument(text, budget = 30144, images = 3) {
   return { form: 'outline', log, view: out.join('\n'), decls: shownDecls, bodies };
 }
 
-if (process.argv[2]) {
-  const text = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).text;
-  const r = instrument(text);
-  for (const row of r.log) console.log(row[0], '=', row.slice(1).join(' | '));
+// The CLI: print the instrumented view of a dossier.
+//
+// This block runs ONLY when this file is the program being run. It used to run whenever the
+// module was imported, and that was a trap: verify.mjs imports this module to call
+// agreesWithKit(), and verify.mjs's OWN first argument is the OUTPUT DIRECTORY -- so
+// `node verify.mjs <out-dir>` put a directory into process.argv[2], this block read it as a
+// dossier file, and the suite died with:
+//
+//     Error: EISDIR: illegal operation on a directory, read
+//
+// which killed the import and with it every gate. The finalize chain runs exactly that form
+// (`node verify.mjs "$TMP/out"`), so the chain could not get past its own step 2 -- it was
+// the gate suite failing to START, not a gate failing.
+//
+// The fix is the entry-point test: an imported module does not run its CLI.
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(new URL(import.meta.url).pathname)) {
+  const arg = process.argv[2];
+  if (arg) {
+    const text = JSON.parse(fs.readFileSync(arg, 'utf8')).text;
+    const r = instrument(text);
+    for (const row of r.log) console.log(row[0], '=', row.slice(1).join(' | '));
+  }
 }

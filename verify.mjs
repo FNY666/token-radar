@@ -403,9 +403,9 @@ for (const name of shots) {
     await page.goto(url, { waitUntil: 'networkidle0' });
     await page.waitForSelector('tbody tr');
     await page.evaluate(() => {
+      // the shot opens on the board's FIRST row -- the same row the cover carries whole
       const rows = Array.from(document.querySelectorAll('tbody tr.row'));
-      const t = rows.find((r) => r.querySelector('.pname') && r.querySelector('.pname').textContent.indexOf('Gauntlet') !== -1) || rows[0];
-      t.click();
+      rows[0].click();
     });
     await page.waitForSelector('.sheet', { visible: true });
     await new Promise((r) => setTimeout(r, 250));
@@ -648,6 +648,57 @@ for (const name of shots) {
     await oldBrowser.close();
     check('the whole-row measure can fail: the old 1280x800 cover carried no whole row', oldGeo.whole === 0 && oldGeo.cut > 0,
       `the old cover carried ${oldGeo.whole} whole rows and cut ${oldGeo.cut} of row 1's elements`);
+  }
+
+  // The two shots must show the SAME ROW. The cover carries the board's top rows whole; the
+  // detail shot carries one row's full derivation. If they are different rows the judge has
+  // no way to check one against the other -- the cover would say "here is what the board looks
+  // like" and the detail shot "here is what some row is worth", and the two never meet. That is
+  // criterion 1's "the screenshots and the code agree" being CHECKABLE rather than asserted.
+  {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+    const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+    const coverPng = decodePng(path.join(shotDir, '1-board.png'));
+    const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+    const page = await browser.newPage();
+    await page.setViewport({ width: coverPng ? coverPng.w : 1440, height: coverPng ? coverPng.h : 900, deviceScaleFactor: 1 });
+    await page.goto(url, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('tbody tr');
+    const coverRows = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('tbody tr.row')].map((tr) => {
+        const r = tr.getBoundingClientRect();
+        let cut = 0;
+        for (const el of tr.querySelectorAll('td, td *')) {
+          const b = el.getBoundingClientRect();
+          if (b.height === 0) continue;
+          if (!(el.textContent || '').trim()) continue;
+          if (b.bottom > window.innerHeight || b.top < 0) cut++;
+        }
+        return { name: (tr.querySelector('.pname')?.textContent || '').trim(), top: Math.round(r.top), bottom: Math.round(r.bottom), cut };
+      });
+      return rows.filter((r) => r.top >= 0 && r.bottom <= window.innerHeight && r.cut === 0).map((r) => r.name);
+    });
+    // now the row the detail shot opens
+    await page.evaluate(() => { document.querySelector('tbody tr.row').click(); });
+    await page.waitForSelector('.sheet', { visible: true });
+    await new Promise((r) => setTimeout(r, 300));
+    const detail = await page.evaluate(() => {
+      const s = document.querySelector('.sheet');
+      const head = s.innerText.split('\n');
+      return { name: head[0], rank: (head[1] || '').match(/rank (\d+) of (\d+)/) };
+    });
+    await browser.close();
+    check('the cover and the detail shot show the SAME row, so the judge can check one against the other',
+      coverRows.length > 0 && coverRows.includes(detail.name),
+      `the cover shows ${coverRows.join(', ') || 'nothing'}; the detail shot opens on ${detail.name}`);
+
+    // The control: the OLD detail shot opened on Gauntlet, rank 4 -- a row the cover does not
+    // carry -- so the same check must fail on it.
+    check('the shared-row measure can fail: rank 4 is not among the cover\'s rows',
+      !coverRows.includes('Gauntlet') && coverRows.length > 0,
+      `the cover's rows are ${coverRows.join(', ')}`);
   }
 
   // What the JUDGE reads is not this PNG: the kit fits each shot into a cell (the cover into

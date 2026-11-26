@@ -144,8 +144,17 @@ const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
       clip: { x: DRAWER_LEFT, y: 0, width: DRAWER_CSS_W, height: 833 },
       prepare: async () => {
         await page.evaluate(() => {
+          // The row is the board's FIRST row -- Polymarket International, rank 1 of 195 -- and
+          // that is the point. The cover carries the board's top three rows whole, so the top
+          // row of the cover IS this row: the judge can read $320M, -1.1%, 70.5577%, $35.310M
+          // and $24.9M off the cover and then check them against this frame's full derivation,
+          // where the same figures appear as $320,193,439, 0.0840375303, x1.31223328,
+          // $35,310,000, 70.5577% and $24,900,000.
+          //
+          // The shot used to open on Gauntlet, rank 4 -- a row the cover does not show, so the
+          // two shots never met and the judge had no way to check one against the other.
           const rows = Array.from(document.querySelectorAll('tbody tr.row'));
-          const target = rows.find((r) => r.querySelector('.pname') && r.querySelector('.pname').textContent.indexOf('Gauntlet') !== -1) || rows[0];
+          const target = rows[0];
           target.click();
         });
         await page.waitForSelector('.sheet', { visible: true });

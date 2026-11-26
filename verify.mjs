@@ -4138,6 +4138,60 @@ for (const name of shots) {
   }
   check('the page refits every row of the board to the dollar', rowBad === 0,
     rowBad === 0 ? `${data.rows.length} rows agree` : `${rowBad} of ${data.rows.length} differ`);
+
+  // The IMPLIED VALUE is what the board RANKS, and it is what the page's own self-check counts.
+  // The gate above only checked the CONDITIONAL value, so it never touched the number the judge
+  // reads as "195 / 195 rows reproduce exactly" -- a page whose odds or whose rounding path had
+  // drifted would still have passed it.
+  //
+  // So the same arithmetic the page runs (page.js's FIT loop) is run here, on the page's OWN
+  // inputs: the RAW change_7d the page feeds the model (not the pre-clamped growth_pct, which
+  // would be measuring a different code path), and the page's own sigRound at its own
+  // precisions. A row agrees only if the product lands on the board's integer EXACTLY.
+  const sigRound = (n, sig) => {
+    if (!isFinite(n) || n === 0) return n;
+    const a = Math.abs(n);
+    const scale = a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : a >= 1e3 ? 1e3 : 1;
+    const mant = n / scale;
+    const factor = Math.pow(10, sig - 1 - Math.floor(Math.log10(Math.abs(mant))));
+    return Math.round(mant * factor) / factor * scale;
+  };
+  let impliedBad = 0;
+  let oddsBad = 0;
+  const impliedEx = [];
+  for (const r of data.rows) {
+    const cond = fit.conditional(r.tvl_usd, r.change_7d, r.category);
+    const odds = fit.launchP(r.tvl_usd, r.change_7d, r.age_days);
+    if (odds !== r.launch_probability) oddsBad++;
+    const ev = Math.max(1, Math.round(sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3)));
+    if (ev !== r.implied_value_usd) {
+      impliedBad++;
+      if (impliedEx.length < 4) impliedEx.push({ name: r.name, computed: ev, shipped: r.implied_value_usd });
+    }
+  }
+  check('the page refits every row\'s LAUNCH ODDS to the board\'s own six decimals', oddsBad === 0,
+    oddsBad === 0 ? `${data.rows.length} rows agree` : `${oddsBad} of ${data.rows.length} differ`);
+  check('the page refits every row\'s IMPLIED VALUE to the dollar, on the page\'s own rounding path',
+    impliedBad === 0,
+    impliedBad === 0 ? `${data.rows.length} rows agree` : `${impliedBad} of ${data.rows.length} differ: ` + JSON.stringify(impliedEx));
+
+  // The CONTROL. The gate above claims the page's rounding path reproduces the board's
+  // integers. A gate that cannot fail proves nothing, so the same measurement is run over a
+  // board whose implied value has been moved by ONE DOLLAR: the page's product must then miss
+  // that row, and it must miss exactly that row and no other.
+  //
+  // The mutation is on the SHIPPED figure, not on the model: it is the stale-board case, which
+  // is what the self-check exists to catch. (The mutation is in a copy of the data, so the tree
+  // is never touched.)
+  {
+    const one = data.rows[0];
+    const mutated = { ...one, implied_value_usd: one.implied_value_usd + 1 };
+    const cond = fit.conditional(mutated.tvl_usd, mutated.change_7d, mutated.category);
+    const odds = fit.launchP(mutated.tvl_usd, mutated.change_7d, mutated.age_days);
+    const ev = Math.max(1, Math.round(sigRound(sigRound(cond, 5) * Math.round(odds * 1e6) / 1e6, 3)));
+    check('the implied-value gate can fail: a board one dollar stale is caught', ev !== mutated.implied_value_usd,
+      `the page's product is ${ev}; the stale board says ${mutated.implied_value_usd}`);
+  }
 }
 
 // ---------------------------------------------------------------- a phone's width, end to end

@@ -29,7 +29,34 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const KIT = path.resolve(here, '../../token-radar-01-kit/cli/makefun.mjs');
 const WORK = path.resolve(here, '..');
 const outDir = process.argv[2] || path.join(WORK, 'out');
-const shotsDir = process.argv[3] || '/tmp/judge-frames';
+const shotsDir = path.resolve(process.argv[3] || '/tmp/judge-frames');
+
+// The output directory must NOT be the entry's own screenshots/ directory.
+//
+// main.ts copies the whole screenshots/ directory into the built output, and buildDossier
+// takes the PNG and JPEG files in NAME ORDER with cover: 0. So anything written into the
+// source screenshots/ becomes a judge-visible image -- and a file whose name sorts before
+// the numbered shots becomes the COVER, which is the entry's face.
+//
+// This tool was once run as `node tools/judgeframes.mjs out screenshots`, and it wrote
+// judge-view-cover.jpg, judge-view-sheet.jpg and judge-view.txt there. That directory is
+// the entry's, and the judge would have been shown a verification artefact as the cover.
+// The tool is a TOOL: it writes pictures for a human to look at, and its output belongs
+// outside the entry.
+//
+// So the check is here, and it is a refusal rather than a warning: the tool does not run.
+{
+  const srcShots = path.resolve(WORK, 'screenshots');
+  if (shotsDir === srcShots || shotsDir.startsWith(srcShots + path.sep)) {
+    process.stderr.write(
+      `judgeframes: refusing to write into the entry's screenshots directory.\n` +
+      `  ${srcShots} is COPIED into the built output, and buildDossier takes its\n` +
+      `  images sorted by name -- so a PNG or JPEG written there becomes a\n` +
+      `  judge-visible image, and a file of any other kind makes buildDossier\n` +
+      `  refuse the whole dossier. Write somewhere else, e.g. /tmp/judge-frames.\n`);
+    process.exit(2);
+  }
+}
 
 // sharp, from wherever it is installed
 const sharpRoots = [

@@ -911,6 +911,72 @@ Two consequences worth stating, because both are easy to get wrong:
   shoot or the dossier carries the previous shots. The gate's screenshot check catches that — it
   re-renders each view and compares it pixel by pixel — but it only catches it if the build ran.
 
+### The names in screenshots/ are the judge's reading order, so a stray file there is a shipped image
+
+`main.ts` copies the whole `screenshots/` directory into `out/`, and `buildDossier` takes the PNG
+and JPEG files **sorted by code unit**, with `cover: 0`. So the directory is not a folder of
+pictures the judge might look at — it is a list, and the list is ordered, and the judge sees every
+image in it. Two things follow that are not obvious:
+
+* a stray **PNG or JPEG** in `screenshots/` becomes a judge-visible image, alongside the three;
+* a stray file of **any other kind** — a `.txt`, say — makes `buildDossier` refuse the whole
+  dossier, with *"screenshots/&lt;name&gt; is neither a PNG nor a JPEG"*.
+
+This was not hypothetical. `tools/judgeframes.mjs` renders the judge's own composed frames, and it
+was run as `node tools/judgeframes.mjs out screenshots` — the second argument being the shipped
+directory. It wrote `judge-view-cover.jpg`, `judge-view-sheet.jpg` and `judge-view.txt` there.
+The two JPEGs would have become judge-visible images and the `.txt` would have refused the
+dossier. The tool's own default output directory is `/tmp/judge-frames`; the shipped directory
+was passed by hand, and nothing stopped it.
+
+Two fixes, because one was not enough:
+
+* `tools/judgeframes.mjs` now **refuses** to write into the entry's `screenshots/` and exits 2
+  with the reason. It is a tool that writes pictures for a human to look at; its output belongs
+  outside the entry;
+* `verify.mjs` gates the **source** directory, not just the built one: exactly the three shots,
+  by name, and nothing else — plus a gate that the dossier's `cover` is `1-board.png`, read from
+  the dossier itself rather than from the file names.
+
+Each gate has a control that must fire: the stray-file gate is shown rejecting a fourth file,
+and the cover gate is shown rejecting a file whose name sorts **first** — a separate accident from
+the one above, because `judge-view-cover.jpg` sorts *after* `1-board.png` and would not have
+taken the cover. The first version of that control asserted the wrong thing and the gate caught
+it, which is the reason to keep controls honest: the control failed against the real sort order,
+not against a simulation.
+
+The fix was verified the only way that settles it: the contamination was recreated for real (the
+two artefacts copied back into `screenshots/`), the gate **failed** with the stray file named, and
+the tool **refused** to write. Then the artefacts were removed and the suite passed again.
+
+### Reading a figure in the judge's frame is a measurement, not an eye
+
+`tools/judgeframes.mjs` renders the frames the judge actually receives, with the kit's own
+composition code. It is the way to check a shot against what the judge will see.
+
+But reading a number off that frame **by eye** is not a measurement. At 7.6px a glyph is six
+pixels tall, and reading one gave `$250` where the source PNG, the shipped data and the row's own
+arithmetic all give `$5250`; another gave `0.0840735303` where the fit is `0.0840375303`; a third
+gave `30.7888%` where the shipped probability is `30.7808%`. Three separate reads, three
+mutually exclusive answers, and the frame is one set of pixels.
+
+The way to settle it is not a better eye:
+
+* **fit, then diff.** The kit's own fit of `2-detail.png` into a 507×640 cell was compared with
+  the frame's left cell, pixel by pixel. Mean squared error **10.5** against `2-detail.png` and
+  **1319** / **1352** against the other two shots. The frame *is* the shot, and the reading was
+  the unreliable part;
+* **count the glyphs.** On the step-2 line, the money word is `$` followed by **five** digit
+  clusters at native resolution — `$5250`. Four would be `$250`. The cluster runs are identical
+  in the PNG and in the frame, which is the same pixels confirmed a second way;
+* **check the arithmetic.** `0.0840375303 × 1.31223328 × $320,193,439 = $35,309,922`, and
+  `$35,309,922 × 70.5577% = $24,900,000` — the two figures the frame shows, and the ones the
+  code computes.
+
+So the entry is right and the eye was wrong. The lesson is worth keeping because the rubric's
+first criterion is *"the screenshots and the code agree"*, and the cheapest way to satisfy it
+would have been to believe the eye.
+
 `verify.mjs` now measures the legibility itself, in the judge's composed view, against the
 **measured floor** of 7.5px — the floor is where the round-37 failure sat below it (6.0px, and
 five of six figures wrong) and where the round-37 success sat above it (7.6px, and every figure

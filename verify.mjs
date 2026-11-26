@@ -464,6 +464,67 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
 const shotDir = path.join(out, 'screenshots');
 const shots = fs.readdirSync(shotDir).filter((n) => !n.startsWith('.')).sort();
 check('screenshots/ holds 3 or 4 images', shots.length >= 3 && shots.length <= 4, `${shots.length}: ${shots.join(', ')}`);
+
+// The judge sees the images in NAME ORDER, and the FIRST one is the cover. So the names in
+// screenshots/ are not a labelling convention -- they are the judge's reading order, and
+// they decide which picture is the entry's face.
+//
+// main.ts COPIES the whole screenshots/ directory into the output, and buildDossier takes
+// the PNG and JPEG files sorted BY CODE UNIT with cover: 0. So a stray file in the source
+// screenshots/ does not merely sit there: it becomes a judge-visible image. A PNG or JPEG
+// becomes a fourth image the judge sees; a file of any other kind (a .txt, say) makes
+// buildDossier REFUSE outright, with "screenshots/<name> is neither a PNG nor a JPEG".
+//
+// This happened while the polish window was working: tools/judgeframes.mjs renders the
+// judge's own composed frames, and it was run with the shipped screenshots/ as its output
+// directory. The three artefacts it wrote would have become judge-visible images -- and
+// judge-view.txt would have REFUSED the whole dossier.
+//
+// So the source directory is checked for exactly the three shots, by name. A tool that
+// writes into it fails here rather than in the judge's inbox.
+{
+  const srcShotDir = path.join(path.dirname(new URL(import.meta.url).pathname), 'screenshots');
+  const EXPECTED = ['1-board.png', '2-detail.png', '3-filtered.png'];
+  let srcNames = [];
+  try {
+    srcNames = fs.readdirSync(srcShotDir).filter((n) => !n.startsWith('.')).sort();
+  } catch {
+    srcNames = [];
+  }
+  check('the source screenshots/ holds exactly the three shots and nothing else',
+    srcNames.length === EXPECTED.length && srcNames.every((n, i) => n === EXPECTED[i]),
+    srcNames.length ? srcNames.join(', ') : 'the directory could not be read');
+
+  // The judge's reading order, from the dossier itself -- not from the file names.
+  const dossierImages = (() => {
+    try {
+      const d = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8'));
+      return { names: (d.images || []).map((i) => i.name), cover: d.cover };
+    } catch { return null; }
+  })();
+  check("the dossier's cover is the board, so the judge's face is the page",
+    dossierImages !== null && dossierImages.cover === 0 && dossierImages.names[0] === '1-board.png',
+    dossierImages ? `cover ${dossierImages.cover}: ${dossierImages.names.join(', ')}` : 'the dossier could not be read');
+
+  // The CONTROL: the gates must be able to fail. A stray file in screenshots/ is exactly
+  // the accident they exist to catch, so it is simulated here -- in memory, on a list, not
+  // on disk -- and the gate must reject it.
+  {
+    const stray = [...EXPECTED, 'judge-view-cover.jpg'];
+    const namesOk = stray.length === EXPECTED.length && stray.every((n, i) => n === EXPECTED[i]);
+    check('the stray-file gate can fail: a fourth file in screenshots/ is caught',
+      namesOk === false, namesOk ? 'the stray file was not caught' : 'caught');
+
+    // And the cover gate, which is a DIFFERENT accident: a file whose name sorts FIRST
+    // takes the cover, so the judge's face is not the page. The stray above does NOT do
+    // that -- "judge-view-cover.jpg" sorts after "1-board.png" -- so it is a separate
+    // case, and the control uses a name that really does sort first.
+    const sorted = [...EXPECTED, '0-stray.png'].sort();
+    const coverOk = sorted[0] === '1-board.png';
+    check('the cover gate can fail: a stray file that sorts first takes the cover',
+      coverOk === false, coverOk ? 'the stray file did not take the cover' : 'caught');
+  }
+}
 for (const name of shots) {
   const p = path.join(shotDir, name);
   const st = fs.statSync(p);

@@ -1527,6 +1527,101 @@ for (const name of shots) {
     refitBad === 0 && rkeys.size > 0, refitBad === 0 ? `${rkeys.size} categories agree` : `${refitBad} differ`);
 }
 
+// ---------------------------------------------------------------- no protocol is named in the model
+// The model tab tells the reader: "No protocol is named in the model, and the coefficients are
+// fitted at run time on this snapshot -- not typed in." That is the whole of criterion 2's
+// defence of the ranking, and NOTHING checked it: the claim was prose. A model that quietly
+// favoured three hand-picked names would score the same on every other gate in this file.
+//
+// So it is checked twice, and the second half is the one that matters.
+//
+//  1. Textually: no protocol's name may appear as a literal in lib/model.ts. The scoring path is
+//     in there, so a hard-coded favourite would show up.
+//
+//  2. BEHAVIOURALLY: a protocol's name, slug, symbol and gecko_id are all changed, and every
+//     figure the model reports about it must be UNCHANGED. A name cannot steer a score that does
+//     not read it.
+//
+// The second half carries a NON-VACUITY CONTROL, because a test that cannot fail proves nothing:
+// the same row is scored again with its TVL changed by half, and that MUST change the score. If
+// the control ever stops firing, the invariance half has gone blind and the gate is meaningless.
+{
+  const model = await import(path.join(process.cwd(), 'lib/model.ts'));
+  const cal = model.calibrate(snapshot);
+  const scored = model.buildRadar(snapshot, cal).board;
+
+  // (1) the textual half
+  //
+  // "No protocol is named in the model" is a claim about the SCORING, not about the universe.
+  // The entry's universe rules do name things -- the exchange list, the wrapper words -- but those
+  // decide WHICH protocols are on the board at all, they are printed on the page as rules, and
+  // they are not the score. So the source checked here is the scoring path: the model's own
+  // fitting and scoring functions, and the built model.js the judge reads whole.
+  //
+  // Reading lib/model.ts by line range is brittle if the file is reordered, so the region is
+  // found by its own anchors and the gate FAILS if an anchor is missing -- a gate that quietly
+  // checks nothing is the defect this file keeps looking for.
+  const libSrc = fs.readFileSync(path.join(process.cwd(), 'lib/model.ts'), 'utf8');
+  const lines = libSrc.split('\n');
+  const startAt = lines.findIndex((l) => /^function categoryCorrections\(/.test(l));
+  const endAt = lines.findIndex((l) => /^export function roundToSig\(/.test(l));
+  const builtJs = fs.readFileSync(path.join(out, 'dashboard', 'model.js'), 'utf8');
+  // COMMENTS ARE STRIPPED before matching. A comment is prose ABOUT the code, not the code: the
+  // scoring path says "is in exactly one age band" and "across sixteen independent draws", and
+  // both are the ordinary English words that happen to be protocol names. Matching them would
+  // make the gate cry wolf, and a gate that cries wolf is a gate nobody reads.
+  const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+  const scoringSrc = startAt >= 0 && endAt > startAt ? stripComments(lines.slice(startAt, endAt).join('\n')) : '';
+
+  const namedInSource = [];
+  for (const p of snapshot.protocols) {
+    const n = p.name.trim();
+    if (n.length < 4) continue; // too short to be evidence of anything
+    // A protocol name is matched as a WHOLE, case-insensitively, so "Axis" does not match the
+    // ordinary word "axis" and a two-word name is not matched by either of its words.
+    const re = new RegExp('(^|[^A-Za-z0-9])' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^A-Za-z0-9]|$)', 'i');
+    if (re.test(scoringSrc) || re.test(stripComments(builtJs))) namedInSource.push(n);
+  }
+  check('no protocol is named in the model\'s scoring code', startAt >= 0 && endAt > startAt && namedInSource.length === 0,
+    startAt < 0 || endAt <= startAt ? 'the scoring region\'s anchors were not found, so nothing was checked'
+      : namedInSource.length === 0 ? `${snapshot.protocols.length} names, none in the scoring code or the built model.js` : namedInSource.join(', '));
+
+  // The textual half needs its own control: a matcher that finds nothing because it is broken
+  // looks exactly like a model that names nothing. So a name is PLANTED in a copy of the scoring
+  // source and the matcher must catch it.
+  const plantName = snapshot.protocols.find((p) => p.name.trim().length >= 6);
+  const planted = scoringSrc + '\nconst favourite = "' + plantName.name + '";\n';
+  const plantRe = new RegExp('(^|[^A-Za-z0-9])' + plantName.name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^A-Za-z0-9]|$)', 'i');
+  check('the name-in-the-source measure can fail: a planted protocol name is caught', plantRe.test(planted),
+    plantRe.test(planted) ? `planted "${plantName.name}", caught` : 'the planted name was NOT caught');
+
+  // (2) the behavioural half
+  const FIELDS = ['conditional_usd', 'launch_p', 'expected_usd', 'age_days', 'growth_pct', 'category_log'];
+  let invariant = 0, steered = 0;
+  let controlFired = 0;
+  const steeredBy = [];
+  for (const row of scored) {
+    const p = snapshot.protocols.find((x) => x.slug === row.slug);
+    if (!p) continue;
+    const disguised = { ...p, name: 'ZZDISGUISED', slug: 'zz-disguised', symbol: 'ZZ', gecko_id: 'zz-disguised' };
+    const before = model.scoreProtocol(p, snapshot.as_of, cal);
+    const after = model.scoreProtocol(disguised, snapshot.as_of, cal);
+    const moved = FIELDS.filter((k) => before[k] !== after[k]);
+    if (moved.length === 0) invariant++;
+    else { steered++; steeredBy.push(row.name + ':' + moved.join('+')); }
+
+    // the non-vacuity control
+    const perturbed = model.scoreProtocol({ ...p, tvl_usd: p.tvl_usd * 1.5 }, snapshot.as_of, cal);
+    if (FIELDS.some((k) => before[k] !== perturbed[k])) controlFired++;
+  }
+  check('a protocol\'s name cannot steer its score: disguising it changes none of the model\'s figures',
+    steered === 0 && invariant > 0,
+    steered === 0 ? `${invariant}/${invariant + steered} rows unchanged` : steeredBy.slice(0, 3).join(', '));
+  check('the name-invariance measure can fail: changing a modelled field does change the score',
+    controlFired === scored.length,
+    `${controlFired}/${scored.length} rows caught`);
+}
+
 // ---------------------------------------------------------------- the words on the page are the words a reader gets
 // Three defects the page carried until now, each of which a reader can see:
 //  1. the sort arrow is a picture of the direction, and `aria-sort` on the header already says

@@ -586,6 +586,34 @@ consistent with every measurement taken at the time. It took 12 runs to see that
 script gives both answers. The lesson is the one from the mutant census: **a gate that
 sometimes passes and sometimes fails is not measuring the thing it names.**
 
+#### A full sweep of the copy, measured against the snapshot (2026-11-26)
+
+Every number the page states was re-derived from the snapshot rather than read from the source,
+and the page was driven in a browser so that what was checked is what a judge sees. The result:
+**no copy defect was found.** The figures, and how each was checked:
+
+| claim | where | measured |
+| --- | --- | --- |
+| 195 rankable, 40 on the watchlist, 155 off it | the board's lede | exact |
+| 59 clear the $50M floor; 19 of them off the list and clear the house's own structural test | the board's lede | exact, **all 19** checked against the house's rule in `RULES.txt:16` |
+| 136 below the floor; 73 left off (2 versioned, 24 bridges, 20 staking, 27 venues) | the board's lede | exact |
+| 758 protocols, 416 record a token, 128 carry a market cap, 9 are venues, 119 in the table, 288 have a token but no price | the live note | exact |
+| 75 of the 119 are in the cohort, 44 as contrast (1 versioned, 18 bridges, 11 staking wrappers, 1 wrapped name, 13 under the floor) | the live note | exact |
+| "Counted across the 303 protocols the launch model was fitted on" | the band table | exact, and **all five bands re-derive** from the 303 |
+| "The 35 with no first-tracked date" | the band table | exact — 35 of the 303, and `model.js` maps a missing date to 365 the same way |
+| "21 of the 26 rest on three or fewer" | the category table | exact, and the 26 sizes sum to the cohort's 75 |
+| every row's drawer derivation multiplies out | all 195 rows | exact — largest relative gap **1.15e-16** |
+| every farm plan's gas bill and share of the stake | all 195 plans | exact |
+| the cover's three rows and the filtered view's 28 rows agree with `board.json` | the shipped shots | exact, to the digit |
+| the build is byte-reproducible | a fresh tree | every file identical |
+| renaming every protocol to `X0, X1, …` changes nothing | the "no name is special" claim | **0 of 195** rows move; the cohort and all 26 category corrections are identical |
+
+Two of the checks were wrong before they were right, and both times the *artifact* was fine and
+the *checker* was not: the first dot-overlap count assumed a uniform radius (the real radii run
+3.5–12, so 9 of 195 dots are hidden, not 47), and the first filtered-view comparison used its own
+money formatter instead of the page's (28 rows "mismatched" until it used `toPrecision(3)`).
+A count that disagrees with the artifact is a question about the count.
+
 #### The levers that were measured and closed
 
 * **A fourth screenshot.** The kit composes the cover alone on one sheet and the rest on a

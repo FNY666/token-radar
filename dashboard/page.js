@@ -157,6 +157,22 @@
   return { exact: exact, worst: worst, total: D.rows.length };
  })();
 
+ // The refit verdict, beside the loop it reports on.
+ function refitCard(host) {
+ var ok = FIT.exact === FIT.total;
+ var d = FIT.total - FIT.exact;
+ var pc = FIT.worst * 100;
+ host.appendChild(card(L.refitted, [
+ el('div', { class: 'big', style: ok ? '' : 'color:var(--live)' },
+ FIT.exact + ' / ' + FIT.total),
+ el('p', { html: D.copy.refit_lead +
+ (ok
+ ? '<strong>All ' + FIT.total + ' rows reproduce exactly</strong>, so the board and the page are the same model.'
+ : '<strong>' + d + (d === 1 ? ' row differs' : ' rows differ') + '</strong>, the largest by ' +
+ (pc >= 0.1 ? pc.toFixed(1) : pc.toPrecision(2)) + '%, which means the data on this page is stale.') })
+ ]));
+ }
+
  function recompute(row) {
   var cond = MODEL
    ? MODEL.conditional(row.tvl_usd, row.change_7d, row.category)
@@ -322,20 +338,8 @@
  e('div', 'formula', D.copy.formula),
  el('p', { html: D.copy.clamps })
  ]));
- if (FIT) {
- var ok = FIT.exact === FIT.total;
- var d = FIT.total - FIT.exact;
- var pc = FIT.worst * 100;
- host.appendChild(card(L.refitted, [
- el('div', { class: 'big', style: ok ? '' : 'color:var(--live)' },
- FIT.exact + ' / ' + FIT.total),
- el('p', { html: D.copy.refit_lead +
- (ok
- ? '<strong>All ' + FIT.total + ' rows reproduce exactly</strong>, so the board and the page are the same model.'
- : '<strong>' + d + (d === 1 ? ' row differs' : ' rows differ') + '</strong>, the largest by ' +
- (pc >= 0.1 ? pc.toFixed(1) : pc.toPrecision(2)) + '%, which means the data on this page is stale.') })
- ]));
- }
+ if (FIT) refitCard(host);
+
  var curve = card(L.curve_title, [t('p', D.copy.curve_note)]);
  var curveBox = h('div','curve');
  c.bands.forEach(function (b) {
@@ -355,7 +359,7 @@
  el('tbody', null, c.bands.map(function (b) {
  var cells = [b.lo + '–' + (b.hi === null ? '∞' : b.hi) + ' days', String(b.n), String(b.issued),
  b.n ? (b.issued / b.n * 100).toFixed(1) + '%' : '—'];
- // The first cell names the row, so it is a row header: the age band is read with the four figures, not four bare numbers.
+ // The first cell names the row, so it is a row header: the age band is read with the four figures.
  return el('tr', null, cells.map(function (c, i) {
  return i === 0 ? el('th', { scope: 'row' }, [c]) : t('td', c);
  }));
@@ -785,7 +789,7 @@
  if (a >= 1e3) return '$' + (n / 1e3).toPrecision(s) + 'K';
  return '$' + Math.round(n);
  }
- // A figure at `sig` significant figures, as the board prints it: `sigRound`'s number, so the drawer and the board round alike, and a zero stays a zero.
+ // A figure at `sig` significant figures, as the board prints it: `sigRound`'s number, so the drawer and the board round alike.
  function moneySig(n, sig) {
  if (n === null || n === undefined) return '—';
  return '$' + sigRound(n, sig).toLocaleString('en-US');
@@ -939,7 +943,7 @@
  var next = parts.length ? '#' + parts.join('&') : '';
  if (next === location.hash) return;
  var url = next || location.pathname + location.search;
- // 'push' always adds a history entry; 'refine' replaces the last one this drawer pushed; 'replace' replaces whatever is there.
+ // 'push' adds a history entry; 'refine' replaces the last one; 'replace' replaces whatever is there.
  var doPush = mode === 'push' || (mode === 'refine' && !pushed);
  if (doPush) {
  history.pushState(null, '', url);
@@ -954,7 +958,7 @@
  function renderMissingData() {
  var main = document.getElementById('board');
  if (!main) return;
- // With no data.js the copy cannot come from the data -- the data is what is missing -- so it is written here.
+ // With no data.js the copy cannot come from the data -- the data is what is missing.
  main.appendChild(h('section','card prose missing', [
  h('h1', null, ['This page has no board yet']),
  t('p','The board arrives in a file called data.js, written beside this page when the radar runs. It is not there.'),

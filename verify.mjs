@@ -206,6 +206,75 @@ check('the dossier text fits the kit\'s cap, with the margin reported (a cut cos
     : 'dossier.json unreadable');
 check('dashboard source stays under 64 KB (so the judge reads it whole)', sourceBytes < 65536, `${sourceBytes} bytes`);
 
+// ---------------------------------------------------------------- what the JUDGE reads
+// The dossier's TEXT is not what the judge reads. The kit hands the judge a 30,144-byte VIEW
+// of it: each file's declaration lines first, then each file's body in path order, until the
+// budget runs out. A file that does not fit whole ends the walk, so the files after it get
+// no body at all and the rest of the budget is stranded.
+//
+// That makes "the source is under the cap" a necessary but very weak claim: the source can
+// fit and still be past the judge's window. So this gate MEASURES the window, with the kit's
+// own viewText lifted out of the kit, and asserts that the code the rubric's first criterion
+// turns on is inside it.
+//
+// The first criterion is "the screenshots and the code agree". The refit is the page's claim
+// that its own arithmetic reproduces the board's, so the verdict -- the sentence that says so
+// -- is the code that criterion turns on. It used to sit at page.js line 334, past the
+// window's end at line 312: the judge could read the refit LOOP but not what it concluded.
+//
+// A control runs the same measurement over a dossier whose page.js has the verdict moved
+// back past the window. If the control does NOT fail, this gate cannot see the difference and
+// proves nothing.
+{
+  const { judgeView, bodyRegion, windowEndLine, lineOf, JUDGE_VIEW_BYTES } =
+    await import('./tools/judgeview.mjs');
+  const dossierText = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8')).text ?? '';
+  const pageSrc = fs.readFileSync(path.join(dashDir, 'page.js'), 'utf8');
+  const VERDICT = 'rows reproduce exactly';
+
+  const view = judgeView(dossierText);
+  const body = bodyRegion(view);
+  const endLine = windowEndLine(view, pageSrc);
+  const verdictLine = lineOf(pageSrc, VERDICT);
+
+  check('the judge\'s window carries the refit verdict, the code that says the page reproduces the board',
+    body.includes(VERDICT) && verdictLine > 0 && verdictLine <= endLine,
+    `the verdict is at page.js line ${verdictLine}; the window ends at line ${endLine} of ${pageSrc.split('\n').length}`
+    + `; the view is ${Buffer.byteLength(view, 'utf8')} of ${JUDGE_VIEW_BYTES} bytes`);
+
+  // The control: the same measurement over a page.js whose verdict is moved back past the
+  // window. It MUST fail, or the gate above measures nothing.
+  //
+  // The verdict is moved to the END of the file, so it is unambiguously outside the window
+  // whatever the window's size is. A control that only nudges the line by one would sit
+  // still inside the window and would pass -- which would make it vacuous.
+  {
+    const ls = pageSrc.split('\n');
+    const vi = ls.findIndex((l) => l.includes(VERDICT));
+    const moved = ls.slice(0, vi).concat(ls.slice(vi + 1)).concat([
+      '',
+      ' // The control: the verdict, parked at the end of the file, past any window.',
+      ls[vi],
+    ]);
+    const movedText = moved.join('\n');
+    // rebuild the dossier text with the control's page.js
+    const ps = dossierText.indexOf('### page.js');
+    const fence = dossierText.indexOf('```js', ps);
+    const bStart = dossierText.indexOf('\n', fence) + 1;
+    const bEnd = dossierText.indexOf('\n```', bStart);
+    const controlText = dossierText.slice(0, bStart) + movedText + dossierText.slice(bEnd);
+    const controlView = judgeView(controlText);
+    const controlBody = bodyRegion(controlView);
+    const controlEnd = windowEndLine(controlView, movedText);
+    const controlLine = lineOf(movedText, VERDICT);
+    const controlFails = !(controlBody.includes(VERDICT) && controlLine > 0 && controlLine <= controlEnd);
+    check('the judge-window gate can fail: a verdict moved past the window is caught',
+      controlFails,
+      `the control\'s verdict is at line ${controlLine}, its window ends at ${controlEnd}: `
+      + (controlFails ? 'caught' : 'NOT CAUGHT -- the gate measures nothing'));
+  }
+}
+
 // ---------------------------------------------------------------- the palette's own note
 // colors.css is read WHOLE by the judge, and its design note counts the palette it introduces:
 // how many colour values, how many radii, how many type scales. A count in a note is a claim

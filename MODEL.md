@@ -1238,7 +1238,50 @@ The plan is generated **once**, by `lib/model.ts`, and travels with the row: the
 the plan a reader reads on the page is the plan the board hands in — there is no second
 implementation that could drift.
 
-## 8. What this is not
+## 8. The transcript bundle, and what the site actually reads
+
+The site's `thinking_reproduces` counts the lines of the tree **the site reads** — the published
+one, which `publish-github.sh` builds from its allowlist: **19 files, 9,666 counted lines**. The
+work tree is **291 files, 20,718 lines**. For months the check had been run against the *work*
+tree, and the difference is not academic: the work tree carries 272 scratch probe tools (14,380
+lines) that the publish script drops, and they were counting **against** the score as if they
+were evidence that had to be carried.
+
+That is backwards. The scratch tools are not evidence; they are the denominator. The first
+polish session wrote `tools/rev_blow2.cjs` and 13 of its siblings, and the bundle's failure
+message had said *"files with no agent evidence: tools/rev_blow2.cjs, …"* — which was true of the
+work tree and false of the entry the site actually reads.
+
+Re-measured against the published tree, with the kit's own `bundle --no-discover` and the kit's
+own `check --transcripts`:
+
+| bundle | bytes | score | verdict |
+| --- | --- | --- | --- |
+| build + polish(48b36615) + polish(5a4e9961) | 215,625,049 | — | **over the 200 MiB limit** |
+| polish(48b36615) + polish(5a4e9961) | 93,895,777 | **31.6%** | **13 passed, 0 failed** |
+| polish(5a4e9961) alone | 70,543,061 | 26.1% | FAIL |
+| build + polish(48b36615) | 38,723,978 | 18.9% | FAIL |
+
+The three-session bundle used to fit, at 102,537,282 bytes. It no longer does: the second polish
+session's own file has grown to **145,834,428 bytes**, most of it inline PNGs from the rendered
+screenshots it read. That pushed the three sessions **5,909,849 bytes** over the limit.
+
+`--exclude-turns` does not help, and the reason is in the kit's own code: the limit is checked on
+the staged bytes at `makefun.mjs:282620`, and the excluded turns are applied later, at
+`makefun.mjs:132168`. Excluding all 168 image-bearing turns of the second session left the total
+at **215,625,049 bytes** — unchanged.
+
+So the bundle carries the **two polish sessions** and not the build window, and the reason is
+measured rather than assumed: candidate C *is* the build window plus the first polish session,
+and it scores 18.9%. The build window's authorship does not reach the published tree's lines,
+because the polish sessions rewrote them. And candidate D shows both polish sessions are still
+needed — the second alone scores 26.1%.
+
+Both `rebuild-bundle.sh` and `finalize-entry.sh` now build the published tree themselves — the
+same tree, minus every tool the allowlist does not name — and check the bundle against **that**,
+so the number the chain reports is the number the site will compute.
+
+## 9. What this is not
 
 It is not a prediction that a token will be issued, or of when, or at what price. The launch odds
 say how often protocols of this age and size have issued, not that this one will. An implied value is

@@ -350,14 +350,37 @@ than in the raw file:
 
 | shot | PNG | in the judge's view | 12px of text lands at |
 | --- | --- | --- | --- |
-| `1-board.png` | 1280×800 | 1024×640 (the cover) | 9.6px |
+| `1-board.png` | 1440×900 | 1024×640 (the cover) | 8.5px |
 | `2-detail.png` | 800×1010 | 507×640 | 7.6px |
 | `3-filtered.png` | 800×1004 | 510×640 | 7.6px |
 
-The cover is 1280 wide rather than 1440 because the kit never enlarges and the width is what
-decides the scale: at 1440×900 its text arrived at 8.5px, at 1280×800 it arrives at 9.6px. The
-board's table still fits whole at 1280 — the wrapper's `scrollWidth` equals its `clientWidth` at
-both widths, so no column is cut. The two rest shots are 800 wide because that is where the table
+**The cover is 1440×900, which is exactly the judge's cover cell's 1.6 aspect**, so it fills the
+1024×640 cell with no waste — and, because the filters fit on *one* line at that width instead of
+two, the fold clears three whole ranked rows. The board's table still fits whole at 1440: the
+wrapper's `scrollWidth` equals its `clientWidth` at both widths, so no column is cut.
+
+The trade is text size, and it was measured rather than assumed:
+
+| framing | 12px of text lands at | whole ranked rows in frame |
+| --- | --- | --- |
+| 1280×800 | 9.6px | **0** |
+| 1280×846 | 9.1px | 1 |
+| 1440×900 | 8.5px | **3** |
+| 1440×940 | 8.2px | 4 |
+| 1440×1000 | 7.7px | 5, but the fold cuts it |
+
+Three whole rows is the point: **the judge can now check the detail shot's row against the
+board**, because the top row of the cover is the row the detail shot opens on. Before, the cover
+showed what a row *looks like* and the detail shot showed what that row is *worth*, and the two
+never met.
+
+8.5px is above the **measured** legibility floor of 7.5px: at 6.0px the filtered shot was read
+with five of its six figures wrong inside the judge's own frame (30.7808% came out as 39.789%),
+and at 7.6px every figure read correctly. The digits were checked through the kit's own pipeline
+— Lanczos fit, then JPEG q82 with 4:2:0 chroma subsampling — at every framing from 9.6px down
+to 7.5px, and `70.5577%` reads as `70.5577%` at all of them.
+
+The two rest shots are 800 wide because that is where the table
 still fits whole *and* it is the smallest short side the kit accepts; 7.6px is the best a rest
 shot can do, since its cell is 510 wide.
 
@@ -377,15 +400,15 @@ at offset 240, which sliced step 2's cost line across the bottom edge — the ju
 cost line reads as a wrong figure rather than as a frame. Measured on the rendered pixels, that
 shot's last row carried **139 lit pixels**: text, cut in half.
 
-The cover has the same kind of edge: it is the page at 1280×800, and the page scrolls, so the
-fold at y=800 is a hard edge too. It used to fall 5px into the first table row's glyphs — the
+The cover has the same kind of edge: it is the page at 1440×900, and the page scrolls, so the
+fold at y=900 is a hard edge too. It used to fall 5px into the first table row's glyphs — the
 judge saw the **tops of a row's letters** and nothing else of it, 143 lit pixels in the last
 row. Scrolling the page to clear it was measured and rejected: the headline needs at most 16px
 of scroll to stay whole and the fold needs at least 24px, so scrolling always costs the
 headline. The gap between the plot and the table is one spacing step wider instead
-(`--c` 12px + `--d` 16px → `--e` 24px), which moves the whole table down 4px and lands the
-fold in the padding **above** row 1's text: the column headers are the last thing in frame, and
-nothing is cut. Measured on the rendered pixels: **0 lit pixels** in the cover's last row.
+(`--c` 12px + `--d` 16px → `--e` 24px), and the cover is framed at 1440×900 so that the fold
+clears **three whole rows** rather than slicing the first one. Measured on the rendered pixels:
+**0 lit pixels** in the cover's last row, and **3 whole rows** clear the fold.
 
 Two consequences worth stating, because both are easy to get wrong:
 
@@ -397,12 +420,14 @@ Two consequences worth stating, because both are easy to get wrong:
   shoot or the dossier carries the previous shots. The gate's screenshot check catches that — it
   re-renders each view and compares it pixel by pixel — but it only catches it if the build ran.
 
-`verify.mjs` now measures the legibility itself, in the judge's composed view, with two bars because
-the cells differ: the cover's cell is 1024×640 and can carry 12px of text at 9.6px, while the two
-rest cells are 510 wide and the kit refuses a shot under an 800px short side, so 7.6px is the best
-a rest shot can do. Its controls plant both old framings — the 1024-wide filtered shot at 6.0px
-and the 1440-wide cover at 8.5px — and require the same measurement to catch them, so the check
-cannot pass by measuring nothing.
+`verify.mjs` now measures the legibility itself, in the judge's composed view, against the
+**measured floor** of 7.5px — the floor is where the round-37 failure sat below it (6.0px, and
+five of six figures wrong) and where the round-37 success sat above it (7.6px, and every figure
+right). Both bars used to be set by a different rule for the cover (9.5px, "because 8.5px is
+wasteful"), and that rule was never a measurement: 1440×900 was a bug at the time and the bar was
+set above the accident. Its controls plant a framing that falls past the floor — the 1024-wide
+filtered shot at 6.0px and a 1440×1100 cover at 7.0px — and require the same measurement to
+catch them, so the check cannot pass by measuring nothing.
 
 ## 7. The farm plans
 

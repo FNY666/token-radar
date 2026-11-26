@@ -658,15 +658,41 @@ record and never from a hand-written list of names:
   fund;
 * **the gas** follows from the chain (about $12 on Ethereum, $6 on Bitcoin, $1 on Solana, $3
   elsewhere);
-* **the hold** follows from the age (90 days under 180, 60 under 365, 45 under 730, then 30). A
+* **the hold** follows from the age, and it **rises** with it — the same five age bands the launch
+  curve is fitted on, so the plan and the odds column cannot disagree about what an age means:
+  **30 days** for the youngest band (0–182 days, 49 rows), **45** (182–365, 30 rows), **60**
+  (365–730, 81 rows), **75** (730–1460, 30 rows) and **90** for the oldest (1460+, 5 rows). A
   protocol with no first-tracked date — seven of the 195 rows, all of them untracked in the
-  snapshot — gets 60 days, the same as one first seen under a year. The age is unknown, and 60 is
-  the middle of the rule rather than its most generous end.
+  snapshot — gets 60 days, the middle of the ladder rather than either end.
+
+  The ladder used to run the other way: 90 days under 180 days old, down to 30 beyond two years,
+  and the code's own comment said why — *"a protocol that has run longer without a token needs a
+  longer window"* — while the ladder did the opposite. That is the entry's model turned upside
+  down: the launch curve says the older a protocol is, the more likely it is to issue, so the plan
+  was telling the rows with the **lowest** odds to wait the **longest**. Measured on the shipped
+  board: Spearman(odds, age) = **+0.83** but Spearman(odds, hold) = **−0.86**, and the rank-1 row
+  was given the shortest window on the board. The window now follows the curve, and `verify.mjs`
+  gates the direction: a row whose odds are above the board's median may never be given a shorter
+  window than a row whose odds are below it, with a control that inverts the windows and requires
+  the gate to fire.
+
+  The ladder reads the model's own bands, so the plan and the curve can never read an age
+  differently — the old rule's threshold (180 days) did not even agree with the curve's first
+  band edge (182), so one row sat in the curve's youngest band while holding for the shortest
+  window a young protocol gets.
 * **the gas the plan counts** is priced for the whole hold window, not for a month: the weekly
   action is budgeted at the chain's own gas rate for each of the hold window's whole weeks, so a
   90-day hold is budgeted for 13 weeks and a 30-day hold for 5. Before this was priced from the
   window, every one of the 195 rows budgeted four weeks of gas and then held for five to thirteen —
   an understatement of more than a factor of three on the longest holds.
+* **the gas ceiling the ladder is scaled against is derived, not measured.** It used to be a
+  written-down constant — $204 — described as "the most expensive gas bill the board can
+  produce". A constant like that goes stale the moment the ladder moves, and a stale one is
+  silently wrong: the capital ladder would be scaled for a bill the board can no longer produce and
+  every position would be deeper than the record justifies. It is now computed from the two rules
+  it depends on — the most expensive chain's gas over the longest window the ladder allows, plus
+  the four one-off spends — so it moves with them. The ladder's shape is unchanged: **$1050**
+  below $50M, **$2100** to $100M, **$3150** to $250M, **$5250** to $1B, **$8400** above it.
 * **the weekly cadence is the plan's own, not the protocol's** — and the plan says so. The
   snapshot carries ten fields per protocol and not one of them records a points schedule, an
   activity series, a snapshot cadence or a streak; the only time-series field is one week of

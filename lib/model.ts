@@ -247,6 +247,15 @@ function ageBandOf(age: number): number {
   return AGE_BANDS.length - 1;
 }
 
+/**
+ * The hold window each age band gets, in days.
+ *
+ * It rises with the age because the launch curve's odds do: the older a protocol is, the likelier
+ * it is to issue, so the longer the position must stay open to catch the claim. The bands are the
+ * model's own, so the plan and the odds column read the same age the same way.
+ */
+const HOLD_DAYS_BY_AGE_BAND = [30, 45, 60, 75, 90];
+
 /** The band a TVL falls in. */
 function tvlBandOf(tvl: number): number {
   for (let i = 0; i < TVL_BANDS.length; i++) {
@@ -1547,8 +1556,17 @@ function chainOf(p: SnapshotProtocol): string {
  * never less than its gas needs.
  */
 const CAPITAL_SHAPE: number[] = [50, 100, 150, 250, 400];
-/** The gas the plan spends at its most, over every board row: the ceiling the ladder must clear. */
-const WORST_GAS_BILL = 204;
+/**
+ * The gas the plan spends at its most, over every board row: the ceiling the ladder must clear.
+ *
+ * It is DERIVED from the two rules above rather than measured and written down, because a measured
+ * constant goes stale the moment either rule moves -- and a stale one is silently wrong: the ladder
+ * would be scaled for a gas bill the board can no longer produce, and every position would be
+ * deeper than the record justifies. The worst bill is the most expensive chain's gas over the
+ * longest hold the ladder allows, plus the four one-off spends (the wallet, the setup, the claim
+ * and the unwind).
+ */
+const WORST_GAS_BILL = gasOnChain('Ethereum') * (Math.ceil(HOLD_DAYS_BY_AGE_BAND[HOLD_DAYS_BY_AGE_BAND.length - 1]! / 7) + 4);
 /** The share of the stake the gas may be at most. */
 const GAS_SHARE_CAP = 5;
 
@@ -1583,13 +1601,29 @@ function capitalFor(p: SnapshotProtocol, gasTotal: number): number {
   return Math.max(band, needed);
 }
 
-/** How long to hold, from the protocol's age: a protocol that has run longer without a token needs a longer window. */
+/**
+ * How long to hold, from the protocol's age.
+ *
+ * The window rises with the age, and it has to. The entry's own launch curve says the OLDER a
+ * protocol is, the MORE likely it is to issue -- 4.5% of the eligible protocols in the youngest
+ * band issued a token against 42.9% in the oldest -- so the older a row is, the sooner its claim
+ * is likely to open, and the longer a plan should keep the position open to catch it. The rule
+ * used to run the other way: 90 days under 180 days old, down to 30 days beyond two years, and the
+ * code's own comment said why ("a protocol that has run longer without a token needs a longer
+ * window") while the ladder did the opposite. That is the entry's model turned upside down, and
+ * it is visible in the numbers: the board's own odds column rises with the age (Spearman 0.83)
+ * while the hold fell with it (Spearman -0.93 against the age), so the plan told the rows with
+ * the LOWEST odds to wait the LONGEST -- the top of the board's ranking was given a 30-day hold
+ * and the bottom a 90-day one.
+ *
+ * The ladder now reads the model's OWN age bands, the same five the launch curve is fitted on,
+ * so the plan and the odds column cannot disagree about what an age means. A protocol with no
+ * first-tracked date has no band, so it gets the middle of the ladder rather than either end.
+ */
 function holdDaysFor(age: number | null): number {
   if (age === null) return 60;
-  if (age < 180) return 90;
-  if (age < 365) return 60;
-  if (age < 730) return 45;
-  return 30;
+  const band = ageBandOf(age);
+  return HOLD_DAYS_BY_AGE_BAND[band] ?? HOLD_DAYS_BY_AGE_BAND[HOLD_DAYS_BY_AGE_BAND.length - 1]!;
 }
 
 /** The gas cost of one transaction on a named chain, roughly. */
@@ -1802,9 +1836,16 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
       // into an asset or an outcome share earns nothing but the asset itself. The window is set
       // by the protocol's own age, so the plan says how long it waits without claiming a streak it
       // cannot see: the snapshot records no points programme and no activity series.
+      //
+      // The step used to end "...so the position is open across more than one of the protocol's own
+      // checkpoints." That asserts the protocol HAS checkpoints, and the snapshot records none: its
+      // ten fields carry no epoch, no cycle, no season and no schedule. The plan's own rule -- never
+      // promise what the record cannot support -- was broken in the one place a reader would act on
+      // it. It now says what IS true of the window the model chose: the position stays open long
+      // enough to cover more than one weekly action, which is the only cadence the plan knows.
       text: earns
-        ? `Hold the position for at least ${hold} days, keeping the balance deposited rather than idle, so the position is open across more than one of the protocol's own checkpoints.`
-        : `Hold the position for at least ${hold} days, keeping it open rather than closed out, so the position is open across more than one of the protocol's own checkpoints.`,
+        ? `Hold the position for at least ${hold} days, keeping the balance deposited rather than idle, so it is open for more than one of the weekly actions you make.`
+        : `Hold the position for at least ${hold} days, keeping it open rather than closed out, so it is open for more than one of the weekly actions you make.`,
       // What the position earns depends on what the step-2 action did: a deposit into a vault or
       // a market earns the protocol's own yield, but a swap, a purchase or a bridged position does
       // not, and promising a yield there would be promising something the protocol never pays.
@@ -1862,11 +1903,17 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
       // the clock the plan waits out is the protocol's own age. A slow one is the right word
       // for a protocol that has NOT issued after the curve says it should have -- and the
       // curve says the opposite, so the note says what the record says instead.
+      //
+      // The note also states the window it sits next to, because the window now FOLLOWS the
+      // curve: a row the curve reads as likelier to issue is held longer, to catch a claim if
+      // one opens, and a row the curve reads as unlikely is held briefly. So the note quotes
+      // both the odds and the window, and a reader can see the plan's reasoning in one place
+      // instead of inferring it from two steps that only agree once you do the arithmetic.
       text: dated
         ? (age !== null && age < AGE_BANDS[0].hi
-          ? `Note the whole record: ${p.name} is tracked ${tracked}, so it is still early — the launch curve says protocols this young issue least often, so size the position for the wait, not for the launch.`
-          : `Note the whole record: ${p.name} is tracked ${tracked} and has issued no token since. The launch curve reads its odds at ${oddsPct} — the older a protocol is, the likelier it is to issue — so size the position for the wait, and read the curve, not this note, for the odds.`)
-        : `Note the whole record: ${p.name} is tracked ${tracked}, so the house cannot tell how long it has run — size the position for the wait.`,
+          ? `Note the whole record: ${p.name} is tracked ${tracked}, so it is still early — the launch curve reads its odds at ${oddsPct} and says protocols this young issue least often, so the plan holds it for ${hold} days and the position is for the yield, not for the launch.`
+          : `Note the whole record: ${p.name} is tracked ${tracked} and has issued no token since. The launch curve reads its odds at ${oddsPct} — the older a protocol is, the likelier it is to issue — so the plan holds it for ${hold} days to catch a claim if one opens, and read the curve, not this note, for the odds.`)
+        : `Note the whole record: ${p.name} is tracked ${tracked}, so the house cannot tell how long it has run — the plan holds it for ${hold} days and the position is for the yield, not for the launch.`,
       cost: 'nothing but the note',
       time: '5 minutes',
     },

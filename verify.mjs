@@ -3072,12 +3072,21 @@ for (const name of shots) {
     const needed = Math.ceil((gasTotal * GAS_SHARE_CAP) / 50) * 50;
     return Math.max(band, needed);
   };
+  // The hold window, read from the library's OWN age bands -- the same five the launch curve is
+  // fitted on -- so the plan and the odds column cannot disagree about what an age means. The
+  // ladder is read out of the source, not re-derived here, so this check cannot drift from it.
+  const holdMatch = libSrc.match(/const HOLD_DAYS_BY_AGE_BAND = \[([\s\S]*?)\];/);
+  const HOLD_DAYS_BY_AGE_BAND = holdMatch
+    ? holdMatch[1].split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n))
+    : [30, 45, 60, 75, 90];
+  const AGE_BAND_EDGES = [[0, 182], [182, 365], [365, 730], [730, 1460], [1460, Infinity]];
   const holdDaysFor = (age) => {
     if (age === null) return 60;
-    if (age < 180) return 90;
-    if (age < 365) return 60;
-    if (age < 730) return 45;
-    return 30;
+    let band = AGE_BAND_EDGES.length - 1;
+    for (let i = 0; i < AGE_BAND_EDGES.length; i++) {
+      if (age >= AGE_BAND_EDGES[i][0] && age < AGE_BAND_EDGES[i][1]) { band = i; break; }
+    }
+    return HOLD_DAYS_BY_AGE_BAND[band] ?? HOLD_DAYS_BY_AGE_BAND[HOLD_DAYS_BY_AGE_BAND.length - 1];
   };
 
   let nameBad = 0, dateBad = 0, capBad = 0, holdBad = 0, streakBad = 0, gasBad = 0;
@@ -3230,6 +3239,124 @@ for (const name of shots) {
         plantedBad > 0,
         `the planted note lands on ${r.name} at ${(r.launch_probability * 100).toFixed(1)}% odds, `
         + `at or above the median of ${(med2 * 100).toFixed(1)}%: ${plantedBad > 0 ? 'caught' : 'NOT CAUGHT -- the gate measures nothing'}`);
+    }
+  }
+
+  // The hold window must not run AGAINST the age the launch curve reads.
+  //
+  // The window used to fall as the age rose -- 90 days for the youngest protocols, 30 for the
+  // oldest -- while the launch curve says the opposite: the older a protocol is, the MORE likely
+  // it is to issue. So the plan told the rows with the LOWEST odds to wait the LONGEST, and the
+  // code's own comment said the reverse of what the ladder did. Measured on the shipped board:
+  // Spearman(odds, age) = +0.83 but Spearman(odds, hold) = -0.86, and the rank-1 row was given
+  // the SHORTEST window of any row on the board.
+  //
+  // The gate tests the ladder's DIRECTION in the age -- the window must be non-decreasing as the
+  // age grows, because the curve's odds are non-decreasing in the age too. It cannot compare the
+  // odds directly, and must not: the odds also move with the TVL band and the week's growth, so
+  // two rows of different ages can legitimately have their odds ordered the other way (Firelight
+  // at 33.0% is older than Predict Fun at 29.2% and holds for less, because a smaller book and a
+  // falling week cost it odds). What must never happen is the ladder itself running backwards.
+  {
+    const bandOf = (age) => {
+      if (age === null) return -1;
+      for (let i = 0; i < AGE_BAND_EDGES.length; i++) {
+        if (age >= AGE_BAND_EDGES[i][0] && age < AGE_BAND_EDGES[i][1]) return i;
+      }
+      return AGE_BAND_EDGES.length - 1;
+    };
+    const byBand = new Map();
+    for (const r of rows) {
+      if (r.age_days === null || r.age_days === undefined) continue;
+      const band = bandOf(r.age_days);
+      const hold = Number(/for at least (\d+) days/.exec(r.farm_steps.join(' | '))?.[1]);
+      if (!Number.isFinite(hold)) continue;
+      if (!byBand.has(band)) byBand.set(band, []);
+      byBand.get(band).push({ r, hold });
+    }
+    // The median window in each band, in band order. The ladder must not fall from one band to
+    // the next, because the curve's odds do not fall from one band to the next.
+    const medians = [...byBand.keys()].sort((a, b) => a - b).map((band) => {
+      const hs = byBand.get(band).map((x) => x.hold).sort((a, b) => a - b);
+      return { band, median: hs[Math.floor(hs.length / 2)], n: hs.length };
+    });
+    let falls = 0;
+    for (let i = 1; i < medians.length; i++) if (medians[i].median < medians[i - 1].median) falls++;
+    check('the hold window does not fall as the protocol gets older', falls === 0,
+      falls === 0
+        ? medians.map((m) => `${m.median}d in band ${m.band} (${m.n} rows)`).join(', ')
+        : `${falls} band(s) fall: ${medians.map((m) => `${m.band}:${m.median}d`).join(', ')}`);
+
+    // The control: the SAME comparison over a ladder that runs backwards. It must fire, or the
+    // gate above cannot see the thing it names.
+    {
+      const inverted = [...medians].reverse().map((m) => ({ ...m, median: m.median }));
+      let f2 = 0;
+      for (let i = 1; i < inverted.length; i++) if (inverted[i].median < inverted[i - 1].median) f2++;
+      check('the window-direction gate can fail: a ladder that runs backwards is caught', f2 > 0,
+        `with the ladder inverted, ${f2} band(s) fall: ${inverted.map((m) => `${m.band}:${m.median}d`).join(', ')}`
+        + `: ${f2 > 0 ? 'caught' : 'NOT CAUGHT -- the gate measures nothing'}`);
+    }
+  }
+
+  // The plan must not assert a cadence the record cannot carry.
+  //
+  // The hold step used to say the position "is open across more than one of the protocol's own
+  // checkpoints". The snapshot's ten fields carry no epoch, no cycle, no season and no schedule,
+  // so that sentence asserts the protocol HAS checkpoints -- the entry's own rule ("never promise
+  // what the record cannot support") broken in the one step a reader acts on.
+  {
+    let checkpointBad = 0;
+    for (const r of rows) {
+      if (/checkpoint|epoch|season cycle|the protocol's own cycle/i.test(r.farm_steps.join(' | '))) checkpointBad++;
+    }
+    check('no farm plan asserts a checkpoint or a cycle the record does not carry', checkpointBad === 0,
+      checkpointBad === 0 ? 'none do' : `${checkpointBad} do`);
+
+    // The control: the SAME check over a plan that DOES assert one. It must fire.
+    {
+      const r = rows[0];
+      const planted = r.farm_steps.slice(0, 3).concat([
+        'Hold the position for at least 30 days, keeping it open rather than closed out, so the position is open across more than one of the protocol\'s own checkpoints. Cost: the stake stays where the protocol keeps it. Time: 30 days.',
+      ]).concat(r.farm_steps.slice(4));
+      const fires = /checkpoint|epoch|season cycle|the protocol's own cycle/i.test(planted.join(' | '));
+      check('the checkpoint gate can fail: a planted checkpoint claim is caught', fires,
+        fires ? 'caught' : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
+  // The closing note must agree with the window it sits next to.
+  //
+  // The note quotes the row's odds and now quotes the window as well, so a reader can see the
+  // plan's reasoning in one place. If the two ever disagree -- the note saying 60 days while the
+  // hold step says 90 -- the plan contradicts itself within nine steps of itself.
+  {
+    let noteBad = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
+      const nm = /the plan holds it for (\d+) days/.exec(note);
+      if (!nm) { noteBad++; if (offenders.length < 3) offenders.push(`${r.name}: the note quotes no window`); continue; }
+      const hm = /for at least (\d+) days/.exec(r.farm_steps.join(' | '));
+      if (!hm || Number(nm[1]) !== Number(hm[1])) {
+        noteBad++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the note says ${nm[1]} days, the hold step says ${hm?.[1]}`);
+      }
+    }
+    check('the closing note quotes the same window as the hold step', noteBad === 0,
+      noteBad === 0 ? 'all agree' : `${noteBad} differ: ${offenders.join('; ')}`);
+
+    // The control: a note that quotes a DIFFERENT window must be caught.
+    {
+      const r = rows[0];
+      const planted = r.farm_steps.slice(0, -1).concat([
+        (r.farm_steps[r.farm_steps.length - 1] ?? '').replace(/the plan holds it for \d+ days/, 'the plan holds it for 7 days'),
+      ]);
+      const pm = /the plan holds it for (\d+) days/.exec(planted[planted.length - 1] ?? '');
+      const hm = /for at least (\d+) days/.exec(planted.join(' | '));
+      const fires = !!(pm && hm && Number(pm[1]) !== Number(hm[1]));
+      check('the note-window gate can fail: a note that quotes a different window is caught', fires,
+        fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
     }
   }
 

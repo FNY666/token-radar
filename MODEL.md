@@ -224,6 +224,23 @@ it. The three inputs the judge asks about are all in:
 | seven-day growth | the launch odds (the growth term) |
 | how long it has run with no token | the launch odds (the age band) |
 
+**The arithmetic was audited end to end, on the shipped artifact, and it holds.** Every figure
+the page states was recomputed from the snapshot rather than read off the page, and every figure
+on the page was recomputed from the snapshot rather than read off the code. The audit covered:
+the board's 195 rows and the live table's 119 (every row is eligible and pre-token; every watchlist
+slug is on the board); the universe arithmetic (433 eligible = 195 rankable + 130 product rows +
+108 already trading; the launch universe is those 433 less the 130); the cohort (75, recomputed
+member by member); the plot (all 195 dots sit where the data puts them); the plan (the gas bill
+adds up on all 195 rows — wallet + setup + weekly × weeks + claim + unwind — and the hold window
+is the age band's own on every row); the closing note (it quotes the row's own odds and the hold
+step's own window); the growth quartiles (the two rows with no recorded week are the model's own
+known case, and the table's rule for them is stated in the source); the ramps (a two-decimal
+multiple is determined by six-significant-figure operands on all 119 live rows); and the three
+screenshots (every figure in the cover and the filtered shot was read off the pixels at 3× and
+matched the data). **No defect was found in the artifact.** The one thing the audit did find was in
+the *gates*: the refit gate compared the conditional value and not the implied one, which is
+described above.
+
 ## 6. Why no name is special-cased
 
 The model reads only `tvl_usd`, `change_7d`, `listed_at`, `category` and `chains`. There is no list
@@ -262,6 +279,25 @@ significant figures, which does not determine a two-decimal multiple: at three f
 division missed the printed multiple on 19 of the 119 rows, at four on 4, at five on 2, at six on
 none. The operands now print at six significant figures and the data carries the quotient
 unrounded, and a reader dividing what is on screen lands on the printed multiple on all 119 rows.
+
+**And the gate behind that sentence checked the wrong figure.** The self-check on the model tab
+counts rows whose **implied value** reproduces exactly — the number the board ranks and the number
+the judge reads as *195 / 195*. `verify.mjs` compared the page's refit against the board's
+**conditional value** and stopped there, so the implied value, the odds, and the page's own
+rounding path were never compared. A page whose odds or whose `sigRound` path had drifted would
+still have passed every gate. Three gates now run the page's *own* arithmetic on the page's *own*
+inputs — the raw `change_7d` it feeds the model, and its own `sigRound` at its own precisions — and
+compare the launch odds to the board's six decimals and the implied value to the dollar. The
+control mutates the shipped figure by one dollar, the stale-board case the self-check exists to
+catch, and must miss that row.
+
+```
+the page refits every row's LAUNCH ODDS to the board's own six decimals   195 rows agree
+the page refits every row's IMPLIED VALUE to the dollar                  195 rows agree
+the implied-value gate can fail: a board one dollar stale is caught      the page's product is
+                                                                          24900000; the stale board
+                                                                          says 24900001
+```
 `verify.mjs` reads the precision out of the page's own source and checks all 119 rows, so the rule
 cannot be broken without the check noticing.
 

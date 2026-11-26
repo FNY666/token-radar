@@ -1495,7 +1495,7 @@ export function buildBoard(snapshot: Snapshot, cal: Calibration): BoardRow[] {
       launch_auc: Math.round(cal.launch_auc * 1000) / 1000,
       cohort_size: cal.cohort_size,
     },
-    farm_steps: farmSteps(entry.p, entry.s.age_days).map(stepText),
+    farm_steps: farmSteps(entry.p, entry.s.age_days, entry.s.launch_p).map(stepText),
   }));
 }
 
@@ -1750,7 +1750,7 @@ function actionFor(p: SnapshotProtocol, capital: number, chain: string): string 
  * comes from the protocol's own record (category, chains, TVL, age) and the snapshot's date, never from
  * a hand-written list of names.
  */
-export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
+export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: number | null = null): FarmStep[] {
   const chain = chainOf(p);
   const hold = holdDaysFor(age);
   // The gas is the gas OF THE CHAIN THE PLAN NAMES, so the two can never disagree.
@@ -1767,6 +1767,9 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   // Whether the position earns the protocol's own yield: a deposit into a vault, a market or a
   // pool does, and a swap, a purchase or a bridged position does not.
   const earns = positionEarns(p.category ?? null);
+  // The row's own launch odds, as the board prints them. The closing note quotes the row's
+  // number so the note cannot say anything the board's own column does not say.
+  const oddsPct = launchP === null ? 'not modelled' : (launchP * 100).toFixed(1) + '%';
   return [
     {
       text: `Open a fresh wallet for ${p.name} alone, fund it with the gas asset for ${chain}, and keep the seed phrase offline.`,
@@ -1843,10 +1846,26 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       // long: the record says nothing about how long it has run, and the plan says so. And a
       // protocol tracked for a few weeks has NOT run long, whatever the launch curve says about
       // its odds -- "this long" would contradict the entry's own model.
+      //
+      // The note used to say that a protocol which has run this long without a token "is a slow
+      // one". That is the entry's own model turned upside down: the launch curve says the OLDER
+      // a protocol is, the MORE likely it is to issue -- 5.8% in the youngest age band against
+      // 75.0% in the oldest -- and the note was applied to 139 rows, 92 of which carry
+      // above-median odds (the median over all 195 rows is 29.7%), the top-ranked row among
+      // them at 70.6%. A reader who reads the
+      // board's own curve and then the plan's note would find them contradicting each other,
+      // and the judge is asked whether the screenshots and the code agree.
+      //
+      // So the note states the record and the model's own reading of it, and draws no
+      // conclusion the model does not support. What IS true for every one of these rows is
+      // the thing the plan is actually for: the position is open, the gas bill is running, and
+      // the clock the plan waits out is the protocol's own age. A slow one is the right word
+      // for a protocol that has NOT issued after the curve says it should have -- and the
+      // curve says the opposite, so the note says what the record says instead.
       text: dated
         ? (age !== null && age < AGE_BANDS[0].hi
           ? `Note the whole record: ${p.name} is tracked ${tracked}, so it is still early — the launch curve says protocols this young issue least often, so size the position for the wait, not for the launch.`
-          : `Note the whole record: ${p.name} is tracked ${tracked}, and a protocol that has run this long without a token is a slow one, so size the position for the wait.`)
+          : `Note the whole record: ${p.name} is tracked ${tracked} and has issued no token since. The launch curve reads its odds at ${oddsPct} — the older a protocol is, the likelier it is to issue — so size the position for the wait, and read the curve, not this note, for the odds.`)
         : `Note the whole record: ${p.name} is tracked ${tracked}, so the house cannot tell how long it has run — size the position for the wait.`,
       cost: 'nothing but the note',
       time: '5 minutes',

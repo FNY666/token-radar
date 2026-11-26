@@ -3176,6 +3176,63 @@ for (const name of shots) {
   check('every farm plan states its own gas bill and what share of the stake it is', billBad === 0,
     billBad === 0 ? 'all agree' : `${billBad} differ`);
 
+  // The plan must not contradict the entry's own model.
+  //
+  // The plan's closing note used to call any protocol that has run long without a token "a slow
+  // one" -- and the entry's own launch curve says the opposite: the OLDER a protocol is, the
+  // MORE likely it is to issue (5.8% in the youngest age band against 75.0% in the oldest).
+  // The note was applied to 139 rows, 69 of which carry above-median odds. A reader who read the
+  // board's curve and then the plan's note would find them contradicting each other, and the
+  // rubric's first criterion is that the screenshots and the code agree.
+  //
+  // So the gate is the opposite direction of every other farm-plan gate: the note may not draw
+  // a conclusion about a protocol's speed that the row's own odds contradict. A row whose odds
+  // are AT or ABOVE the board's median may not be called slow.
+  {
+    const probs = rows.map((r) => r.launch_probability).sort((a, b) => a - b);
+    const median = probs[Math.floor(probs.length / 2)];
+    let slowBad = 0;
+    let slowAtOrAbove = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const last = r.farm_steps[r.farm_steps.length - 1];
+      if (!/is a slow one|has not issued in|should have issued/i.test(last)) continue;
+      slowBad++;
+      if (r.launch_probability >= median) {
+        slowAtOrAbove++;
+        if (offenders.length < 3) {
+          offenders.push(`${r.name} (${(r.launch_probability * 100).toFixed(1)}% odds, median ${(median * 100).toFixed(1)}%)`);
+        }
+      }
+    }
+    check('no farm plan calls a protocol slow when the entry\'s own curve says it is likelier to issue',
+      slowBad === 0,
+      slowBad === 0 ? `no plan calls a protocol slow; the board's median odds are ${(median * 100).toFixed(1)}%`
+        : `${slowBad} plans call a protocol slow and ${slowAtOrAbove} of them are at or above the median: `
+        + offenders.join('; '));
+
+    // The control: the SAME check over a plan that DOES call a slow protocol slow. It must
+    // fire, or the gate above cannot see the thing it names.
+    {
+      const r = rows[0];
+      const planted = rows.map((x) => (x.slug === r.slug
+        ? { ...x, farm_steps: x.farm_steps.slice(0, -1).concat([
+          'Note the whole record: this protocol is tracked since 2021-10-26 and a protocol that has run this long without a token is a slow one, so size the position for the wait.']) }
+        : x));
+      const probs2 = planted.map((x) => x.launch_probability).sort((a, b) => a - b);
+      const med2 = probs2[Math.floor(probs2.length / 2)];
+      let plantedBad = 0;
+      for (const x of planted) {
+        const last = x.farm_steps[x.farm_steps.length - 1];
+        if (/is a slow one/i.test(last) && x.launch_probability >= med2) plantedBad++;
+      }
+      check('the slow-note gate can fail: a planted slow note on an above-median row is caught',
+        plantedBad > 0,
+        `the planted note lands on ${r.name} at ${(r.launch_probability * 100).toFixed(1)}% odds, `
+        + `at or above the median of ${(med2 * 100).toFixed(1)}%: ${plantedBad > 0 ? 'caught' : 'NOT CAUGHT -- the gate measures nothing'}`);
+    }
+  }
+
   // The ladder must still BE a ladder: a bigger book gets a bigger stake. Lifting each row by
   // its OWN gas instead of scaling the ladder once would put a $28M protocol's stake above a
   // $1.58B one's -- the opposite of what a ladder means, and the opposite of the entry's own

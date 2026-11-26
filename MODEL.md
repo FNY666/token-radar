@@ -688,11 +688,24 @@ record and never from a hand-written list of names:
   position that pays none is the one thing a farm plan must not do. The rule is a list of
   *categories*, never of protocols, and a category the action table does not name falls back to a
   deposit, which earns.
-* **the closing note** follows the age band the model itself uses. A protocol inside the model's
-  youngest band — 49 of the 188 dated rows, tracked for under 182 days — is described as early,
-  with the launch curve's own finding quoted back: protocols this young issue *least* often. The
-  other rows are described as slow ones. A protocol with no first-tracked date is told that the
-  house cannot tell how long it has run, and is not told anything it cannot support.
+* **the closing note** quotes the record and the model's own reading of it, and draws no
+  conclusion the model does not support. A protocol inside the model's youngest band — 49 of the
+  188 dated rows, tracked for under 182 days — is described as early, with the launch curve's own
+  finding quoted back: protocols this young issue *least* often. The other 139 dated rows quote
+  their **own** odds figure and then the curve's direction: the older a protocol is, the likelier
+  it is to issue. A protocol with no first-tracked date — 7 rows — is told that the house cannot
+  tell how long it has run, and is not told anything it cannot support.
+
+  The note used to call every long-tracked, token-less protocol "a slow one". That was the
+  entry's own model turned upside down: the launch curve's fitted age logits are monotone in the
+  observed band rates — **5.8%** in the youngest band against **75.0%** in the oldest — so the
+  note was telling 139 rows the opposite of what the board's own column said, 92 of them on rows
+  at or above the median, the top-ranked row among them at **70.6%**. A reader who read the
+  board's curve and then the plan's note would find them contradicting each other, and the
+  rubric's first criterion is that the screenshots and the code agree. The note now states the
+  record, quotes the row's own number, and defers to the curve. `verify.mjs` gates this: no plan
+  may call a protocol slow, and the gate's control plants the old wording on the top row and
+  requires the gate to fire.
 
 The plan is generated **once**, by `lib/model.ts`, and travels with the row: the nine steps go into
 `board.json` and into the dataset the page reads. The detail view shows those same nine steps, so

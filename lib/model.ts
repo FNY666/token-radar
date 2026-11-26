@@ -1642,41 +1642,50 @@ function gasOnChain(chain: string): number {
  * and `CDP Manager` is not a lending market because both carry the word "CDP". Every line names the
  * protocol, the amount, the asset, the chain and what the farmer ends up holding.
  *
+ * Every line is a claim about the protocol, so every line may say only what the snapshot can
+ * support. The snapshot carries ten fields per protocol -- category, chains, TVL, a week's
+ * change, a market cap, a listing date and three token identifiers -- and NOT ONE of them
+ * records a product name, a pool, a vault, a score, a schedule or a term. So the table names no
+ * "largest vault" (18 rows), no "deepest pool" (21 rows), no "best-scoring strategy" (9 rows),
+ * no "curated vault" (34 rows) and no cadence the record cannot carry: the lines below say what
+ * the farmer does and what they end up holding, and leave the choice of which product to the
+ * reader, who can see the protocol's own products where the plan cannot.
+ *
  * `{name}` is the protocol's own name, `{poss}` its name in the possessive, `{cap}` the capital its
  * TVL asks for, `{chain}` the chain it sits on and `{cat}` the category itself, used by the
  * fallback line.
  */
 const CATEGORY_ACTIONS: Record<string, string> = {
-  'Risk Curators': "Deposit {cap} of USDC into a {name} curated vault on {chain} and keep the shares in the wallet.",
-  'Onchain Capital Allocator': "Deposit {cap} of USDC into {poss} largest vault on {chain} and keep the vault receipt token.",
-  'Prediction Market': "Fund {cap} of USDC on {name} on {chain}, take one small position on a market, and hold the outcome shares to the settlement.",
-  'Dexs': "Provide {cap} of USDC and the paired asset in {poss} deepest pool on {chain} and hold the LP position open.",
-  'Indexes': "Buy {cap} of {poss} index token on {chain} and hold it to the next rebalance.",
+  'Risk Curators': "Deposit {cap} of USDC into a {name} vault on {chain} and keep the shares in the wallet.",
+  'Onchain Capital Allocator': "Deposit {cap} of USDC into a {poss} vault on {chain} and keep the vault receipt token.",
+  'Prediction Market': "Fund {cap} of USDC on {name} on {chain}, take one small position on a market, and hold the outcome shares.",
+  'Dexs': "Provide {cap} of USDC and the paired asset in a {poss} pool on {chain} and hold the LP position open.",
+  'Indexes': "Buy {cap} of {poss} index token on {chain} and hold it.",
   'CDP': "Lock {cap} of USDC as collateral in {name} on {chain}, draw no debt against it, and keep the vault open.",
-  'CDP Manager': "Set up a {cap} USDC collateral position in {name} on {chain} and leave it open through the rebalances.",
+  'CDP Manager': "Set up a {cap} USDC collateral position in {name} on {chain} and leave it open.",
   'Collateral Markets': "Post {cap} of USDC as collateral in {name} on {chain}, borrow the paired asset against it, and hold both sides of the trade.",
-  'Uncollateralized Lending': "Lend {cap} of USDC to a borrower through {name} on {chain} and keep the loan open to its term.",
+  'Uncollateralized Lending': "Lend {cap} of USDC to a borrower through {name} on {chain} and keep the loan open.",
   'Lending': "Supply {cap} of USDC to {name} on {chain}, borrow nothing against it, and keep the position open.",
-  'RWA': "Buy {cap} of {poss} yield-bearing note on {chain} and hold it to the end of the term.",
-  'Chain': "Bridge {cap} of USDC onto {chain} and spend it in {name}'s app and its ecosystem, keeping the bridged balance open.",
+  'RWA': "Buy {cap} of {poss} yield-bearing note on {chain} and hold it.",
+  'Chain': "Bridge {cap} of USDC onto {chain} and spend it in {name}'s own products, keeping the bridged balance open.",
   'Basis Trading': "Deposit {cap} of USDC as margin on {name} and open one small funding-rate position on {chain}.",
   'Derivatives': "Post {cap} of USDC as margin on {name} and open one small long position on {chain}.",
   'Interest Rate Derivatives': "Post {cap} of USDC as margin on {name} on {chain} and open one small fixed-rate position.",
   'Restaking': "Buy {cap} of the chain's native asset and restake it through {name} on {chain}, keeping the liquid restaking receipt.",
-  'Staking Pool': "Buy {cap} of the chain's native asset and delegate it to {poss} pool on {chain}, keeping the pool receipt.",
-  'OTC Marketplace': "Open a {cap} USDC position on {poss} OTC desk on {chain} and hold it to the settlement date.",
-  'Yield Aggregator': "Route {cap} of USDC into {poss} best-scoring strategy on {chain} and hold the strategy receipt token.",
-  'Yield': "Deposit {cap} of USDC into {poss} own yield product on {chain} and hold the receipt token until it claims.",
+  'Staking Pool': "Buy {cap} of the chain's native asset and delegate it to a {poss} pool on {chain}, keeping the pool receipt.",
+  'OTC Marketplace': "Open a {cap} USDC position on a {poss} OTC desk on {chain} and hold it.",
+  'Yield Aggregator': "Route {cap} of USDC into a {poss} strategy on {chain} and hold the strategy receipt token.",
+  'Yield': "Deposit {cap} of USDC into a {poss} yield product on {chain} and keep the receipt token.",
   'CeDeFi': "Deposit {cap} of USDC into {name}'s CeDeFi product on {chain} and hold the receipt token it issues.",
-  'Liquidity Manager': "Deposit {cap} of USDC into {poss} managed liquidity position on {chain} and hold it until the next rebalance.",
-  'Stablecoin Wrapper': "Wrap {cap} of USDC into {poss} wrapper token on {chain} and hold the wrapped balance.",
-  'Dual-Token Stablecoin': "Swap {cap} of USDC into {poss} dual-token stablecoin on {chain} and hold both halves of the pair.",
+  'Liquidity Manager': "Deposit {cap} of USDC into {poss} managed liquidity position on {chain} and hold it.",
+  'Stablecoin Wrapper': "Wrap {cap} of USDC into a {poss} wrapper token on {chain} and hold the wrapped balance.",
+  'Dual-Token Stablecoin': "Swap {cap} of USDC into a {poss} dual-token stablecoin on {chain} and hold both halves of the pair.",
   'Payments': "Buy {cap} of BTC with USDC, open a Lightning channel to a peer node on {chain}, and keep the channel balance in place.",
-  'Governance Incentives': "Stake {cap} of the chain's native asset through {name} on {chain}, take part in its incentive programme, and keep the staking receipt.",
+  'Governance Incentives': "Stake {cap} of the chain's native asset through {name} on {chain} and keep the staking receipt.",
   'Insurance': "Buy {cap} of cover from {name} on {chain} and keep the policy open.",
-  'Decentralized BTC': "Buy {cap} worth of BTC and deposit it into {poss} vault on {chain}, holding the BTC receipt.",
+  'Decentralized BTC': "Buy {cap} worth of BTC and deposit it into a {poss} vault on {chain}, holding the BTC receipt.",
   'Leveraged Farming': "Open a {cap} USDC leveraged farming position in {name} on {chain} and keep the collateral posted.",
-  'Farm': "Deposit {cap} of USDC into {poss} farm pool on {chain} and hold the pool receipt.",
+  'Farm': "Deposit {cap} of USDC into a {poss} farm pool on {chain} and hold the pool receipt.",
   'Crypto Card Issuer': "Open a {name} card on {chain}, fund it with {cap} of USDC, and keep the balance in the card account.",
   // Categories the snapshot holds that the board does not rank today, kept here so a board that
   // reaches them still reads like a plan and not like a slogan.
@@ -1688,12 +1697,12 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   'Reserve Currency': "Hold {cap} of the reserve asset on {name} on {chain} and keep it in the reserve vault.",
   'Collateral Management': "Post {cap} of USDC as collateral in {name} on {chain} and keep the position open.",
   Launchpad: "Bridge {cap} of USDC to {name} on {chain} and buy one of the launches it lists.",
-  'Token Locker': "Lock {cap} of the protocol's own tokens in {name} on {chain} and keep the lock open to the unlock.",
-  Privacy: "Send {cap} of USDC through {poss} shielded pool on {chain} and keep the receipt.",
+  'Token Locker': "Lock {cap} of the protocol's own tokens in {name} on {chain} and keep the lock open.",
+  Privacy: "Send {cap} of USDC through a {poss} shielded pool on {chain} and keep the receipt.",
   'NFT Marketplace': "Buy {cap} of USDC worth of a listed NFT from {name} on {chain} and keep it in the wallet.",
-  'AI Agents': "Deposit {cap} of USDC into {poss} agent treasury on {chain} and keep the agent's own receipt.",
+  'AI Agents': "Deposit {cap} of USDC into a {poss} agent treasury on {chain} and keep the agent's own receipt.",
   'Decentralized AI': "Rent {cap} of USDC worth of compute from {name} on {chain} and keep the rental receipt.",
-  DOR: "Deposit {cap} of USDC into {poss} liquidity pool on {chain} and hold the LP receipt.",
+  DOR: "Deposit {cap} of USDC into a {poss} liquidity pool on {chain} and hold the LP receipt.",
 };
 
 /** The fallback line: the one action a category the table does not name still gets. */

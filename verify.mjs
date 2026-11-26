@@ -3326,21 +3326,41 @@ for (const name of shots) {
   // so that sentence asserts the protocol HAS checkpoints -- the entry's own rule ("never promise
   // what the record cannot support") broken in the one step a reader acts on.
   {
-    let checkpointBad = 0;
+    // The action table's superlatives and product claims. The record carries no product names, no
+    // per-vault or per-pool TVL, no scores and no schedules, so a plan that names "its largest
+    // vault", "the deepest pool" or "the best-scoring strategy" is asserting something the entry
+    // cannot know -- and "its app" and "the settlement" and "the term" name a cadence and a
+    // product the record does not carry either.
+    const UNSUPPORTED = [
+      /\blargest\b/i, /\bdeepest\b/i, /best-scoring/i, /\bcurated\b/i,
+      /the settlement/i, /\bthe term\b/i, /until it claims/i, /to the unlock/i,
+      /the next rebalance/i, /incentive programme/i, /incentive program/i,
+      /\bthe protocol's own checkpoints\b/i, /checkpoint|epoch/i,
+    ];
+    let claimBad = 0;
+    const offenders = [];
     for (const r of rows) {
-      if (/checkpoint|epoch|season cycle|the protocol's own cycle/i.test(r.farm_steps.join(' | '))) checkpointBad++;
+      for (const s of r.farm_steps) {
+        const hit = UNSUPPORTED.find((re) => re.test(s));
+        if (hit) {
+          claimBad++;
+          if (offenders.length < 3) offenders.push(`${r.name}: ${s.slice(0, 90)}`);
+          break;
+        }
+      }
     }
-    check('no farm plan asserts a checkpoint or a cycle the record does not carry', checkpointBad === 0,
-      checkpointBad === 0 ? 'none do' : `${checkpointBad} do`);
+    check('no farm plan asserts a superlative, a product or a cadence the record cannot carry',
+      claimBad === 0,
+      claimBad === 0 ? 'none do' : `${claimBad} do: ${offenders.join('; ')}`);
 
     // The control: the SAME check over a plan that DOES assert one. It must fire.
     {
       const r = rows[0];
-      const planted = r.farm_steps.slice(0, 3).concat([
-        'Hold the position for at least 30 days, keeping it open rather than closed out, so the position is open across more than one of the protocol\'s own checkpoints. Cost: the stake stays where the protocol keeps it. Time: 30 days.',
-      ]).concat(r.farm_steps.slice(4));
-      const fires = /checkpoint|epoch|season cycle|the protocol's own cycle/i.test(planted.join(' | '));
-      check('the checkpoint gate can fail: a planted checkpoint claim is caught', fires,
+      const planted = r.farm_steps.slice(0, 1).concat([
+        'Deposit $5250 of USDC into Polymarket International\'s largest vault on Polygon and keep the shares in the wallet. Cost: $5250 of capital and about $3 of gas. Time: 20 minutes to set up.',
+      ]).concat(r.farm_steps.slice(2));
+      const fires = UNSUPPORTED.some((re) => re.test(planted.join(' | ')));
+      check('the unsupported-claim gate can fail: a planted "largest vault" is caught', fires,
         fires ? 'caught' : 'NOT CAUGHT -- the gate measures nothing');
     }
   }

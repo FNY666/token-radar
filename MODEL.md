@@ -638,8 +638,18 @@ catch them, so the check cannot pass by measuring nothing.
 Every row carries nine steps, each an action with a cost and a time, derived from the protocol's own
 record and never from a hand-written list of names:
 
-* **the action** follows from the category (a curated vault is deposited into, a lending market is
-  supplied to, a DEX is provided liquidity to, and so on);
+* **the action** follows from the category (a vault is deposited into, a lending market is supplied
+  to, a DEX is provided liquidity to, and so on) — and it says only what the record can support.
+  A template line is a claim about the protocol, not just a phrasing, and the snapshot's ten
+  fields carry no product name, no per-vault or per-pool TVL, no score and no schedule. So the
+  table names no **largest vault** (18 rows), no **deepest pool** (21 rows), no **best-scoring
+  strategy** (9 rows) and no **curated vault** (34 rows), and it names no cadence either: "to the
+  settlement", "to the end of the term", "until it claims", "to the next rebalance" and "to the
+  unlock" all became "and hold it". The lines say what the farmer does and what they end up
+  holding, and leave the choice of which product to the reader, who can see the protocol's own
+  products where the plan cannot. `verify.mjs` gates this: no plan may assert a superlative, a
+  product or a cadence the record cannot carry, and the gate's control plants a "largest vault"
+  line and requires the gate to fire;
 * **the capital** follows from the TVL, as a ladder: the bigger the book, the deeper the
   position. The shape is fixed — a book 40 times the size gets a stake 8 times deeper — and the
   **scale** is set so that the plan's gas is a small share of the stake: **$1050** below $50M,

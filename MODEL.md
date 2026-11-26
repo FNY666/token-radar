@@ -367,6 +367,16 @@ nothing; the drawer's header is sticky, so the row's name stays on screen while 
 the plan. The board is shot 1280 wide so the table keeps every column, and the filtered view is
 800 wide, which is the narrowest width that keeps the hero in two columns *and* the table whole.
 
+The clip is a hard edge, so **where the frame lands is measured, not chosen**: the drawer's
+sticky header is 82.4px tall, so a line of text is only readable between `scrollTop + 82.4` and
+`scrollTop + 833`, and every line must lie wholly inside that band or wholly outside it.
+Offsets 247–258 satisfy that with the pricing table and the snapshot record whole; 252 is the
+middle of the band, and the shot's last row carries **0 lit pixels**. The shot used to be taken
+at offset 240, which sliced step 2's cost line across the bottom edge — the judge read half of
+*"Cost: $8400 of capital and about $3 of gas · Time: 20 minutes to set up"*, and a fragment of a
+cost line reads as a wrong figure rather than as a frame. Measured on the rendered pixels, that
+shot's last row carried **139 lit pixels**: text, cut in half.
+
 Two consequences worth stating, because both are easy to get wrong:
 
 * the kit's advice is 300–350 KB a screenshot, and its reason is the dossier ("three at the

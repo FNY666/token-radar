@@ -691,6 +691,37 @@ the *upside*: at 8.53px on the cover and 7.6px on the sheet, the digits are righ
 check the cover's row 1 against the detail shot's drawer, which is criterion 1 made checkable
 rather than asserted.
 
+#### The transcript bundle's pin, measured rather than assumed (2026-11-26)
+
+`submission/scripts/rebuild-bundle.sh` pins the sessions that go into the transcript bundle by
+id, and it pinned the polish window's **first** session, `48b36615`. This polish pass is a
+**second** session (`5a4e9961`), and it wrote files into the tree — so the pin was asked to
+carry both. That is not a question to be answered by reading the script; it is a question the
+kit answers, and the answer is not what either reading suggests.
+
+Three bundles were built with the kit's own `bundle --no-discover` and checked with the kit's
+own `check --transcripts`:
+
+| configuration | bytes | `thinking_reproduces` | `check` |
+| --- | --- | --- | --- |
+| build + polish `48b36615` — **the current pin** | 38,724,036 | **18.1%** | **FAIL** (30% required) |
+| build + polish `5a4e9961` — the naive repin | 79,170,996 | **29.4%** | **FAIL** (30% required) |
+| build + **both** polish sessions | 102,537,282 | **32.7%** | **13 passed, 0 failed** |
+
+The naive repin — the one the obvious reading suggests — **fails**, at 29.4% against a 30%
+requirement. The reason is in the check's own output: the files with no agent evidence are the
+**scratch tools the first polish session wrote** (`tools/refute_ascii.cjs`,
+`tools/rev_blow2.cjs`, `tools/rev_find_text.cjs` and 12 more). The tree carries files from
+*both* polish sessions, so the bundle must carry *both* sessions; drop either one and the files
+that session wrote lose their evidence.
+
+And the current pin, left alone, is worse still: at **18.1%** it fails on the same tree. The
+pin was not merely stale — it was already failing, because this polish pass added files the
+first session's bundle cannot account for.
+
+The three-session bundle is the only configuration that passes, and it does so at 97.8 MiB,
+comfortably under the 200 MiB limit. The submission window's rebuild script now names all three.
+
 #### The levers that were measured and closed
 
 * **A fourth screenshot.** The kit composes the cover alone on one sheet and the rest on a

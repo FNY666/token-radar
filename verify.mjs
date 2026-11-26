@@ -3641,6 +3641,119 @@ for (const name of shots) {
       }
     }
 
+    // No template may ask the reader to BRIDGE capital, and no template may tell the reader to
+    // move capital ONTO a protocol.
+    //
+    // The `Chain` line used to read "Bridge {cap} of USDC onto {chain} and spend it in {name}'s
+    // own products". The snapshot carries no source chain, no bridge and no route -- its ten
+    // fields hold the category, the chains, the TVL, a week's change, a market cap, a listing date
+    // and three token identifiers, and none of them says where capital comes FROM. So the line
+    // asked for a move the record cannot support. Worse, on three of the four rows it reached it
+    // described no move at all: it asked the reader to bridge onto the protocol's OWN ONLY chain
+    // (Hive Protocol -> BSquared, Abstract -> Ethereum, XION Finance -> XION, Noble -> Noble), so
+    // the capital is already there and there is nothing to bridge. The `Launchpad` line had the
+    // same defect with the chain and the protocol swapped: "Bridge {cap} of USDC to {name}".
+    {
+      const bridgeBad = [];
+      const tableBody3 = libSrc.slice(
+        libSrc.indexOf('const CATEGORY_ACTIONS'),
+        libSrc.indexOf('const NON_YIELDING_CATEGORIES'),
+      );
+      const tableRe3 = /^\s*(?:'([^']+)'|([A-Za-z][A-Za-z ]*?))\s*:\s*"((?:[^"\\]|\\.)*)"/;
+      for (const line of tableBody3.split('\n')) {
+        const m = tableRe3.exec(line);
+        if (!m) continue;
+        const cat = m[1] ?? m[2];
+        const tpl = m[3];
+        // A bridge needs a source the record does not carry.
+        if (/\bbridge\b|\bbridged\b/i.test(tpl)) bridgeBad.push(`${cat}: ${tpl.slice(0, 70)}`);
+        // Capital moved ONTO a protocol AS A DESTINATION -- a protocol is not a chain. The pattern
+        // is deliberately narrow, and it is checked against the template with the PLACEHOLDER
+        // still in it: "Supply $1050 of USDC to {name}" is right on the lending lines, where the
+        // protocol is the counterparty and not a place, while "Bridge $1050 of USDC to {name}" is
+        // a MOVE -- capital brought onto the protocol as though it were a chain it had to arrive
+        // on. So the trigger is the MOVE word, and the destination must be the protocol itself.
+        if (/\b(?:bridge|bridged)\b[^"]*?\bto \{name\}\b/i.test(tpl)
+          || /\b(?:bridge|bridged)\b[^"]*?\b(?:onto|in) \{name\}\b/i.test(tpl)) {
+          bridgeBad.push(`${cat}: capital moved onto the protocol itself: ${tpl.slice(0, 70)}`);
+        }
+        // And a template that says "onto {chain}" for a category that does not bridge: a chain is
+        // where a position SITS, not something capital is moved onto.
+        if (/\bonto \{chain\}/i.test(tpl) && !/\bbridge\b/i.test(tpl)) {
+          bridgeBad.push(`${cat}: capital moved onto the chain: ${tpl.slice(0, 70)}`);
+        }
+      }
+      check('no action template asks the reader to bridge capital the record cannot place',
+        bridgeBad.length === 0,
+        bridgeBad.length === 0 ? 'no template names a bridge or a protocol as a destination'
+          : `${bridgeBad.length} do: ${bridgeBad.join('; ')}`);
+
+      // The control: a template that DOES ask for a bridge must be caught.
+      {
+        const planted = "  Chain: \"Bridge {cap} of USDC onto {chain} and spend it in {name}'s own products, keeping the bridged balance open.\",";
+        const m = tableRe3.exec(planted);
+        const tpl = m ? m[3] : '';
+        const hit = /\bbridge\b|\bbridged\b/i.test(tpl);
+        check('the bridge gate can fail: a planted bridge template is caught', hit,
+          hit ? 'caught' : 'NOT CAUGHT -- the gate measures nothing');
+      }
+    }
+
+    // No template may name an ASSET or a NETWORK the record cannot support.
+    //
+    // The `Payments` line said "Buy {cap} of BTC with USDC, open a Lightning channel" -- but the
+    // snapshot holds THREE protocols filed under Payments (Lightning Network, Streamflow,
+    // Superfluid), and only the first is a Bitcoin lightning network; the other two run on Solana
+    // and on the EVM. The line told the reader to buy Bitcoin and open a lightning channel on a
+    // chain that has neither. The three staking lines said "the chain's native asset", a noun
+    // phrase that names an asset no field of the ten identifies: the chains include Qubic, Mezo
+    // and Algorand.
+    //
+    // A template may name an asset when the CATEGORY itself names it -- the `Decentralized BTC`
+    // line says BTC, and BTC is in the category's name -- and it may name the assets the plan
+    // already deals in, USDC and the chain's own. What it may not do is name a coin or a network
+    // the record does not carry, and the sharpest test of that is a CATEGORY line naming a chain
+    // the category's own protocols do not all run on.
+    {
+      const assetBad = [];
+      const tableBody4 = libSrc.slice(
+        libSrc.indexOf('const CATEGORY_ACTIONS'),
+        libSrc.indexOf('const NON_YIELDING_CATEGORIES'),
+      );
+      const tableRe4 = /^\s*(?:'([^']+)'|([A-Za-z][A-Za-z ]*?))\s*:\s*"((?:[^"\\]|\\.)*)"/;
+      // The categories whose own name carries the asset, and the assets they carry.
+      const CATEGORY_ASSET = { 'Decentralized BTC': /\bBTC\b/i };
+      for (const line of tableBody4.split('\n')) {
+        const m = tableRe4.exec(line);
+        if (!m) continue;
+        const cat = m[1] ?? m[2];
+        const tpl = m[3];
+        // A named network: a proper noun that is not a placeholder and not a plain word.
+        for (const nm of tpl.matchAll(/\b(Lightning|Bitcoin|Ethereum|Solana|Bitcoin)\b/g)) {
+          if (nm[1] === 'Bitcoin' && CATEGORY_ASSET[cat]) continue;
+          assetBad.push(`${cat}: names the network "${nm[1]}"`);
+        }
+        // "the chain's native asset": the record does not say what a chain's own coin is.
+        if (/the chain'?s native asset/i.test(tpl)) {
+          assetBad.push(`${cat}: names an asset the record does not identify`);
+        }
+      }
+      check('no action template names an asset or a network the record cannot carry',
+        assetBad.length === 0,
+        assetBad.length === 0 ? 'no template names an asset the record does not carry'
+          : `${assetBad.length} do: ${assetBad.join('; ')}`);
+
+      // The control: a template that DOES name a network the record cannot carry must be caught.
+      {
+        const planted = "  Payments: \"Buy {cap} of BTC with USDC, open a Lightning channel to a peer node on {chain}, and keep the channel balance in place.\",";
+        const m = tableRe4.exec(planted);
+        const tpl = m ? m[3] : '';
+        const hit = /\bLightning\b/.test(tpl);
+        check('the asset gate can fail: a planted "Lightning channel" template is caught', hit,
+          hit ? 'caught' : 'NOT CAUGHT -- the gate measures nothing');
+      }
+    }
+
     // Every template's placeholders must be ones the library can fill.
     //
     // A template with a placeholder the filler does not know renders as "undefined's vault", and
@@ -3649,7 +3762,7 @@ for (const name of shots) {
     // gate checks the same thing from the other side: every placeholder in every template is one
     // the filler knows.
     {
-      const KNOWN = new Set(['name', 'poss', 'cap', 'chain']);
+      const KNOWN = new Set(['name', 'poss', 'cap', 'chain', 'art']);
       const tableBody2 = libSrc.slice(
         libSrc.indexOf('const CATEGORY_ACTIONS'),
         libSrc.indexOf('const NON_YIELDING_CATEGORIES'),
@@ -3680,6 +3793,70 @@ for (const name of shots) {
         const bad = [...planted.matchAll(/\{([a-z]+)\}/g)].filter((m) => !KNOWN.has(m[1])).map((m) => m[1]);
         check('the placeholder gate can fail: an unknown placeholder is caught', bad.length > 0,
           bad.length > 0 ? `caught (${bad.join(', ')})` : 'NOT CAUGHT -- the gate measures nothing');
+      }
+    }
+
+    // The article in front of a protocol's own name must be right, and the possessive must match
+    // the name's plurality.
+    //
+    // The templates used to write the article out by hand -- "into a {poss} vault" -- which is
+    // right for a lower-case noun and wrong for a protocol's own name. It produced "a Veda's
+    // vault" on 7 rows (an indefinite article in front of a possessive is not English), and it
+    // disagreed with the word it stood in front of on 20 more: "a IPOR Fusion vault", "an Avant
+    // avUSD vault", "an AgnI Finance vault". Choosing the article from the name's first LETTER
+    // does not work either -- an English reader says "a Steakhouse", "an XRPL" and "a USDCx",
+    // and the snapshot records no pronunciation, so the entry has no basis on which to choose.
+    //
+    // So the templates do not choose at all: a protocol's own name takes "the", which needs no
+    // pronunciation, and a possessive takes NO article, because the possessive already carries
+    // the relation. The gate checks the SHIPPED lines, because the defect is in the filled text,
+    // not in the template.
+    {
+      let artBad = 0;
+      let possBad = 0;
+      const offenders = [];
+      for (const r of rows) {
+        // The row's own name, and the two ways it can appear in a line: bare, or possessive.
+        const name = r.name;
+        const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        for (const st of r.farm_steps) {
+          // An INDEFINITE article in front of the protocol's own name: "a Gauntlet vault", "an
+          // IPOR Fusion vault". A protocol's name is a proper noun, and the record carries no
+          // pronunciation, so the entry has no basis on which to choose "a" or "an" for it.
+          if (new RegExp(`\\b(?:a|an) ${esc}\\b`).test(st)) {
+            artBad++;
+            if (offenders.length < 3) offenders.push(`${r.name}: an indefinite article before its own name`);
+          }
+          // An indefinite article in front of ANY possessive proper noun: "a Veda's vault".
+          if (/\b(?:a|an) [A-Z][A-Za-z0-9]*'s\b/.test(st)) {
+            artBad++;
+            if (offenders.length < 3) offenders.push(`${r.name}: an indefinite article before a possessive`);
+          }
+          // The possessive must match the name's plurality: a singular name takes 's, a plural
+          // name takes the bare apostrophe.
+          for (const m of st.matchAll(/\b([A-Za-z][A-Za-z0-9 ]*?)'([s]?) (?=[a-z]+ )/g)) {
+            const nm = m[1];
+            if (!/^[A-Z]/.test(nm)) continue;
+            if (/s$/.test(nm) === (m[2] === 's')) {
+              possBad++;
+              if (offenders.length < 6) offenders.push(`${r.name}: "${nm}'${m[2]}"`);
+            }
+          }
+        }
+      }
+      check('no farm plan puts a wrong article in front of a protocol\'s own name', artBad === 0,
+        artBad === 0 ? 'every article agrees with the word it stands in front of'
+          : `${artBad} lines do: ${offenders.slice(0, 3).join('; ')}`);
+      check('every possessive matches the plurality of the name it belongs to', possBad === 0,
+        possBad === 0 ? 'every possessive agrees with its name'
+          : `${possBad} do: ${offenders.slice(3, 6).join('; ')}`);
+
+      // The control: a line with the old "a {poss}" article must be caught.
+      {
+        const planted = 'Deposit $5250 of USDC into a Veda\'s vault on Ink and keep the vault receipt token.';
+        const fires = /\ba [A-Z][A-Za-z0-9]*'s\b/.test(planted);
+        check('the article gate can fail: a planted "a Veda\'s vault" is caught', fires,
+          fires ? 'caught' : 'NOT CAUGHT -- the gate measures nothing');
       }
     }
 
@@ -3727,6 +3904,145 @@ for (const name of shots) {
       const fires = !!(pm && hm && Number(pm[1]) !== Number(hm[1]));
       check('the note-window gate can fail: a note that quotes a different window is caught', fires,
         fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
+  // The closing note must not assert a history the record does not carry.
+  //
+  // It used to say "X has issued no token since <date>". The snapshot records no token NOW; it
+  // carries no history, so it cannot say what a protocol did before the record began -- and the
+  // house's own rule says it outright: "say a protocol records no token, never that it has
+  // none". The board's own headline says "Every protocol here records no token", and the note
+  // said the opposite about the same rows.
+  {
+    let historyBad = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
+      if (!/\bhas issued\b|\bissued no token\b|\bhas not issued\b/i.test(note)) continue;
+      historyBad++;
+      if (offenders.length < 3) offenders.push(`${r.name}: ${note.slice(0, 80)}`);
+    }
+    check('the closing note says a protocol RECORDS no token, not that it has issued none',
+      historyBad === 0,
+      historyBad === 0 ? 'no plan claims a protocol has issued nothing'
+        : `${historyBad} plans claim a history the snapshot cannot carry: ${offenders.join('; ')}`);
+
+    // The control: the SAME check over a note that claims the history. It must fire, or the gate
+    // above measures nothing.
+    {
+      const r = rows[0];
+      const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
+      const planted = r.farm_steps.slice(0, -1).concat([
+        note.replace(/records no token of its own/, 'has issued no token since'),
+      ]);
+      const fires = /\bhas issued\b|\bissued no token\b|\bhas not issued\b/i.test(planted[planted.length - 1] ?? '');
+      check('the note-history gate can fail: a planted "has issued no token" is caught', fires,
+        fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
+  // The closing note must not chain the window off the odds.
+  //
+  // The note used to read "the launch curve reads its odds at X% -- the older a protocol is, the
+  // likelier it is to issue -- so the plan holds it for N days". The window does NOT follow the
+  // odds: the ladder reads the protocol's own AGE BAND, while the odds also move with the TVL
+  // band and the week's growth. So the note told the reader the window was set by the number
+  // printed right in front of it, and it was not: on the shipped board 47 of the 139 rows that
+  // sentence covered carried odds BELOW the board's median, three of them on the model's own 5%
+  // odds floor. A reader who checked the note against the board would find them disagree.
+  {
+    let chained = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
+      // The note may QUOTE the odds -- that is the board's own column -- but it may not make the
+      // odds the REASON for the window, which is what "the older a protocol is, the likelier it
+      // is to issue -- so the plan holds it for N days" did.
+      if (!/the older a protocol is, the likelier it is to issue/i.test(note)) continue;
+      chained++;
+      if (offenders.length < 3) offenders.push(`${r.name}: ${note.slice(0, 90)}`);
+    }
+    check('the closing note does not make the odds the reason for the window', chained === 0,
+      chained === 0 ? 'no note chains the window off the odds'
+        : `${chained} notes do: ${offenders.join('; ')}`);
+
+    // The control: a note with the old chaining must be caught.
+    {
+      const r = rows[0];
+      const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
+      const planted = r.farm_steps.slice(0, -1).concat([
+        note.replace(/Read the curve, not this note, for the odds\./,
+          'The older a protocol is, the likelier it is to issue — so the plan holds it for 7 days.'),
+      ]);
+      const fires = /the older a protocol is, the likelier it is to issue/i.test(planted[planted.length - 1] ?? '');
+      check('the note-window-cause gate can fail: a planted odds-chained window is caught', fires,
+        fires ? `caught on ${r.name}` : 'NOT CAUGHT -- the gate measures nothing');
+    }
+  }
+
+  // The closing note must not deny the launch to a row the board ranks ON the launch.
+  //
+  // The note used to end "the position is for the yield, not for the launch" on every young row
+  // AND on every row with no first-tracked date. On the undated rows that was worse than wrong:
+  // the board ranks those rows by their launch odds, six of the seven carry above-median odds,
+  // and the highest of them is rank 7 of 195 with $12.8M of implied value at 57.5% odds. The note
+  // told the reader the launch was not what the position was for, on the row the board ranked
+  // seventh. And on 17 of the 56 rows the note promised a yield that step 4 had already said was
+  // not there ("what it earns, if anything, is yours").
+  {
+    const probs = rows.map((r) => r.launch_probability).sort((a, b) => a - b);
+    const median = probs[Math.floor(probs.length / 2)];
+    let denied = 0;
+    let earnedNothing = 0;
+    const offenders = [];
+    for (const r of rows) {
+      const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
+      if (!/not for the launch/i.test(note)) continue;
+      denied++;
+      // Step 4 is the plan's own statement of whether the position earns. If it says the
+      // position earns nothing, the note cannot promise the yield.
+      if (/what it earns, if anything, is yours/i.test(r.farm_steps[3] ?? '')) {
+        earnedNothing++;
+        if (offenders.length < 3) offenders.push(`${r.name}: the note promises the yield, step 4 says there is none`);
+      }
+    }
+    check('the closing note never promises a yield the hold step says is not there', earnedNothing === 0,
+      earnedNothing === 0
+        ? `${denied} notes say the position is for the yield, and every one of them is a row that earns`
+        : `${earnedNothing} of ${denied} notes promise a yield their own hold step says is not there: ${offenders.join('; ')}`);
+
+    // A row the board ranks ON the launch may not have the launch denied to it -- unless the
+    // row is young, where the curve itself says protocols that young issue least often, and the
+    // note says so with the curve's own number in front of the reader.
+    let deniedAboveMedian = 0;
+    const aboveOffenders = [];
+    for (const r of rows) {
+      const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
+      if (!/not for the launch/i.test(note)) continue;
+      if (r.launch_probability <= median) continue;
+      deniedAboveMedian++;
+      if (aboveOffenders.length < 3) aboveOffenders.push(`${r.name} at ${(r.launch_probability * 100).toFixed(1)}% odds`);
+    }
+    check('no row the board ranks above its own median has the launch denied to it', deniedAboveMedian === 0,
+      deniedAboveMedian === 0
+        ? `the board's median odds are ${(median * 100).toFixed(1)}%`
+        : `${deniedAboveMedian} above-median rows are told the launch is not what the position is for: ${aboveOffenders.join('; ')}`);
+
+    // The control: a note that denies the launch on an above-median row must be caught.
+    {
+      const r = rows.find((x) => x.launch_probability > median) ?? rows[0];
+      const note = r.farm_steps[r.farm_steps.length - 1] ?? '';
+      const planted = r.farm_steps.slice(0, -1).concat([
+        note.replace(/Read the curve, not this note, for the odds\./,
+          'The position is for the yield, not for the launch.'),
+      ]);
+      const fires = /not for the launch/i.test(planted[planted.length - 1] ?? '')
+        && r.launch_probability > median;
+      check('the note-launch gate can fail: a planted "not for the launch" on an above-median row is caught',
+        fires,
+        fires ? `caught on ${r.name} at ${(r.launch_probability * 100).toFixed(1)}% odds`
+          : 'NOT CAUGHT -- the gate measures nothing');
     }
   }
 

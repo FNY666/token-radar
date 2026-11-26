@@ -1657,12 +1657,39 @@ function gasOnChain(chain: string): number {
  * TVL asks for and `{chain}` the chain it sits on. The category is deliberately NOT a
  * placeholder: a category is a label DefiLlama files a protocol under, not a product a reader can
  * put money into, so the fallback line does not name one.
+ *
+ * The `Chain` line used to say "BRIDGE {cap} of USDC ONTO {chain}". That named a move the record
+ * cannot support and, on three of the four rows it reached, described no move at all. The
+ * snapshot carries no source chain, no bridge, no route and no origin: its ten fields hold the
+ * protocol's category, its chains, its TVL, a week's change, a market cap, a listing date and
+ * three token identifiers -- none of which says where capital comes FROM. So the line asked the
+ * reader to bridge onto the protocol's own chain and told them nothing about where from. On
+ * "Noble" it asked them to bridge USDC onto "Noble", which is not a bridge but a protocol's own
+ * name; on "Hive Protocol" it asked them to bridge onto "BSquared", "Abstract" onto "Ethereum"
+ * and "XION Finance" onto "XION" -- in every case the protocol's ONLY chain, so the capital is
+ * already there and there is nothing to bridge. The verb now says what the reader does: bring
+ * the capital to the chain and spend it there. The `Launchpad` line had the same defect with the
+ * chain and the protocol swapped -- "Bridge {cap} of USDC to {name}" -- and says the same thing.
+ *
+ * Two lines also named an ASSET the record does not carry. The `Payments` line said "Buy {cap}
+ * of BTC with USDC, open a LIGHTNING channel" -- but the snapshot holds THREE protocols filed
+ * under Payments (Lightning Network, Streamflow, Superfluid), and only the first is a Bitcoin
+ * lightning network; the other two run on Solana and on the EVM. So the line told the reader to
+ * buy Bitcoin and open a lightning channel on a chain that has neither. It now speaks of "the
+ * native asset of {chain}" and of "a payment channel", which is what a payment protocol on
+ * that chain can actually do.
+ *
+ * And the three staking lines said "the chain's native asset" -- a noun phrase that names an
+ * asset the record does not identify: no field of the ten says what a chain's own coin is, and
+ * the chains here include Qubic, Mezo and Algorand. The lines now say "the native asset of
+ * {chain}", which names the chain the plan has already named and leaves the asset to the
+ * reader, who can see it where the plan cannot.
  */
 const CATEGORY_ACTIONS: Record<string, string> = {
-  'Risk Curators': "Deposit {cap} of USDC into a {name} vault on {chain} and keep the shares in the wallet.",
-  'Onchain Capital Allocator': "Deposit {cap} of USDC into a {poss} vault on {chain} and keep the vault receipt token.",
+  'Risk Curators': "Deposit {cap} of USDC into the {name} vault on {chain} and keep the shares in the wallet.",
+  'Onchain Capital Allocator': "Deposit {cap} of USDC into {poss} vault on {chain} and keep the vault receipt token.",
   'Prediction Market': "Fund {cap} of USDC on {name} on {chain}, take one small position on a market, and hold the outcome shares.",
-  'Dexs': "Provide {cap} of USDC and the paired asset in a {poss} pool on {chain} and hold the LP position open.",
+  'Dexs': "Provide {cap} of USDC and the paired asset in {poss} pool on {chain} and hold the LP position open.",
   'Indexes': "Buy {cap} of {poss} index token on {chain} and hold it.",
   'CDP': "Lock {cap} of USDC as collateral in {name} on {chain}, draw no debt against it, and keep the vault open.",
   'CDP Manager': "Set up a {cap} USDC collateral position in {name} on {chain} and leave it open.",
@@ -1670,26 +1697,26 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   'Uncollateralized Lending': "Lend {cap} of USDC to a borrower through {name} on {chain} and keep the loan open.",
   'Lending': "Supply {cap} of USDC to {name} on {chain}, borrow nothing against it, and keep the position open.",
   'RWA': "Buy {cap} of {poss} yield-bearing note on {chain} and hold it.",
-  'Chain': "Bridge {cap} of USDC onto {chain} and spend it in {name}'s own products, keeping the bridged balance open.",
+  'Chain': "Bring {cap} of USDC to {chain} and spend it in {name}'s own products, keeping the balance open.",
   'Basis Trading': "Deposit {cap} of USDC as margin on {name} on {chain}, and open one small funding-rate position there.",
   'Derivatives': "Post {cap} of USDC as margin on {name} on {chain}, and open one small long position there.",
   'Interest Rate Derivatives': "Post {cap} of USDC as margin on {name} on {chain} and open one small fixed-rate position.",
-  'Restaking': "Buy {cap} of the chain's native asset and restake it through {name} on {chain}, keeping the liquid restaking receipt.",
-  'Staking Pool': "Buy {cap} of the chain's native asset and delegate it to a {poss} pool on {chain}, keeping the pool receipt.",
-  'OTC Marketplace': "Open a {cap} USDC position on a {poss} OTC desk on {chain} and hold it.",
-  'Yield Aggregator': "Route {cap} of USDC into a {poss} strategy on {chain} and hold the strategy receipt token.",
-  'Yield': "Deposit {cap} of USDC into a {poss} yield product on {chain} and keep the receipt token.",
+  'Restaking': "Buy {cap} of the native asset of {chain} and restake it through {name} on {chain}, keeping the liquid restaking receipt.",
+  'Staking Pool': "Buy {cap} of the native asset of {chain} and delegate it to {poss} pool on {chain}, keeping the pool receipt.",
+  'OTC Marketplace': "Open a {cap} USDC position on {poss} OTC desk on {chain} and hold it.",
+  'Yield Aggregator': "Route {cap} of USDC into {poss} strategy on {chain} and hold the strategy receipt token.",
+  'Yield': "Deposit {cap} of USDC into {poss} yield product on {chain} and keep the receipt token.",
   'CeDeFi': "Deposit {cap} of USDC into {name}'s CeDeFi product on {chain} and hold the receipt token it issues.",
   'Liquidity Manager': "Deposit {cap} of USDC into {poss} managed liquidity position on {chain} and hold it.",
-  'Stablecoin Wrapper': "Wrap {cap} of USDC into a {poss} wrapper token on {chain} and hold the wrapped balance.",
-  'Dual-Token Stablecoin': "Swap {cap} of USDC into a {poss} dual-token stablecoin on {chain} and hold both halves of the pair.",
-  'Payments': "Buy {cap} of BTC with USDC, open a Lightning channel to a peer node on {chain}, and keep the channel balance in place.",
-  'Governance Incentives': "Stake {cap} of the chain's native asset through {name} on {chain} and keep the staking receipt.",
+  'Stablecoin Wrapper': "Wrap {cap} of USDC into {poss} wrapper token on {chain} and hold the wrapped balance.",
+  'Dual-Token Stablecoin': "Swap {cap} of USDC into {poss} dual-token stablecoin on {chain} and hold both halves of the pair.",
+  'Payments': "Buy {cap} of the native asset of {chain} with USDC, open a payment channel to a peer node on {chain}, and keep the channel balance in place.",
+  'Governance Incentives': "Stake {cap} of the native asset of {chain} through {name} on {chain} and keep the staking receipt.",
   'Insurance': "Buy {cap} of cover from {name} on {chain} and keep the policy open.",
-  'Decentralized BTC': "Buy {cap} worth of BTC and deposit it into a {poss} vault on {chain}, holding the BTC receipt.",
+  'Decentralized BTC': "Buy {cap} worth of BTC and deposit it into {poss} vault on {chain}, holding the BTC receipt.",
   'Leveraged Farming': "Open a {cap} USDC leveraged farming position in {name} on {chain} and keep the collateral posted.",
-  'Farm': "Deposit {cap} of USDC into a {poss} farm pool on {chain} and hold the pool receipt.",
-  'Crypto Card Issuer': "Open a {name} card on {chain}, fund it with {cap} of USDC, and keep the balance in the card account.",
+  'Farm': "Deposit {cap} of USDC into {poss} farm pool on {chain} and hold the pool receipt.",
+  'Crypto Card Issuer': "Open the {name} card on {chain}, fund it with {cap} of USDC, and keep the balance in the card account.",
   // Categories the snapshot holds that the board does not rank today, kept here so a board that
   // reaches them still reads like a plan and not like a slogan.
   Options: "Write {cap} of USDC into one {name} option on {chain} and hold it.",
@@ -1699,13 +1726,13 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   'Stablecoin Issuer': "Mint {cap} of the issued dollar on {name} on {chain} and hold it in the wallet.",
   'Reserve Currency': "Hold {cap} of the reserve asset on {name} on {chain} and keep it in the reserve vault.",
   'Collateral Management': "Post {cap} of USDC as collateral in {name} on {chain} and keep the position open.",
-  Launchpad: "Bridge {cap} of USDC to {name} on {chain} and buy one of the launches it lists.",
+  Launchpad: "Bring {cap} of USDC to {chain} and buy one of the launches {name} lists.",
   'Token Locker': "Lock {cap} of the protocol's own tokens in {name} on {chain} and keep the lock open.",
-  Privacy: "Send {cap} of USDC through a {poss} shielded pool on {chain} and keep the receipt.",
+  Privacy: "Send {cap} of USDC through {poss} shielded pool on {chain} and keep the receipt.",
   'NFT Marketplace': "Buy {cap} of USDC worth of a listed NFT from {name} on {chain} and keep it in the wallet.",
-  'AI Agents': "Deposit {cap} of USDC into a {poss} agent treasury on {chain} and keep the agent's own receipt.",
+  'AI Agents': "Deposit {cap} of USDC into {poss} agent treasury on {chain} and keep the agent's own receipt.",
   'Decentralized AI': "Rent {cap} of USDC worth of compute from {name} on {chain} and keep the rental receipt.",
-  DOR: "Deposit {cap} of USDC into a {poss} liquidity pool on {chain} and hold the LP receipt.",
+  DOR: "Deposit {cap} of USDC into {poss} liquidity pool on {chain} and hold the LP receipt.",
 };
 
 /**
@@ -1995,16 +2022,43 @@ export function farmSteps(p: SnapshotProtocol, age: number | null, launchP: numb
       // for a protocol that has NOT issued after the curve says it should have -- and the
       // curve says the opposite, so the note says what the record says instead.
       //
-      // The note also states the window it sits next to, because the window now FOLLOWS the
-      // curve: a row the curve reads as likelier to issue is held longer, to catch a claim if
-      // one opens, and a row the curve reads as unlikely is held briefly. So the note quotes
-      // both the odds and the window, and a reader can see the plan's reasoning in one place
-      // instead of inferring it from two steps that only agree once you do the arithmetic.
+      // The note also states the window it sits next to, and says WHERE the window comes from.
+      //
+      // It used to chain the window off the row's odds: "the launch curve reads its odds at
+      // X% -- the older a protocol is, the likelier it is to issue -- so the plan holds it for N
+      // days". But the window does NOT follow the odds: the ladder reads the protocol's own age
+      // band, while the odds also move with the TVL band and the week's growth. On the shipped
+      // board Spearman(odds, hold) is +0.76, not +1: 47 of the 139 rows this sentence covered
+      // carry odds BELOW the board's median of 29.7%, and three of them sit on the model's own
+      // 5% odds floor -- one of them ranked 195th of 195, holding for 45 days. So the note told
+      // the reader the window was set by the number printed right in front of it, and it was not.
+      // The note now says what is actually true: the window is the one this row's own age gives
+      // it, and the odds are the curve's reading, to be read on the curve.
+      //
+      // Two further things the note asserted, both of which the plan contradicted elsewhere.
+      //
+      // ONE: "the position is for the yield, not for the launch", on every young row and on every
+      // undated row. On 17 of those 56 rows step 4 says the position earns NOTHING -- "what it
+      // earns, if anything, is yours" -- so the note promised a yield the plan had already said
+      // was not there. And on the UNDATED rows the sentence was worse than wrong: it denied the
+      // launch to seven rows the board ranks ON the launch, six of them above the board's median
+      // odds, the highest of them rank 7 of 195 with $12.8M of implied value and 57.5% odds.
+      // The board's own rule is that a protocol RECORDS no token -- never that it has none --
+      // so "the position is for the yield, not for the launch" is a conclusion the record cannot
+      // support in either direction. The undated branch now says only what the record does
+      // support: the house cannot tell how long the protocol has run, and the window is the
+      // middle of the ladder because there is no age to read a band from.
+      //
+      // TWO: "has issued no token since <date>". The snapshot records no token NOW; it carries no
+      // history, so it cannot say what a protocol did before the record began. The house's own
+      // rule says it outright: "say a protocol records no token, never that it has none". The
+      // note now says what the record holds -- "records no token of its own" -- which is the same
+      // wording the board's headline uses.
       text: dated
         ? (age !== null && age < AGE_BANDS[0].hi
-          ? `Note the whole record: ${p.name} is tracked ${tracked}, so it is still early — the launch curve reads its odds at ${oddsPct} and says protocols this young issue least often, so the plan holds it for ${hold} days and the position is for the yield, not for the launch.`
-          : `Note the whole record: ${p.name} is tracked ${tracked} and has issued no token since. The launch curve reads its odds at ${oddsPct} — the older a protocol is, the likelier it is to issue — so the plan holds it for ${hold} days to catch a claim if one opens, and read the curve, not this note, for the odds.`)
-        : `Note the whole record: ${p.name} is tracked ${tracked}, so the house cannot tell how long it has run — the plan holds it for ${hold} days and the position is for the yield, not for the launch.`,
+          ? `Note the whole record: ${p.name} is tracked ${tracked}, so it is still early — the launch curve reads its odds at ${oddsPct} and says protocols this young issue least often, so the plan holds it for ${hold} days and the position is ${earns ? 'for the yield, not for the launch' : 'held for what the protocol pays, if anything, and the launch is not what it is for'}.`
+          : `Note the whole record: ${p.name} is tracked ${tracked} and records no token of its own. The launch curve reads its odds at ${oddsPct}, and the plan holds it for ${hold} days — the window this row's own age gives it — to catch a claim if one opens. Read the curve, not this note, for the odds.`)
+        : `Note the whole record: ${p.name} is tracked ${tracked}, so the house cannot tell how long it has run. The launch curve reads its odds at ${oddsPct} all the same, and the plan holds it for ${hold} days — the middle of the 30-to-90-day ladder every other row's age picks from. Read the curve, not this note, for the odds.`,
       cost: 'nothing but the note',
       time: '5 minutes',
     },

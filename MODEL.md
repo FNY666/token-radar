@@ -781,6 +781,39 @@ record and never from a hand-written list of names:
   sails past every gate that only looks for unsupported *claims*. The library now throws on an
   unknown placeholder, and the gate checks the same thing from the other side: every placeholder
   in every template is one the filler knows.
+* **no template names an asset or a network the record cannot carry.** The `Payments` line said
+  "Buy $3150 of **BTC** with USDC, open a **Lightning** channel" — but the snapshot holds
+  **three** protocols filed under Payments (Lightning Network, Streamflow, Superfluid), and only
+  the first is a Bitcoin lightning network; the other two run on Solana and on the EVM. So the
+  line told the reader to buy Bitcoin and open a lightning channel on a chain that has neither.
+  The three staking lines said "**the chain's native asset**" — a noun phrase that names an asset
+  no field of the ten identifies: the chains in question include Qubic, Mezo and Algorand. All
+  four now speak of "the native asset of {chain}", which names the chain the plan has already
+  named and leaves the coin to the reader. A template may still name an asset when the
+  **category** names it — the `Decentralized BTC` line says BTC, and BTC is in the category's
+  name. `verify.mjs` gates the whole table, with a control that plants the old line.
+* **the article in front of a protocol's own name is the name's own.** The templates used to
+  write the article out by hand — "into a {poss} vault" — which is right for a lower-case noun
+  and wrong for a protocol's name. It produced **"a Veda's vault"** on **7** rows (an indefinite
+  article in front of a possessive is not English) and it disagreed with the word it stood in
+  front of on **20** more: "a IPOR Fusion vault", "an Avant avUSD vault", "an Agni Finance
+  vault". Choosing the article from the name's first **letter** does not fix it either — an
+  English reader says "a Steakhouse", "an XRPL" and "a USDCx", and the snapshot records no
+  pronunciation, so the entry has no basis on which to choose. So the templates do not choose at
+  all: a protocol's own name takes **"the"**, which needs no pronunciation, and a **possessive
+  takes no article at all**, because the possessive already carries the relation. `verify.mjs`
+  checks the *shipped* lines, since the defect is in the filled text and not in the template.
+* **no template asks the reader to bridge capital the record cannot place.** The `Chain` line
+  used to read "Bridge $3150 of USDC onto BSquared" — and the snapshot carries no source chain, no
+  bridge and no route. Its ten fields hold the category, the chains, the TVL, a week's change, a
+  market cap, a listing date and three token identifiers, and **not one** of them says where
+  capital comes *from*. On **three of the four** rows the line reached, it described no move at
+  all: it asked the reader to bridge onto the protocol's **own only chain** — Hive Protocol →
+  BSquared, Abstract → Ethereum, XION Finance → XION, Noble → Noble — so the capital is already
+  there and there is nothing to bridge. The `Launchpad` line had the same defect with the chain
+  and the protocol swapped: "Bridge $1050 of USDC to {name}". Both now say what the reader
+  actually does: bring the capital to the chain and spend it there. `verify.mjs` gates the whole
+  table, with a control that plants the old line and requires the gate to fire.
 * **the whole bill** is stated in one line, so the reader can check the position against the fees
   instead of adding five costs up in their head. The plan spends gas at five points, and step 8
   says what that comes to and what share of the stake it is. Across the 195 rows the share runs
@@ -796,13 +829,45 @@ record and never from a hand-written list of names:
   conclusion the model does not support. A protocol inside the model's youngest band — 49 of the
   188 dated rows, tracked for under 182 days — is described as early, with the launch curve's own
   finding quoted back: protocols this young issue *least* often. The other 139 dated rows quote
-  their **own** odds figure and then the curve's direction: the older a protocol is, the likelier
-  it is to issue. Every dated row quotes **both** its odds and the window the plan holds it for,
-  because the window now follows the curve: a row the curve reads as likelier to issue is held
-  longer, to catch a claim if one opens. A reader can see the plan's reasoning in one place
-  instead of inferring it from two steps nine apart, and `verify.mjs` requires the note and the
-  hold step to quote the same window. A protocol with no first-tracked date — 7 rows — is told
-  that the house cannot tell how long it has run, and is not told anything it cannot support.
+  their **own** odds figure and then say what sets the window: **the window this row's own age
+  gives it**. Every dated row quotes **both** its odds and the window the plan holds it for, and
+  `verify.mjs` requires the note and the hold step to quote the same window. A reader can see the
+  plan's reasoning in one place instead of inferring it from two steps nine apart. A protocol with
+  no first-tracked date — 7 rows — is told that the house cannot tell how long it has run, and is
+  not told anything it cannot support.
+
+  The note used to chain the window off the odds: *"the launch curve reads its odds at X% — the
+  older a protocol is, the likelier it is to issue — so the plan holds it for N days"*. But the
+  window does **not** follow the odds: the ladder reads the protocol's own **age band**, while
+  the odds also move with the TVL band and the week's growth. Measured on the shipped board,
+  Spearman(odds, hold) = **+0.76**, not +1 — and of the 139 rows that sentence covered, **47**
+  carried odds *below* the board's median of **29.7%**, three of them sitting on the model's own
+  **5%** odds floor (one of them ranked **195th of 195**, holding for 45 days). So the note told
+  the reader the window was set by the number printed right in front of it, and it was not. The
+  note now says what is actually true: the window is the one this row's own age gives it, and the
+  odds are the curve's reading, to be read on the curve. `verify.mjs` gates it, with a control
+  that plants the old chaining and requires the gate to fire.
+
+  The note also used to end *"the position is for the yield, not for the launch"* on every young
+  row **and on every row with no first-tracked date**. Two things were wrong with that. It
+  promised a yield on **17** of those 56 rows whose own hold step says the position earns
+  nothing — *"what it earns, if anything, is yours"* — so the plan contradicted itself within
+  four steps. And on the **undated** rows it denied the launch to seven rows the board ranks
+  **on** the launch: **6** of the 7 carry above-median odds, and the highest of them is rank **7
+  of 195** with **$12.8M** of implied value at **57.5%** odds. The note told the reader the
+  launch was not what the position was for, on the row the board ranked seventh. The board's own
+  rule is that a protocol *records* no token — never that it has none — so the sentence was a
+  conclusion the record cannot support in either direction. The undated branch now says only
+  what the record does support: the house cannot tell how long the protocol has run, and the
+  window is the middle of the 30-to-90-day ladder because there is no age to read a band from.
+
+  And the note used to say *"X has issued no token since 2021-10-26"*. The snapshot records no
+  token **now**; it carries no history, so it cannot say what a protocol did before the record
+  began — and the house's own rule says it outright: *"say a protocol records no token, never
+  that it has none"*. The board's own headline says *"Every protocol here records no token"*, and
+  the note said the opposite about the same rows. It now says what the record holds: *"records no
+  token of its own"*. `verify.mjs` gates all three, each with a control that plants the old
+  wording and requires the gate to fire.
 
   The note used to call every long-tracked, token-less protocol "a slow one". That was the
   entry's own model turned upside down: the launch curve's fitted age logits are monotone in the

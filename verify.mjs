@@ -373,12 +373,15 @@ for (const name of shots) {
   const page = await browser.newPage();
   const rendered = {};
 
-  // 1: the board, at the height the handed-in shot was taken at.
+  // 1: the board, at the SIZE the handed-in shot was taken at. The size is read from the shot
+  //    rather than assumed, so a re-frame of the cover does not silently compare the new shot
+  //    against the old framing's pixels.
   const boardShot = path.join(shotDir, '1-board.png');
   if (fs.existsSync(boardShot)) {
     const a = decodePng(boardShot);
-    const h = a ? a.h : 900;
-    await page.setViewport({ width: 1440, height: h, deviceScaleFactor: 1 });
+    const h = a ? a.h : 800;
+    const w = a ? a.w : 1280;
+    await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 });
     await page.goto(url, { waitUntil: 'networkidle0' });
     await page.waitForSelector('tbody tr');
     await new Promise((r) => setTimeout(r, 200));
@@ -488,8 +491,9 @@ for (const name of shots) {
     const page2 = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--force-device-scale-factor=1', '--hide-scrollbars', '--allow-file-access-from-files'] });
     const p2 = await page2.newPage();
     const a0 = decodePng(path.join(shotDir, '1-board.png'));
-    const h0 = a0 ? a0.h : 1400;
-    await p2.setViewport({ width: 1440, height: h0, deviceScaleFactor: 1 });
+    const h0 = a0 ? a0.h : 800;
+    const w0 = a0 ? a0.w : 1280;
+    await p2.setViewport({ width: w0, height: h0, deviceScaleFactor: 1 });
     await p2.goto(url, { waitUntil: 'networkidle0' });
     await p2.waitForSelector('tbody tr');
     // Change one letter of one label: the board's own caption, which is on the judge's frame.
@@ -541,19 +545,31 @@ for (const name of shots) {
     eff.push({ name: cover, px: 12 * fitScale(dims[cover].w, dims[cover].h, COVER) });
     for (const n of rest) eff.push({ name: n, px: 12 * fitScale(dims[n].w, dims[n].h, cell) });
     const worst = Math.min(...eff.map((e) => e.px));
-    // The bar is 7.5px, not 5px. At 6.0px the filtered shot was read with five of its six
-    // figures WRONG inside the judge's own frame (30.7808% came out as 39.789%); at 7.6px
-    // every figure read correctly. So the bar is set above the framing that failed, and the
-    // control below plants that framing.
-    check('every shot carries readable text in the judge\'s composed view (12px lands at 7.5px or more)',
-      worst >= 7.5,
+    // The bars differ per cell, because the cells differ. The COVER's cell is 1024x640, so a
+    // cover shot at 1280x800 lands the page's 12px text at 9.6px. The REST cells are 510x640,
+    // and the kit refuses a shot whose short side is under 800, so the best a rest shot can
+    // do is 800x1010 -> 7.6px: no framing can beat that, and the bar is set there.
+    //
+    // The bar is well above the 5px that failed: at 6.0px the filtered shot was read with
+    // five of its six figures WRONG inside the judge's own frame (30.7808% came out as
+    // 39.789%); at 7.6px every figure read correctly. A cover shot at 1440 wide lands at
+    // 8.5px, which is legible but wasteful, so the cover's bar is set above it.
+    const coverEff = eff.find((e) => e.name === cover);
+    const restEff = eff.filter((e) => e.name !== cover);
+    check('the cover carries readable text in the judge\'s composed view (12px lands at 9.5px or more)',
+      coverEff !== undefined && coverEff.px >= 9.5,
+      eff.map((e) => `${e.name} ${e.px.toFixed(1)}px`).join(', '));
+    check('every other shot carries readable text in the judge\'s composed view (12px lands at 7.5px or more)',
+      restEff.length > 0 && Math.min(...restEff.map((e) => e.px)) >= 7.5,
       eff.map((e) => `${e.name} ${e.px.toFixed(1)}px`).join(', '));
 
-    // The control: the framing that failed (the filtered shot at 1024x1285) put the page's
-    // 12px text at 6.0px in the judge's cell. The same measurement must catch that.
+    // The controls: the framings that failed must fail this measurement.
     const oldFiltered = 12 * fitScale(1024, 1285, cell);
     check('the legibility measure can fail: the 1024-wide filtered framing is caught',
       oldFiltered < 7.5, `the old filtered framing lands at ${oldFiltered.toFixed(1)}px`);
+    const oldCover = 12 * fitScale(1440, 900, COVER);
+    check('the legibility measure can fail: the 1440-wide cover framing is caught',
+      oldCover < 9.5, `the old cover framing lands at ${oldCover.toFixed(1)}px`);
   }
   fs.rmSync(tmpDir, { recursive: true, force: true });
   console.log('  (screenshot comparison: threshold ' + THRESHOLD + '; ' + counts.join(', ') + ')');

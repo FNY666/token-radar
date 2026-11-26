@@ -26,7 +26,7 @@
 //
 // So each shot below is sized for the cell it lands in:
 //
-//   cover   1280x800  -> 1024x640  12px text lands at 9.6px  (was 1440x1000 -> 7.7px)
+//   cover   1280x800  -> 1024x640  12px text lands at 9.6px  (was 1440x900 -> 8.5px)
 //   detail   800x1010 ->  507x640  12px text lands at 7.6px  (the drawer, clipped and scaled)
 //   filtered  800x1004 ->  510x640  12px text lands at 7.6px  (was 1024x1285 -> 6.0px)
 //
@@ -48,6 +48,14 @@ const { execFileSync } = require('node:child_process');
 const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
 // The board is captured wide, so its table keeps every column.
 const WIDTH = 1440;
+// The COVER is shot at its CELL's own aspect, 1024:640, so it fills the 1024x640 cover box
+// instead of being letterboxed into it -- and at 1280 wide rather than 1440, because the kit
+// never enlarges: a wider PNG arrives smaller. At 1440x900 the page's 12px text landed at
+// 8.5px in the judge's frame; at 1280x800 it lands at 9.6px, a 12.5% gain, with the table
+// still fitting whole (measured: the wrapper's scrollWidth equals its clientWidth at both
+// widths, so no column is cut at 1280).
+const COVER_W = 1280;
+const COVER_H = 800;
 // The drawer is clipped out of the board's frame and captured at this device scale, so the
 // clipped PNG is 800 wide: the smallest short side the kit accepts, and the largest the
 // judge's cell can show at full legibility.
@@ -105,10 +113,11 @@ const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
     if (!ok) throw new Error(name + ' is ' + w + 'x' + h + ', outside the kit\'s 1440/800 sides');
   }
 
-  // 1: the board. 1440 wide, so the table keeps every column, and 900 tall -- the cell's own
-  //    aspect, so it fills the 1024x640 cover instead of being letterboxed into 922 of it.
+  // 1: the board. 1280 wide, so the table keeps every column, and 800 tall -- the cell's own
+  //    aspect, so it fills the 1024x640 cover instead of being letterboxed, and narrow enough
+  //    that the page's 12px text arrives at 9.6px rather than 8.5px.
   {
-    const r = await take('1-board.png', { width: WIDTH, height: 900 });
+    const r = await take('1-board.png', { width: COVER_W, height: COVER_H });
     legal('1-board.png', r.w, r.h);
   }
 

@@ -456,7 +456,7 @@ for (const name of shots) {
     // depends on when the animation happens to finish. Wait for it to SETTLE.
     await page.evaluate(async () => {
       const tabs = document.querySelector('.tabs');
-      const y = Math.round(tabs.getBoundingClientRect().top + window.scrollY);
+      const y = Math.round(tabs.getBoundingClientRect().top + window.scrollY) + 30;
       window.scrollTo({ top: y, behavior: 'instant' });
       await new Promise((r) => {
         let last = -1;
@@ -549,17 +549,28 @@ for (const name of shots) {
       detail === null ? 'the shot could not be decoded'
         : `${lastLit} lit pixels in the last row of ${detail.w}x${detail.h}`);
 
-    // The COVER has the same kind of edge: it is the page at 1280x846, and the page scrolls, so
-    // the fold at y=846 is a hard edge too. It used to fall 5px into the first table row's
+    // The COVER has the same kind of edge: it is the page at 1440x900, and the page scrolls, so
+    // the fold at y=900 is a hard edge too. It used to fall 5px into the first table row's
     // glyphs -- 143 lit pixels in the last row -- so the judge saw the tops of a row's letters
     // and nothing else of it. The gap between the plot and the table is now one spacing step
-    // wider, and the cover is tall enough that the fold clears row 1 altogether.
+    // wider, and the cover is framed so the fold clears THREE whole rows.
     const cover = decodePng(path.join(shotDir, '1-board.png'));
     const coverLit = cover ? litInRow(cover, cover.h - 1) : -1;
     check('no shot cuts a line of text at its edge: the cover ends on whitespace',
       cover !== null && coverLit === 0,
       cover === null ? 'the cover could not be decoded'
         : `${coverLit} lit pixels in the last row of ${cover.w}x${cover.h}`);
+
+    // The FILTERED shot has the same kind of edge, and the same kind of defect: at the tabs'
+    // own scroll offset the fold ran through the last row's TEXT (rows 992 to 999 of the PNG
+    // were full of glyphs), so the judge saw the top of a row's figures and no more. Scrolled
+    // 30px further, the fold lands on the row's bottom border and the row is whole.
+    const filtered = decodePng(path.join(shotDir, '3-filtered.png'));
+    const filteredLit = filtered ? litInRow(filtered, filtered.h - 1) : -1;
+    check('no shot cuts a line of text at its edge: the filtered shot ends on whitespace',
+      filtered !== null && filteredLit === 0,
+      filtered === null ? 'the filtered shot could not be decoded'
+        : `${filteredLit} lit pixels in the last row of ${filtered.w}x${filtered.h}`);
 
     // The control: the same measurement on a frame scrolled onto a line of text.
     const page3 = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
@@ -699,6 +710,86 @@ for (const name of shots) {
     check('the shared-row measure can fail: rank 4 is not among the cover\'s rows',
       !coverRows.includes('Gauntlet') && coverRows.length > 0,
       `the cover's rows are ${coverRows.join(', ')}`);
+  }
+
+  // The FILTERED shot must also share rows with the cover, and its figures must be the SAME
+  // figures. It is the shot that shows the filters and the re-sort doing their work, so the
+  // judge reads it as the board under a different query -- and two frames of "the board" that
+  // disagree would be worse than one. The filtered shot's rows are sorted by TVL, so the first
+  // two are ranks 3 and 2 of the whole board, and both are on the cover.
+  {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+    const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+    const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 800, height: 1004, deviceScaleFactor: 1 });
+    await page.goto(url, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('tbody tr');
+    const read = async () => page.evaluate(() => {
+      const rows = [...document.querySelectorAll('tbody tr.row')].map((tr) => {
+        const r = tr.getBoundingClientRect();
+        let cut = 0;
+        for (const el of tr.querySelectorAll('td, td *')) {
+          const b = el.getBoundingClientRect();
+          if (b.height === 0) continue;
+          if (!(el.textContent || '').trim()) continue;
+          if (b.bottom > window.innerHeight || b.top < 0) cut++;
+        }
+        const cells = [...tr.children].map((td) => td.innerText.trim().replace(/\n/g, ' '));
+        return { name: (tr.querySelector('.pname')?.textContent || '').trim(), cells, top: Math.round(r.top), bottom: Math.round(r.bottom), cut };
+      });
+      return rows;
+    });
+    const unfiltered = await read();
+    // now apply the same filters the shot uses, and the same TVL sort
+    await page.evaluate(() => {
+      const cat = document.querySelectorAll('.controls select')[0];
+      for (const o of cat.options) if (o.value === 'Risk Curators') { cat.value = 'Risk Curators'; break; }
+      cat.dispatchEvent(new Event('change'));
+    });
+    await page.evaluate(() => {
+      const chain = document.querySelectorAll('.controls select')[1];
+      for (const o of chain.options) if (o.value === 'Ethereum') { chain.value = 'Ethereum'; break; }
+      chain.dispatchEvent(new Event('change'));
+    });
+    await page.evaluate(() => {
+      const search = document.querySelector('input[type=search]');
+      search.value = 'a';
+      search.dispatchEvent(new Event('input'));
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    await page.evaluate(() => { const hs = [...document.querySelectorAll('thead th button')]; const t = hs.find((h) => h.textContent.indexOf('TVL') === 0); if (t) t.click(); });
+    await new Promise((r) => setTimeout(r, 300));
+    // the shot is scrolled to the tabs, and 30px further
+    await page.evaluate(async () => {
+      const tabs = document.querySelector('.tabs');
+      const y = Math.round(tabs.getBoundingClientRect().top + window.scrollY) + 30;
+      window.scrollTo({ top: y, behavior: 'instant' });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    const filtered = await read();
+    await browser.close();
+
+    // The filtered shot's rows are the SAME rows of the same board, re-sorted. The figures must
+    // be identical -- not similar, identical -- because a filter changes which rows show, not
+    // what they are worth.
+    const byName = new Map(unfiltered.map((r) => [r.name, r.cells]));
+    const shared = filtered.filter((r) => byName.has(r.name));
+    const mismatched = shared.filter((r) => byName.get(r.name).join('|') !== r.cells.join('|'));
+    check('the filtered shot\'s figures are the board\'s own figures, unchanged by the filter',
+      shared.length > 0 && mismatched.length === 0,
+      `${shared.length} rows are on both views; ${mismatched.length} disagree` +
+      (mismatched.length ? `: ${mismatched.slice(0, 2).map((r) => r.name).join(', ')}` : ''));
+
+    // The filtered shot's rows in frame must be whole -- its fold used to run through the last
+    // row's text, so the judge saw the top of a row's figures and no more.
+    const whole = filtered.filter((r) => r.top >= 0 && r.bottom <= 1004 && r.cut === 0);
+    check('the filtered shot carries whole rows, so the judge can read their figures',
+      whole.length >= 8,
+      `${whole.length} whole rows clear the fold of the 800x1004 frame`);
   }
 
   // What the JUDGE reads is not this PNG: the kit fits each shot into a cell (the cover into

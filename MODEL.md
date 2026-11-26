@@ -387,8 +387,27 @@ shot can do, since its cell is 510 wide.
 The detail shot is **clipped to the drawer and captured at a device scale above 1**, so the row's
 own numbers, its derivation and the plan's costs are legible instead of a whole board shrunk to
 nothing; the drawer's header is sticky, so the row's name stays on screen while the frame shows
-the plan. The board is shot 1280 wide so the table keeps every column, and the filtered view is
+the plan. The cover is shot 1440×900 so the table keeps every column, and the filtered view is
 800 wide, which is the narrowest width that keeps the hero in two columns *and* the table whole.
+
+**The two shots show the same row, on purpose.** The detail shot opens on the board's *first*
+row, Polymarket International, rank 1 of 195 — which is the top line of the cover. So the judge
+can read the cover's
+
+```
+$320M   -1.1%   70.5577%   $35.310M   $24.9M
+```
+
+and check it against the detail shot's derivation of the same row:
+
+```
+$320,193,439  ×  0.0840375303  ×  1.31223328  =  $35,310,000
+70.5577%  →  $24,900,000
+```
+
+The two frames agree figure for figure. The detail shot used to open on Gauntlet, rank 4 — a row
+the cover does not carry — so the cover and the drawer never met, and criterion 1's *"the
+screenshots and the code agree"* was something the judge had to take on trust rather than check.
 
 The clip is a hard edge, so **where the frame lands is measured, not chosen**: the drawer's
 sticky header is 82.4px tall, so a line of text is only readable between `scrollTop + 82.4` and

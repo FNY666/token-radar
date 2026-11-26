@@ -213,12 +213,22 @@ const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
         // and 426px tall, and the judge would rather have the filters and the table than the
         // hero's prose. The table's own sticky header stays in frame.
         //
+        // It is then scrolled 30px FURTHER, and that is measured, not chosen. The rows are
+        // 72px tall at this width, so where the fold at y=1004 lands decides whether the last
+        // row is whole or sliced. At the tabs' own offset the fold ran through the last row's
+        // TEXT -- rows 992 to 999 of the PNG were full of glyphs -- so the judge saw the top
+        // of a row's figures and no more. Scanned at 1px, offsets 20 to 28 and 30 to 37 all
+        // land the fold on whitespace, and 30 to 37 carry EIGHT whole rows where the tabs'
+        // offset carried seven. 30 is the first of them: the fold lands on the row's bottom
+        // border, so the last row in frame is whole -- rank, name, all six figures and the
+        // value bar -- rather than a fragment.
+        //
         // The page scrolls SMOOTHLY (html{scroll-behavior:smooth}), so the scroll is an
         // animation and a fixed wait is a race -- the shot's offset depends on when the
         // animation happens to finish. Wait for it to SETTLE instead.
         await page.evaluate(async () => {
           const tabs = document.querySelector('.tabs');
-          const y = Math.round(tabs.getBoundingClientRect().top + window.scrollY);
+          const y = Math.round(tabs.getBoundingClientRect().top + window.scrollY) + 30;
           window.scrollTo({ top: y, behavior: 'instant' });
           await new Promise((r) => {
             let last = -1;

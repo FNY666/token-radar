@@ -3617,6 +3617,72 @@ for (const name of shots) {
       }
     }
 
+    // The FALLBACK line must not name the category as a product.
+    //
+    // The fallback for a category the table does not name used to interpolate the category NAME
+    // as a product noun: "Deposit $1050 of USDC into Across' cross chain bridge product on
+    // Ethereum". That made two claims the record cannot support -- that the protocol HAS a
+    // product of that name, and that a category is a thing a reader can deposit into. The
+    // category is a label DefiLlama files a protocol under; it is not a product. The fallback now
+    // says what a reader can do with a protocol whose own product the record does not name.
+    {
+      const fbMatch = libSrc.match(/const FALLBACK_ACTION = "((?:[^"\\]|\\.)*)"/);
+      const fb = fbMatch ? fbMatch[1] : '';
+      const namesACategory = /\{cat\}/.test(fb);
+      check('the fallback action does not name the category as a product', fb !== '' && !namesACategory,
+        fb === '' ? 'the fallback was not found in the library'
+          : namesACategory ? `it interpolates the category name: "${fb}"` : `"${fb.slice(0, 72)}"`);
+
+      // The control: a fallback that DOES name the category must be caught.
+      {
+        const planted = "Deposit {cap} of USDC into {name}'s {cat} product on {chain} and hold the receipt it issues.";
+        check('the fallback gate can fail: a fallback naming the category is caught', /\{cat\}/.test(planted),
+          /\{cat\}/.test(planted) ? 'caught' : 'NOT CAUGHT -- the gate measures nothing');
+      }
+    }
+
+    // Every template's placeholders must be ones the library can fill.
+    //
+    // A template with a placeholder the filler does not know renders as "undefined's vault", and
+    // a line like that sails past every gate that only looks for unsupported CLAIMS -- it asserts
+    // nothing, it just looks broken. The library now throws on an unknown placeholder, and this
+    // gate checks the same thing from the other side: every placeholder in every template is one
+    // the filler knows.
+    {
+      const KNOWN = new Set(['name', 'poss', 'cap', 'chain']);
+      const tableBody2 = libSrc.slice(
+        libSrc.indexOf('const CATEGORY_ACTIONS'),
+        libSrc.indexOf('const NON_YIELDING_CATEGORIES'),
+      );
+      const fbBody = libSrc.match(/const FALLBACK_ACTION = "((?:[^"\\]|\\.)*)"/);
+      const templates = [];
+      const tableRe2 = /^\s*(?:'([^']+)'|([A-Za-z][A-Za-z ]*?))\s*:\s*"((?:[^"\\]|\\.)*)"/;
+      for (const line of tableBody2.split('\n')) {
+        const m = tableRe2.exec(line);
+        if (m) templates.push([m[1] ?? m[2], m[3]]);
+      }
+      if (fbBody) templates.push(['FALLBACK_ACTION', fbBody[1]]);
+      const badPlaceholders = [];
+      for (const [cat, tpl] of templates) {
+        // "{name}'s" is rewritten to "{poss}" before filling, so it is not an unknown placeholder.
+        const prepared = tpl.replace(/\{name\}'s/g, '{poss}');
+        for (const m of prepared.matchAll(/\{([a-z]+)\}/g)) {
+          if (!KNOWN.has(m[1])) badPlaceholders.push(`${cat}: {${m[1]}}`);
+        }
+      }
+      check('every action template uses only placeholders the library can fill', badPlaceholders.length === 0,
+        badPlaceholders.length === 0 ? `${templates.length} templates, all placeholders known`
+          : badPlaceholders.join('; '));
+
+      // The control: a template with an UNKNOWN placeholder must be caught.
+      {
+        const planted = 'Deposit {cap} of USDC into {poss} vault on {chain}, {nmae} it and hold it.';
+        const bad = [...planted.matchAll(/\{([a-z]+)\}/g)].filter((m) => !KNOWN.has(m[1])).map((m) => m[1]);
+        check('the placeholder gate can fail: an unknown placeholder is caught', bad.length > 0,
+          bad.length > 0 ? `caught (${bad.join(', ')})` : 'NOT CAUGHT -- the gate measures nothing');
+      }
+    }
+
     // The control: the SAME check over a plan that DOES assert one. It must fire.
     {
       const r = rows[0];

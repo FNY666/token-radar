@@ -794,10 +794,12 @@ export interface Calibration {
  * other does not have.
  *
  * Growth was measured, not assumed. It earns its place in the LAUNCH probability, where the
- * effect is strong and identified: the observed rate at which a protocol issues a token falls
- * by roughly half from the worst seven-day-growth quartile to the best, and the launch fit's
- * growth coefficient is negative in every bootstrap resample, with an interval that stays well
- * clear of zero. It earns NO place in the market-cap ratio: on this
+ * effect is strong and identified: the observed rate at which a protocol issues a token falls by
+ * MORE than half from the worst seven-day-growth quartile to the best -- the measured quartiles
+ * are published with the calibration, and this sentence deliberately carries no copy of them, so
+ * that a change in the measurement cannot leave a stale figure in a comment -- and the launch
+ * fit's growth coefficient is negative in every bootstrap resample, with an interval that stays
+ * well clear of zero. It earns NO place in the market-cap ratio: on this
  * cohort the coefficient's sign is set by the weight's exponent rather than by the data (plain
  * least squares gives -0.060, the shipped weight gives +0.059), no bootstrap interval separates
  * it from zero, and a permutation test that shuffles the growth values among the cohort's rows
@@ -1652,8 +1654,9 @@ function gasOnChain(chain: string): number {
  * reader, who can see the protocol's own products where the plan cannot.
  *
  * `{name}` is the protocol's own name, `{poss}` its name in the possessive, `{cap}` the capital its
- * TVL asks for, `{chain}` the chain it sits on and `{cat}` the category itself, used by the
- * fallback line.
+ * TVL asks for and `{chain}` the chain it sits on. The category is deliberately NOT a
+ * placeholder: a category is a label DefiLlama files a protocol under, not a product a reader can
+ * put money into, so the fallback line does not name one.
  */
 const CATEGORY_ACTIONS: Record<string, string> = {
   'Risk Curators': "Deposit {cap} of USDC into a {name} vault on {chain} and keep the shares in the wallet.",
@@ -1705,8 +1708,17 @@ const CATEGORY_ACTIONS: Record<string, string> = {
   DOR: "Deposit {cap} of USDC into a {poss} liquidity pool on {chain} and hold the LP receipt.",
 };
 
-/** The fallback line: the one action a category the table does not name still gets. */
-const FALLBACK_ACTION = "Deposit {cap} of USDC into {name}'s {cat} product on {chain} and hold the receipt it issues.";
+/**
+ * The fallback line: the one action a category the table does not name still gets.
+ *
+ * It used to interpolate the CATEGORY NAME as a product noun -- "Deposit $1050 of USDC into
+ * Across' cross chain bridge product on Ethereum" -- which made two claims the record cannot
+ * support: that the protocol HAS a product of that name, and that a category is a product. The
+ * category is a label DefiLlama files a protocol under; it is not a thing a reader can deposit
+ * into. The line now says what a reader can actually do with a protocol whose own product the
+ * record does not name: use the protocol itself, on the chain the record gives.
+ */
+const FALLBACK_ACTION = "Deposit {cap} of USDC into {poss} own product on {chain} and hold the receipt it issues.";
 
 /**
  * The categories whose step-2 action SPENDS the capital into something that earns nothing by
@@ -1771,11 +1783,21 @@ function fillAction(template: string, p: SnapshotProtocol, capital: number, chai
     poss: possessive(p.name),
     cap: `$${capital}`,
     chain,
-    cat: (p.category ?? 'protocol').toLowerCase(),
   };
   // "{name}'s" in a template means the possessive; "{poss}" already is one.
   const prepared = template.replace(/\{name\}'s/g, '{poss}');
-  return prepared.replace(/\{(name|poss|cap|chain|cat)\}/g, (_m: string, key: string) => values[key]!);
+  // An UNKNOWN placeholder is a bug in the template, not something to render as "undefined": a
+  // line that says "undefined's vault" is worse than no line, and it would sail past every gate
+  // that only looks for unsupported CLAIMS. So the placeholder is caught here, where the template
+  // is filled, and named. The known placeholders are the four the table may use; anything else is
+  // a typo, and the guard must not fire on a known one.
+  const KNOWN = new Set(['name', 'poss', 'cap', 'chain']);
+  for (const m of prepared.matchAll(/\{([a-z]+)\}/g)) {
+    if (!KNOWN.has(m[1])) {
+      throw new Error(`action template uses an unknown placeholder {${m[1]}}: ${prepared}`);
+    }
+  }
+  return prepared.replace(/\{(name|poss|cap|chain)\}/g, (_m: string, key: string) => values[key]!);
 }
 
 /** The category's one action, in the words a farmer can follow. */

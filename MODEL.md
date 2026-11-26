@@ -768,6 +768,19 @@ record and never from a hand-written list of names:
   log "the deposit dates" — but on **66** rows the action never deposited anything: the position
   was bought, posted as margin, bridged, staked or wrapped. The record of what was done is now
   named after what was done.
+* **the fallback line does not name the category as a product.** The line a category the table
+  does not name falls back to used to interpolate the **category name** as a product noun —
+  "Deposit $1050 of USDC into Across' cross chain bridge product on Ethereum" — which makes two
+  claims the record cannot support: that the protocol *has* a product of that name, and that a
+  category is a thing a reader can deposit into. A category is a label DefiLlama files a
+  protocol under; it is not a product. The fallback now says what a reader can do with a
+  protocol whose own product the record does not name.
+* **a template placeholder the library cannot fill is an error, not a word.** The filler knew
+  four placeholders and would render any other as the literal text "undefined" — so a typo in a
+  template would have shipped a line reading "undefined's vault", which asserts nothing and so
+  sails past every gate that only looks for unsupported *claims*. The library now throws on an
+  unknown placeholder, and the gate checks the same thing from the other side: every placeholder
+  in every template is one the filler knows.
 * **the whole bill** is stated in one line, so the reader can check the position against the fees
   instead of adding five costs up in their head. The plan spends gas at five points, and step 8
   says what that comes to and what share of the stake it is. Across the 195 rows the share runs

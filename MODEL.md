@@ -722,6 +722,44 @@ first session's bundle cannot account for.
 The three-session bundle is the only configuration that passes, and it does so at 97.8 MiB,
 comfortably under the 200 MiB limit. The submission window's rebuild script now names all three.
 
+#### The gate suite could not START when the finalize chain ran it (2026-11-26)
+
+The finalize chain's dry run found this, and it is the kind of defect that no amount of
+running the suite the usual way would ever reveal.
+
+`finalize-entry.sh` step 2 runs the entry's own gates as:
+
+```
+node verify.mjs "$TMP/out"
+```
+
+and `verify.mjs`'s **first argument is the output directory**. But `tools/jvaccount.mjs` ran
+its CLI block on every **import**, and that block read `process.argv[2]` as a *dossier
+file*. So the directory was read as a file and the import died with:
+
+```
+Error: EISDIR: illegal operation on a directory, read
+```
+
+which killed the import and with it **every gate**. The chain therefore failed at its own
+step 2 — and the failure was not a gate failing, it was the gate suite failing to *start*.
+The local `node verify.mjs`, with no argument, passed perfectly, because `argv[2]` was
+undefined and the block never ran.
+
+So the suite had a second invocation shape that nobody had run: the one the chain uses.
+A gate suite that is only ever run one way is not a gate suite; it is a script.
+
+The fix is the entry-point test — an imported module does not run its CLI:
+
+```js
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(new URL(import.meta.url).pathname)) {
+```
+
+Both shapes now work: `node verify.mjs` and `node verify.mjs out` both report ALL GATES
+PASS, and `node tools/jvaccount.mjs out/dossier.json` still prints its instrumented
+accounting. The lesson is the one that keeps recurring: **a check that has only ever been
+run one way has not been checked.**
+
 #### The levers that were measured and closed
 
 * **A fourth screenshot.** The kit composes the cover alone on one sheet and the rest on a

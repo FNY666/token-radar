@@ -2004,7 +2004,12 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       head: 'How a row is priced',
       steps: [
         '<strong>Conditional value.</strong> TVL × the fitted market-cap-to-TVL ratio for its size and category.',
-        '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols its age and size have issued.',
+        // The launch odds read THREE of the row's own fields, and the card is where a reader
+        // learns that. It used to name two -- age and size -- and leave out the week's growth,
+        // which is the third input the launch model is fitted on and the one the fit shows is
+        // measured and strong. A reader told "age and size" cannot tell that the odds move with
+        // the week as well.
+        '<strong>Launch odds.</strong> The chance it issues at all, read from how often protocols of its age, its size and its seven-day growth have issued.',
         '<strong>Implied value.</strong> The two multiplied. This is what the board ranks.',
       ],
     },
@@ -2022,7 +2027,10 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       head: 'How the model works',
       steps: [
         '<strong>Value model.</strong> What a market cap is worth against TVL, for a protocol of that size and category.',
-        '<strong>Launch model.</strong> How often a protocol of that age and size issues a token at all.',
+        // The launch model's three inputs, named: the age band, the TVL band and the week. It
+        // used to name two and leave out the week, which is the term the fit measures and the
+        // bootstrap holds negative in every resample.
+        '<strong>Launch model.</strong> How often a protocol of that age and size issues a token at all, and how its week\'s growth moves the odds.',
         '<strong>Implied value.</strong> The two multiplied, which is what the board ranks.',
       ],
     },

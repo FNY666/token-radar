@@ -388,6 +388,59 @@ the judge-window gate can fail                  a verdict parked at the end of t
                                                 is caught
 ```
 
+#### The pricing card named two of the launch model's three inputs
+
+The rubric's criterion 2 reads: *"the implied value follows from the snapshot's own figures, the
+protocol's TVL, its seven-day growth and how long it has run with no token"*. The cover's
+**"How a row is priced"** card is the one piece of prose that says where the odds come from, and
+it named **two** of the three: *"read from how often protocols its age and size have issued"*. The
+week was missing, and the week is the term the fit measures — the launch coefficient is negative
+in **300 of 300** bootstrap resamples, and the issue rate runs 58.7% → 40.0% → 26.7% → 17.9%
+across the four growth quartiles. A reader told "age and size" cannot tell that the odds move with
+the week as well, and cannot check the sentence against the quartile rates the model tab prints.
+
+The card now names all three — *"its age, its size and its seven-day growth"* — and the model
+tab's own card says how the week moves the odds. The cover's layout is unchanged: the card sits
+in a grid row sized by the lede beside it, so the longer step takes no vertical space at all
+(row 3 still ends at y=892 of the 900px frame). The card has room for four more lines before
+the row grows.
+
+Two gates hold this, and the third is the control:
+
+```
+the board's callout names all three of the launch odds' inputs
+the model tab's callout names all three of the launch model's inputs
+the three-input measure can fail: a card naming only age and size is caught
+```
+
+The first gate was verified to **fail** on the old wording: with `its age and size have issued`
+planted back into the copy, the rebuild and the suite both catch it.
+
+#### The levers that were measured and closed
+
+* **A fourth screenshot.** The kit composes the cover alone on one sheet and the rest on a
+  second, in a grid whose shape comes from `restCell(n)`. With three images the rest cells are
+  510×640; with four they become 510×318 and **12px of page text falls from 7.60px to 3.78px** —
+  below the measured legibility floor, and the floor is where the filtered shot's figures were
+  read *wrong* inside the judge's own frame. The image tokens are the same either way (2,240):
+  the sheets are the same size. So a shot of the model tab would cost the detail and filtered
+  shots their readability, and the model tab's evidence is better carried by the code.
+* **The file order.** Unchanged and still a bad trade — see above.
+* **`theme.css`'s declarations.** Merging its rules onto fewer lines saves 1,012 bytes and 12
+  declaration lines, but the body phase *breaks* at `page.js`, so `theme.css` never gets a body
+  either way: the gain is **zero** page.js lines. The declaration phase's cost is not
+  proportional to the body phase's need.
+* **Stripping `model.js`'s comments** would buy the judge **38 more `page.js` lines** (the
+  comments are 1,288 bytes, and `page.js` averages 39 bytes a line). It is a bad trade: the
+  38 lines are `sheetFor()` and the head of `renderModel()`, which the screenshots already
+  cover, and the comments that go are the ones that explain *why* the fits are the way they are
+  — the redescending weight, the rank-deficient design, the product rows. Those are the sentences
+  that answer criterion 2.
+* **A comment inside the window costs about two code lines.** The six comments in the first 305
+  lines of `page.js` cost 480 bytes where 299 code lines cost 11,511: an 80-byte comment line
+  against a 41-byte code line. Removing all six would bring in 14 more lines — of the drawer's
+  header builder and the model tab's card construction. Again, already covered by the shots.
+
 ### The screenshots the judge reads are not the screenshots in the repository
 
 The kit does not send the judge the three PNGs. It fits each one into a cell — the cover into

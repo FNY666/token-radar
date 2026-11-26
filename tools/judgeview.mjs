@@ -59,16 +59,16 @@ const REST_BOX={width:1024,height:640};
 const OPENAI_PATCH_MULTIPLIERS=[];
 `;
 
-export const JUDGE_VIEW_BYTES = 30144;
-
 let K = null;
-function kit() {
+export function kit() {
   if (!K) {
     K = new Function(PRELUDE + '\n' + NAMES.map(grab).join('\n\n') + '\nreturn {' +
       NAMES.map((n) => n + ':' + n).join(',') + '};')();
   }
   return K;
 }
+
+export const JUDGE_VIEW_BYTES = 30144;
 
 // The body region of the view: everything before the LAST fence. The declaration phase
 // re-lists each file's names, so a search over the WHOLE view finds a name in the

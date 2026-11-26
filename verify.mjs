@@ -1702,6 +1702,7 @@ for (const name of shots) {
       return {
         title: cal.querySelector('h2').textContent.trim(),
         items: Array.from(cal.querySelectorAll('li')).map((li) => li.textContent.trim().split('.')[0]),
+        text: cal.textContent.replace(/\s+/g, ' ').trim(),
         headers: heads
       };
     });
@@ -1715,6 +1716,30 @@ for (const name of shots) {
   check('the callout describes the table under it, on every view',
     boardOk && liveOk && modelOk && titlesDiffer,
     Object.entries(seen).map(([k, v]) => `${k}: "${v.title}" ${v.items.join('/')}`).join(' | '));
+
+  // The launch odds read THREE of the row's own fields: its age, its size and its week. The
+  // callout is where a reader learns that -- it is the first thing the cover shows beside the
+  // board, and it is the only place that says what the odds are read FROM. It used to name two
+  // of the three and leave the week out, so a reader could not tell that the odds move with the
+  // week as well as with the age.
+  //
+  // The three are named as what they are: an age, a size and a week. The check is on the WORDS
+  // because the card is prose, and a card that says "its age, its size and its seven-day
+  // growth" is naming the same three fields as "its age, its size and its week" -- so both are
+  // accepted, and what is NOT accepted is a card that names only two of them.
+  const namesThree = (text) =>
+    /\bage\b/i.test(text) && /\bsize\b/i.test(text) && /\b(week|growth)\b/i.test(text);
+  const boardNames = namesThree(seen.board.text);
+  const modelNames = namesThree(seen.model.text);
+  check('the board\'s callout names all three of the launch odds\' inputs: the age, the size and the week',
+    boardNames, boardNames ? seen.board.text : seen.board.text);
+  check('the model tab\'s callout names all three of the launch model\'s inputs: the age, the size and the week',
+    modelNames, modelNames ? seen.model.text : seen.model.text);
+  // The control: a card that names only two of the three is caught. Without this, the check
+  // above could pass for a reason that has nothing to do with the card.
+  check('the three-input measure can fail: a card naming only age and size is caught',
+    !namesThree('The chance it issues at all, read from how often protocols its age and size have issued.'),
+    'age and size alone is not the three');
 }
 
 // ---------------------------------------------------------------- the influence claim

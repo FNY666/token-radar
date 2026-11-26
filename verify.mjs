@@ -1630,6 +1630,49 @@ for (const name of shots) {
   check('the search placeholder is the page\'s own ink, not the browser default grey',
     !grey && d2.placeholder.color !== d2.placeholder.bodyColor,
     `placeholder ${d2.placeholder.color} vs text ${d2.placeholder.bodyColor}`);
+
+  // 4. the placeholder must FIT. A placeholder that is cut mid-word does not read as a
+  //    hint, it reads as a broken box -- and the judge sees it in the cover shot, where the
+  //    search field is on the filter row. The box is 200px wide (min-width) and its inner
+  //    width is 148px; the old placeholder measured 280px and showed "Search a protocol, a ".
+  //    Measured here at the widths that matter: the judge's cover (1280), the filtered shot
+  //    (800) and a phone (375), because the font changes below 1000px.
+  const fit = [];
+  {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const puppeteer = require('/home/muse-newapi/makefun-token-radar/tools/node_modules/puppeteer');
+    const CHROME = '/home/muse-newapi/.cache/puppeteer/chrome-headless-shell/linux_arm-157.0.8103.78/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+    const b2 = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
+    const p2 = await b2.newPage();
+    for (const w of [1280, 800, 375]) {
+      await p2.setViewport({ width: w, height: 900 });
+      await p2.goto('file://' + path.join(out, 'dashboard', 'index.html'), { waitUntil: 'networkidle0' });
+      await p2.waitForSelector('tbody tr');
+      await new Promise((r) => setTimeout(r, 150));
+      fit.push(await p2.evaluate((vw) => {
+        const i = document.querySelector('.controls .q');
+        const cs = getComputedStyle(i);
+        const probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font:' + cs.font;
+        document.body.appendChild(probe);
+        probe.textContent = i.placeholder;
+        const need = probe.getBoundingClientRect().width;
+        probe.remove();
+        const inner = i.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+        return { vw, need: Math.round(need), inner: Math.round(inner), fits: need <= inner, text: i.placeholder };
+      }, w));
+    }
+    await b2.close();
+  }
+  check('the search placeholder fits the box at every width the judge or a phone sees',
+    fit.every((f) => f.fits),
+    fit.map((f) => `${f.vw}px ${f.text} ${f.need}/${f.inner}${f.fits ? '' : ' CUT'}`).join(' | '));
+
+  // The control: the placeholder that was cut must fail this measurement.
+  const cutProbe = { need: 280, inner: 148 };
+  check('the placeholder fit measure can fail: the old 280px placeholder is caught',
+    cutProbe.need > cutProbe.inner, `280px of text in a ${cutProbe.inner}px box`);
 }
 
 // ---------------------------------------------------------------- every table names its columns

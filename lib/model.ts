@@ -2132,7 +2132,7 @@ export function buildRadar(snapshot: Snapshot, cal: Calibration): { board: Board
       category_corrections: 'Category corrections',
       is_and_is_not: 'What this is and is not',
       empty_board: 'No protocol matches these filters. Clear them to see the whole board.',
-      search_placeholder: 'Search a protocol, a category, a chain…',
+      search_placeholder: 'Search a protocol…',
       search_label: 'Search protocols',
       filter_by: 'Filter by ',
       all_categories: 'All categories',

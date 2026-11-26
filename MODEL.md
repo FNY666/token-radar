@@ -429,6 +429,28 @@ headline. The gap between the plot and the table is one spacing step wider inste
 clears **three whole rows** rather than slicing the first one. Measured on the rendered pixels:
 **0 lit pixels** in the cover's last row, and **3 whole rows** clear the fold.
 
+The filtered shot had the same kind of edge, and the same kind of defect. At the tabs' own scroll
+offset the fold at y=1004 ran through the last row's **glyphs** — rows 992 to 999 of the PNG were
+full of ink — so the judge saw the top of a row's figures and nothing of the rest. The rows are
+72px tall at that width, so where the fold lands decides whether the last row is whole or
+sliced. Scanned at 1px, offsets 20–28 and 30–37 all land the fold on whitespace, and 30–37
+carry **eight whole rows** where the tabs' offset carried seven. The shot is scrolled **30px**
+past the tabs, so the fold lands on the last row's bottom border and that row is whole: rank,
+name, all six figures and the value bar.
+
+**All three shots now end on zero lit pixels**, and the three of them agree with each other:
+
+| shot | whole rows in frame | shares a row with |
+| --- | --- | --- |
+| `1-board.png` | 3 (ranks 1, 2, 3) | the detail shot (rank 1) and the filtered shot (ranks 2, 3) |
+| `2-detail.png` | one row, in full | the cover (rank 1) |
+| `3-filtered.png` | 8 | the cover (ranks 2, 3) |
+
+The filtered shot sorts by TVL while the cover sorts by rank, so the two show the same rows in a
+different order — and two frames of "the board" that disagreed would be worse than one. They do
+not disagree: the 28 rows the filtered view keeps are **byte-identical** across the two views.
+That is a gate, not a claim.
+
 Two consequences worth stating, because both are easy to get wrong:
 
 * the kit's advice is 300–350 KB a screenshot, and its reason is the dossier ("three at the

@@ -89,21 +89,44 @@ export function judgeView(dossierText) {
 }
 
 // The window's end, as a LINE of page.js: the last body line the view carries.
+//
+// The kit's body phase emits the source's lines VERBATIM (kit.mjs: s3.lines.slice(0, k3)),
+// so the carried count is read off the fenced block directly -- no text matching, and so no
+// trap from a line that occurs more than once in the source.
+//
+// Matching backwards from the end was wrong: a line like " ])," occurs on several lines of
+// the source, and a backward search finds the LAST of them and reads the window's end as
+// further along than it is -- which once made a measurement report 256 lines where there
+// were 2.
 export function windowEndLine(view, pageSource) {
   const body = bodyRegion(view);
   const bl = body.split('\n');
-  // the body region ENDS with the closing fence, which is not a source line
-  let last = '';
-  for (let i = bl.length - 1; i >= 0; i--) {
-    const t = bl[i].trim();
-    if (!t || t.startsWith('```')) continue;
-    last = t;
-    break;
+  // the page.js section's heading, then its opening fence, then the lines, then the fence
+  let hi = -1;
+  for (let i = 0; i < bl.length; i++) {
+    if (bl[i].indexOf('### page.js') >= 0) { hi = i; break; }
   }
-  if (!last) return -1;
+  if (hi < 0) return -1;
+  let open = -1;
+  for (let i = hi + 1; i < bl.length; i++) {
+    if (bl[i].trim().startsWith('```')) { open = i; break; }
+  }
+  if (open < 0) return -1;
+  let close = -1;
+  for (let i = open + 1; i < bl.length; i++) {
+    if (bl[i].trim() === '```') { close = i; break; }
+  }
+  if (close < 0) return -1;
+  const carried = close - open - 1;
   const ls = pageSource.split('\n');
-  for (let i = ls.length - 1; i >= 0; i--) if (ls[i].trim() === last) return i + 1;
-  return -1;
+  if (carried > ls.length) return -1;
+  // and the carried lines must BE the source's first lines: the walk is in order, so if the
+  // block's content does not match the source line for line, this measurement is not
+  // measuring what it claims and must say so.
+  for (let i = 0; i < carried; i++) {
+    if (bl[open + 1 + i] !== ls[i]) return -1;
+  }
+  return carried;
 }
 
 // The line a given source text sits on.

@@ -343,14 +343,46 @@ the current source:
 
 | what | measured |
 | --- | --- |
-| the view's size | **29,156 bytes of the 30,144** — 988 bytes stranded |
-| the body's end | **page.js line 305 of 1,053** |
+| the view's size | **29,156 bytes of the 30,144** — 988 bytes unspent |
+| the body's end | **page.js line 305 of 1,052** |
 | what the judge reads whole | `colors.css`, `index.html`, `model.js` — and the first 305 lines of `page.js` |
 | `theme.css` | **selectors only**, no rule body: 171 selectors, and the walk stops before it |
-| the declaration phase | 6,007 bytes for 245 lines of names — the names of functions whose bodies do not arrive |
+| the declaration phase | 245 declaration lines of names — the names of functions whose bodies do not arrive |
 
-The 988 stranded bytes cannot be spent: the body phase *breaks* at the first file that does not
-fit whole (`page.js`), so everything after it gets no body at all.
+The 988 unspent bytes **cannot be spent**, and the reason is specific. The body phase *breaks*
+at the first file that does not fit whole (`page.js`), so everything after it gets no body at
+all.
+
+**But the 988 are not the pool.** The kit counts a line at its JSON-escaped size, and the
+escaping costs the view **957 bytes** over its raw 29,156 — so the 988-byte gap and the
+pool are two different numbers, and adding them up is wrong. The pool is what the kit's own
+arithmetic leaves, and the instrumented run says it is **18 bytes**.
+
+The view, measured part by part off what the judge actually receives, comes to this:
+
+| the view's 30,144 bytes | spent |
+| --- | --- |
+| the view's own header: the "bodies" line, the head and the section headings | 309 |
+| `colors.css` — the heading, the fence and its 2 lines whole | 1,026 |
+| `index.html` — the heading, the fence and its 40 lines whole | 1,823 |
+| `model.js` — the heading, the fence and its 221 lines whole | 8,823 |
+| `page.js` — the heading, the fence, its first 305 lines, and the 72 declarations past them | 14,710 |
+| `theme.css` — the heading and its 171 selectors, with no rule body | 3,422 |
+| **the view, as the kit counts it** | **30,113** |
+
+That **18** is the whole story: when the walk stopped at `page.js` it had 18 bytes left, and the
+next line of `page.js` — ` e('div', 'slug', sub)` — costs **23**. So the pool is exhausted by
+**5 bytes**, and the view ends 31 bytes under its budget.
+
+Nothing here is recoverable by editing the entry: the walk's order is fixed by the file names,
+and `page.js` is 41,060 bytes against a pool that holds 10,467 of them. The five bytes that
+separate the pool from the next line are the only slack in the whole view — and they are not
+worth five bytes of anything.
+
+*This accounting was wrong once and is now measured.* The earlier version of this table said
+the pool held 988 bytes and that the next line cost 23; both numbers came from comparing the
+*raw* view against a budget the kit measures on the *escaped* view. The instrumented run is
+what settled it, and it is where the 18 comes from.
 
 **The verdict had to move.** The rubric's first criterion is *"the screenshots and the code
 agree"*, and the refit is the page's claim that its own arithmetic reproduces the board's. The
@@ -415,6 +447,31 @@ the three-input measure can fail: a card naming only age and size is caught
 
 The first gate was verified to **fail** on the old wording: with `its age and size have issued`
 planted back into the copy, the rebuild and the suite both catch it.
+
+#### The suite's own shot comparison was a coin
+
+The suite re-renders each of the three shots and compares it to the handed-in PNG. It failed
+on `2-detail.png` — **4,609 pixels differ by more than 96** — and the failure was not the
+page's fault. The pixels were the glyphs of the plan's steps and nothing else; the layout was
+measured identical (every element's box, the drawer's `scrollHeight`, its `scrollTop` and the
+sticky header's height), and the shot itself was byte-identical to the one in the repository
+and to a fresh shoot.
+
+The cause was **re-using a page after its device scale had changed**. Chrome re-rasterizes
+the text at the new scale, and sometimes it does so against the old scale's glyph cache.
+Measured over 12 identical runs: **10 matched exactly and 2 differed by exactly 4,609
+pixels**. Six fresh browsers at the detail scale all matched; six fresh pages at a changed
+scale all matched. So it is the page's own history, not the entry.
+
+The suite now gives **each shot its own page**. A gate was added for it: the detail shot is
+re-rendered **twice**, on two fresh pages, and both must match the handed-in shot *and* each
+other. A comparison that passes 10 times in 12 is not a gate.
+
+*This one is worth recording for what it is.* The old gate reported a failure that was really
+the gate's own flakiness, and the fix that "explained" it — the stale device scale — was
+consistent with every measurement taken at the time. It took 12 runs to see that the same
+script gives both answers. The lesson is the one from the mutant census: **a gate that
+sometimes passes and sometimes fails is not measuring the thing it names.**
 
 #### The levers that were measured and closed
 

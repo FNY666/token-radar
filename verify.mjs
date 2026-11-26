@@ -273,6 +273,114 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
       `the control\'s verdict is at line ${controlLine}, its window ends at ${controlEnd}: `
       + (controlFails ? 'caught' : 'NOT CAUGHT -- the gate measures nothing'));
   }
+
+  // The budget is a byte pool and the walk stops when the next line does not fit. This
+  // measures how much room the pool had when it stopped -- by perturbation: if the line that
+  // did not fit were shortened enough to fit, the walk would carry MORE lines. The count is
+  // measured, so this is a measurement and not an assertion.
+  //
+  // The control: a view whose pool has plenty of room must NOT show the same shape. If it
+  // did, the measurement would be measuring nothing.
+  {
+    const ls = pageSrc.split('\n');
+    const endLine = windowEndLine(view, pageSrc);
+    const nextLine = ls[endLine] ?? '';
+    const nextBytes = Buffer.byteLength(nextLine, 'utf8') + 1;
+    const ps = dossierText.indexOf('### page.js');
+    const fence = dossierText.indexOf('```js', ps);
+    const bStart = dossierText.indexOf('\n', fence) + 1;
+    const bEnd = dossierText.indexOf('\n```', bStart);
+    // rebuild the dossier text with a different page.js
+    const withPage = (src) =>
+      dossierText.slice(0, bStart) + src + dossierText.slice(bEnd);
+
+    // Shorten the line that did not fit to a single character, so it fits whatever room is
+    // left, and count how many more lines the walk then carries.
+    const shortened = ls.slice(0, endLine).concat(['x']).concat(ls.slice(endLine + 1)).join('\n');
+    const shortEnd = windowEndLine(judgeView(withPage(shortened)), shortened);
+    check('the judge\'s window is at the pool\'s edge: a shorter next line brings more in',
+      shortEnd > endLine,
+      `the line that did not fit (page.js line ${endLine + 1}) costs ${nextBytes} bytes; `
+      + `shortened to 2, the window ends at line ${shortEnd} instead of ${endLine} `
+      + `(${shortEnd - endLine} more lines)`);
+
+    // The control: the SAME measurement against a view where page.js's body FITS WHOLE, so
+    // there is no line that did not fit and the perturbation cannot gain anything.
+    //
+    // The control's page.js is CUT to 200 lines, not merely shortened: a page.js that is
+    // merely shorter still overflows the pool, and the perturbation would still gain a line
+    // -- so the control would pass the gate for the wrong reason and prove nothing.
+    const cut = ls.slice(0, 200);
+    const cEnd = windowEndLine(judgeView(withPage(cut.join('\n'))), cut.join('\n'));
+    const cutShort = cut.slice(0, 199).concat(['x']);
+    const cShortEnd = windowEndLine(judgeView(withPage(cutShort.join('\n'))), cutShort.join('\n'));
+    check('the pool-edge measure can fail: a view whose pool has room in it is caught',
+      cEnd === 200 && cShortEnd === cEnd,
+      `a page.js of 200 lines fits whole, so the walk carries all ${cEnd} of it, and the `
+      + `same perturbation gains nothing (${cShortEnd})`);
+  }
+
+  // The byte accounting itself, measured with the kit's own arithmetic. MODEL.md prints
+  // these numbers, and a number in a document is a claim like any other -- so the claim is
+  // checked against the kit, and the check FAILS when the source moves the numbers.
+  {
+    const { instrument, agreesWithKit } = await import('./tools/jvaccount.mjs');
+    const dossierText = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8')).text ?? '';
+
+    // The instrumented copy of the kit's viewText must produce the kit's own view. If it does
+    // not, every number below is a number about a COPY and not about the kit.
+    const agrees = agreesWithKit(dossierText);
+    check('the instrumented copy of the kit\'s viewText produces the kit\'s own view',
+      agrees.same,
+      `the kit's view is ${agrees.kitBytes} bytes; the copy's is ${agrees.mineBytes}`
+      + (agrees.same ? '' : ' -- the copy has drifted from the kit'));
+
+    const r = instrument(dossierText);
+    const num = (log, name) => {
+      const row = log.find((l) => l[0] === name);
+      return row ? Number(row[1]) : NaN;
+    };
+    const pool = num(r.log, 'left at the end of the body phase (UNREACHABLE by later sections)');
+    const spent = num(r.log, 'the view, as the kit counts it');
+    const unspent = num(r.log, "UNSPENT (the kit's count)");
+    const raw = num(r.log, 'the view, as raw bytes');
+    const escaping = spent - raw;
+    const pageRow = r.log.find((l) => String(l[0]).startsWith('section 3'));
+    const shown = pageRow ? Number(/lines shown (\d+)/.exec(pageRow[1])[1]) : NaN;
+    const ls = pageSrc.split('\n');
+    const nextBytes = Buffer.byteLength(ls[shown] ?? '', 'utf8') + 1;
+
+    // What MODEL.md prints, checked here so the document cannot drift from the source.
+    const CLAIM = { spent: 30113, unspent: 31, raw: 29156, escaping: 957, pool: 18, shown: 305, nextBytes: 23 };
+    const got = { spent, unspent, raw, escaping, pool, shown, nextBytes };
+    const same = Object.keys(CLAIM).every((k) => CLAIM[k] === got[k]);
+    check('the byte accounting MODEL.md prints is the accounting the kit measures',
+      same,
+      `the kit measures ${JSON.stringify(got)}; MODEL.md claims ${JSON.stringify(CLAIM)}`);
+
+    // The control: the SAME check over a dossier whose page.js is cut. Every number moves,
+    // so the check above must fire -- otherwise it cannot see a drift and proves nothing.
+    const ps = dossierText.indexOf('### page.js');
+    const fence = dossierText.indexOf('```js', ps);
+    const bStart = dossierText.indexOf('\n', fence) + 1;
+    const bEnd = dossierText.indexOf('\n```', bStart);
+    const cutText = dossierText.slice(0, bStart)
+      + pageSrc.split('\n').slice(0, 200).join('\n') + dossierText.slice(bEnd);
+    const rc = instrument(cutText);
+    const cSpent = num(rc.log, 'the view, as the kit counts it');
+    const cUnspent = num(rc.log, "UNSPENT (the kit's count)");
+    const cRaw = num(rc.log, 'the view, as raw bytes');
+    const cPool = num(rc.log, 'left at the end of the body phase (UNREACHABLE by later sections)');
+    const cPage = rc.log.find((l) => String(l[0]).startsWith('section 3'));
+    const cShown = cPage ? Number(/lines shown (\d+)/.exec(cPage[1])[1]) : NaN;
+    const cGot = { spent: cSpent, unspent: cUnspent, raw: cRaw, escaping: cSpent - cRaw, pool: cPool, shown: cShown,
+      nextBytes: Buffer.byteLength(pageSrc.split('\n')[cShown] ?? '', 'utf8') + 1 };
+    const cSame = Object.keys(CLAIM).every((k) => CLAIM[k] === cGot[k]);
+    check('the accounting check can fail: a page.js that is cut moves every number',
+      !cSame,
+      `the control measures ${JSON.stringify(cGot)} against the claim ${JSON.stringify(CLAIM)}: `
+      + (cSame ? 'NOT CAUGHT -- the check measures nothing' : 'caught'));
+  }
 }
 
 // ---------------------------------------------------------------- the palette's own note
@@ -373,7 +481,11 @@ for (const name of shots) {
 
   // A PNG decoder written here, so the check does not lean on the library that wrote the file.
   function decodePng(path) {
-    const d = fs.readFileSync(path);
+    return decodePngBytes(fs.readFileSync(path));
+  }
+
+  // The same decoder, over bytes already in hand -- a re-render's buffer.
+  function decodePngBytes(d) {
     let o = 8, idat = null, ihdr = null;
     while (o < d.length) {
       const len = d.readUInt32BE(o);
@@ -439,8 +551,27 @@ for (const name of shots) {
   const THRESHOLD = 96;
   const url = 'file://' + path.join(out, 'dashboard', 'index.html');
   const browser = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--force-device-scale-factor=1', '--hide-scrollbars', '--allow-file-access-from-files'] });
-  const page = await browser.newPage();
   const rendered = {};
+
+  // EACH shot is re-rendered on its OWN PAGE.
+  //
+  // It used to be one page for all three, with the viewport re-set between them. That made
+  // the detail shot's re-render differ from the handed-in shot by 4,609 pixels -- in the
+  // TEXT's antialiasing only: the layout was measured identical (every element's box, the
+  // drawer's scrollHeight, its scrollTop and the sticky header's height all the same), and
+  // the differing pixels were confined to the glyphs of the plan's steps.
+  //
+  // The cause is a RACE, not a rule. Re-using a page after its device scale has changed
+  // makes Chrome re-rasterize the text at the new scale, and it sometimes does so against
+  // the old scale's glyph cache. Measured over 12 identical runs: 10 matched the handed-in
+  // shot exactly and 2 differed by 4,609 pixels. Six fresh browsers at the detail scale all
+  // matched, and six more at a changed scale on a fresh page all matched -- so it is the
+  // page's own history, not the shot.
+  //
+  // A fresh page per shot has no history to remember, and so it rasterizes the way the
+  // shoot script's fresh page did. Measured: the detail shot's re-render then matches the
+  // handed-in shot with 0 differing pixels, and the filtered shot's with 0.
+  const freshPage = async () => browser.newPage();
 
   // 1: the board, at the SIZE the handed-in shot was taken at. The size is read from the shot
   //    rather than assumed, so a re-frame of the cover does not silently compare the new shot
@@ -450,6 +581,7 @@ for (const name of shots) {
     const a = decodePng(boardShot);
     const h = a ? a.h : 800;
     const w = a ? a.w : 1280;
+    const page = await freshPage();
     await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 });
     await page.goto(url, { waitUntil: 'networkidle0' });
     await page.waitForSelector('tbody tr');
@@ -466,6 +598,7 @@ for (const name of shots) {
     // the handed-in PNG is 800 wide: the drawer is 660 css px, captured at 800/660.
     const scale = a ? a.w / 660 : 1;
     const clipH = a ? a.h / scale : 833;
+    const page = await freshPage();
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: scale });
     // the page is LOADED at the scale the shot was taken at: a scale above 1 reflows it, and
     // a view prepared before the reflow is not the view the shot holds.
@@ -496,6 +629,7 @@ for (const name of shots) {
     const a = decodePng(filteredShot);
     const h = a ? a.h : 1004;
     // the shot is taken 800 wide, where the table still fits whole
+    const page = await freshPage();
     await page.setViewport({ width: 800, height: h, deviceScaleFactor: 1 });
     await page.goto(url, { waitUntil: 'networkidle0' });
     await page.waitForSelector('tbody tr');
@@ -542,6 +676,50 @@ for (const name of shots) {
     rendered['3-filtered.png'] = await page.screenshot({ encoding: 'binary' });
   }
   await browser.close();
+
+  // The detail shot is re-rendered a SECOND time, on its own fresh page, and the two
+  // re-renders are compared against each other as well as against the handed-in shot.
+  //
+  // This is the guard against the flake it fixed. Re-using a page after its device scale
+  // has changed makes Chrome rasterize the text against a stale glyph cache, SOMETIMES:
+  // 2 of 12 identical runs differed from the handed-in shot by 4,609 pixels, and the other
+  // 10 matched exactly. A comparison that passes only 10 times in 12 is not a gate -- it is
+  // a coin. So the suite renders the detail shot twice, on two fresh pages, and requires
+  // both to match the handed-in shot AND each other.
+  {
+    const browser2 = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--force-device-scale-factor=1', '--hide-scrollbars', '--allow-file-access-from-files'] });
+    const detailShot = path.join(shotDir, '2-detail.png');
+    if (fs.existsSync(detailShot)) {
+      const a = decodePng(detailShot);
+      const scale = a ? a.w / 660 : 1;
+      const clipH = a ? a.h / scale : 833;
+      const again = [];
+      for (let k = 0; k < 2; k++) {
+        const p = await browser2.newPage();
+        await p.setViewport({ width: 1440, height: 900, deviceScaleFactor: scale });
+        await p.goto(url, { waitUntil: 'networkidle0' });
+        await p.waitForSelector('tbody tr');
+        await p.evaluate(() => { document.querySelectorAll('tbody tr.row')[0].click(); });
+        await p.waitForSelector('.sheet', { visible: true });
+        await new Promise((r) => setTimeout(r, 250));
+        await p.evaluate(() => { document.querySelector('.sheet').scrollTop = 252; });
+        await new Promise((r) => setTimeout(r, 200));
+        again.push(await p.screenshot({ encoding: 'binary', clip: { x: 1440 - 660, y: 0, width: 660, height: clipH } }));
+        await p.close();
+      }
+      const shot = decodePng(detailShot);
+      const r0 = decodePngBytes(again[0]);
+      const r1 = decodePngBytes(again[1]);
+      const n0 = bigDiffs(shot, r0, THRESHOLD);
+      const n1 = bigDiffs(shot, r1, THRESHOLD);
+      const n01 = bigDiffs(r0, r1, THRESHOLD);
+      check('the detail shot re-renders the same way every time, not just usually',
+        n0 === 0 && n1 === 0 && n01 === 0,
+        `two fresh re-renders differ from the handed-in shot by ${n0} and ${n1} pixels, and `
+        + `from each other by ${n01}`);
+    }
+    await browser2.close();
+  }
 
   const tmpDir = process.env.SHOT_FRESH_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'shotfresh-'));
   const counts = [];

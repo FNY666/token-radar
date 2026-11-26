@@ -3,8 +3,8 @@
 //   value model   log10(mcap/tvl) ~ log10(tvl), redescending-weight, with a shrunk category
 //                 correction, on the 75 protocols whose tokens trade: median error 0.337
 //                 log10 dollars, 0.414 held out over 300 five-fold splits.
-//   launch model  logistic(age band, TVL band, growth), on the 303 eligible protocols less
-//                 the product rows: AUC 0.753, issuers against non-issuers.
+//   launch model  logistic(age band, TVL band, growth), on 433 eligible protocols less the
+//                 130 product rows: AUC 0.753, issuers against non-issuers.
 //   ranking       implied value = value if it issues x the chance it issues.
 (function (global) {
   'use strict';

@@ -3025,6 +3025,72 @@ for (const name of shots) {
   const libNoLiterals = !/from 58\.7% in the worst/.test(libSrc) && !/40\.0%, 26\.7% and 17\.9%/.test(libSrc);
   check('no growth rate is typed into the copy source', libNoLiterals,
     libNoLiterals ? 'measured' : 'a literal rate survives in lib/model.ts');
+
+  // ---------------------------------------------------------------- the model's HEADER, which the judge reads whole
+  //
+  // model.js's header comment is the FIRST thing the judge reads about the model, and it is
+  // prose: it states counts. A count stated in prose is a claim, and this is the one piece of
+  // prose in the entry that no gate covered -- the copy in lib/model.ts is checked elsewhere,
+  // but lib/model.ts is NOT in the dossier, and the header IS.
+  //
+  // It once said "on the 303 eligible protocols less the product rows". A reader subtracts the
+  // 130 product rows from the 303 and lands on 173, while the fit is on 303: the sentence named
+  // the fit's OWN universe and then asked the reader to subtract from it. The header now names
+  // the eligible universe (433) and the product rows (130), which is 303 exactly.
+  //
+  // The check below is a PARSER, not a string test: it reads every count the header states and
+  // asks whether the arithmetic it implies is the shipped one. A header that says something this
+  // parser cannot read is a FAIL, not a pass -- a check that cannot fail proves nothing.
+  const headerSrc = fs.readFileSync(path.join(out, 'dashboard', 'model.js'), 'utf8');
+  const headerEnd = headerSrc.indexOf('(function (global)');
+  const header = headerEnd > 0 ? headerSrc.slice(0, headerEnd) : '';
+  const headerCounts = [...header.matchAll(/\b(\d+)\s+(eligible protocols|product rows|protocols whose tokens trade)\b/g)]
+    .map((m) => ({ n: Number(m[1]), what: m[2] }));
+  const eligibleN = data.facts.eligible_protocols;
+  const productN = cal.product_rows;
+  const universeN = cal.universe_size;
+  const cohortN = cal.cohort_size;
+  // Every count the header states must be one of the shipped ones, and the arithmetic it spells
+  // out must land on the shipped universe.
+  const headerArith = [];
+  for (const h of headerCounts) {
+    if (h.what === 'eligible protocols') {
+      headerArith.push({ n: h.n, ok: h.n === eligibleN, why: `eligible protocols: ${h.n} vs ${eligibleN}` });
+    } else if (h.what === 'product rows') {
+      headerArith.push({ n: h.n, ok: h.n === productN, why: `product rows: ${h.n} vs ${productN}` });
+    } else {
+      headerArith.push({ n: h.n, ok: h.n === cohortN, why: `cohort: ${h.n} vs ${cohortN}` });
+    }
+  }
+  // If the header subtracts one count from another, the result must be the fit's universe.
+  const subtractive = /(\d+)\s+eligible protocols less the\s+(\d+)\s+product rows/.test(header);
+  const subOk = !subtractive ||
+    (eligibleN - productN) === universeN;
+  const headerOk = header.length > 0 && headerCounts.length > 0 &&
+    headerArith.every((a) => a.ok) && subOk;
+  check('the model.js header the judge reads states the shipped counts, and its arithmetic lands on the fit',
+    headerOk,
+    headerOk ? `${headerCounts.map((h) => h.n + ' ' + h.what).join(', ')}; ${eligibleN} - ${productN} = ${universeN}` :
+      (headerCounts.length === 0 ? 'the header states no count this check can read' :
+        headerArith.filter((a) => !a.ok).map((a) => a.why).join('; ') +
+        (subtractive && !subOk ? `; ${eligibleN} - ${productN} = ${universeN}, not the header's own subtraction` : '')));
+
+  // The CONTROL: the check must be able to fail. Take the header's own arithmetic and break it
+  // the way the defect broke it -- name the fit's universe where the eligible universe belongs --
+  // and the parser must call it wrong. A parser that cannot fail proves nothing.
+  {
+    const broken = header.replace(/(\d+)(\s+eligible protocols less the)/, (m, n, rest) => String(universeN) + rest);
+    const brokenCounts = [...broken.matchAll(/\b(\d+)\s+(eligible protocols|product rows|protocols whose tokens trade)\b/g)]
+      .map((m) => ({ n: Number(m[1]), what: m[2] }));
+    const brokenArith = brokenCounts.map((h) => h.what === 'eligible protocols'
+      ? { ok: h.n === eligibleN }
+      : h.what === 'product rows' ? { ok: h.n === productN } : { ok: h.n === cohortN });
+    const brokenSub = /(\d+)\s+eligible protocols less the\s+(\d+)\s+product rows/.test(broken);
+    const brokenOk = brokenCounts.length > 0 && brokenArith.every((a) => a.ok) &&
+      (!brokenSub || (eligibleN - productN) === universeN);
+    check('the header gate can fail: a header naming the fit\'s universe as the eligible one is caught',
+      !brokenOk, brokenOk ? 'the broken header still passed' : 'caught');
+  }
 }
 
 // ---------------------------------------------------------------- the farm plans agree with their rows

@@ -203,6 +203,39 @@ those that did not better than chance, and the dashboard reports that number rat
 taken on trust. The correction raised the AUC from 0.735: a model trained on the wrong labels was
 being asked to fit a relationship that was not there.
 
+**And the header `dashboard/model.js` carries is the first thing the judge reads about this
+model, so its arithmetic is a claim.** It read:
+
+```
+//   launch model  logistic(age band, TVL band, growth), on the 303 eligible protocols less
+//                 the product rows: AUC 0.753, issuers against non-issuers.
+```
+
+A reader subtracts the 130 product rows from the **303** and lands on **173** — but the fit is on
+**303**. The sentence named the fit's *own* universe and then asked the reader to subtract from it.
+The copy in `lib/model.ts` had already been corrected for exactly this reason (it now says "fitted
+on the 303 eligible protocols that are not a product of someone else's token — the other 130
+eligible rows"), but `lib/model.ts` is **not in the dossier**: the correction never reached the one
+file the judge reads whole. The header now names the eligible universe and the product rows, so the
+reader's own subtraction lands on the fit:
+
+```
+//   launch model  logistic(age band, TVL band, growth), on 433 eligible protocols less the
+//                 130 product rows: AUC 0.753, issuers against non-issuers.
+```
+
+**433 − 130 = 303**, which is the shipped `universe_size`. The rewrite is **byte-identical** to the
+old two lines (169 bytes either way), so it costs the dossier's 23 bytes of headroom nothing, and
+the judge's 30,144-byte view is unchanged at 12,278 of 12,288 tokens.
+
+Two gates now cover it. The first **parses** the header — it reads every count the header states
+and asks whether it is one of the shipped ones, and whether a subtraction it spells out lands on the
+fit's universe; a header that states no count the parser can read is a **FAIL**, not a pass. The
+second is the **control**: it rewrites the header the way the defect rewrote it — naming the fit's
+universe where the eligible universe belongs — and the parser must call it wrong. Both were run
+against the *original* header in a copy of the tree, and the gate fired with
+`eligible protocols: 303 vs 433`.
+
 ## 5. The ranking
 
 ```

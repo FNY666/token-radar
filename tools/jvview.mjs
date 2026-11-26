@@ -73,6 +73,13 @@ for (const f of files) {
 const r = K.viewText(text, BUDGET, 3, true);
 const out = r.text;
 console.log(`judge view: ${Buffer.byteLength(out)} bytes, form ${r.form}, ${r.decls} declaration lines, ${r.bodies} files shown whole`);
+
+// --dump <file> writes the view out, so a claim can be checked for presence in what the judge
+// actually reads rather than in the source.
+if (process.argv[3] === '--dump') {
+  fs.writeFileSync(process.argv[4] || '/tmp/judgeview.txt', out);
+  console.log(`  dumped to ${process.argv[4] || '/tmp/judgeview.txt'}`);
+}
 for (const f of files) {
   let best = 0;
   for (let i = 1; i <= f.lines.length; i++) {

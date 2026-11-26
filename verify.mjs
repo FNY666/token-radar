@@ -220,14 +220,26 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
   const typeScales = decls.filter(([k, v]) => /^(font|mono)$/.test(k) && v.includes(','));
   const spacing = decls.filter(([k, v]) => /^[a-g]$/.test(k) && /px$/.test(v));
   const note = (css.match(/\/\*([\s\S]*?)\*\//) || ['', ''])[1];
-  const words = { colours: 'Twenty-four', radii: 'two', typeScales: 'two', spacing: 'one' };
-  const spelled = /Twenty-four|twenty-four/.test(note) ? 'Twenty-four' : null;
+  // The note spells the colour count out. Match the word it uses, whatever that word is,
+  // and require it to be the count the file actually holds -- so the note cannot be edited
+  // to a wrong number without the gate noticing, and the gate's message names the wrong
+  // number when it does.
+  const saidColours = (note.match(/([A-Za-z]+(?:-[a-z]+)?) palette values/) || [])[1] || '(none)';
+  const saidRadii = (note.match(/([a-z]+) radii/) || [])[1] || '(none)';
+  const saidTypes = (note.match(/([a-z]+) type scales/) || [])[1] || '(none)';
+  const saidSpacing = (note.match(/([a-z]+) spacing scale/) || [])[1] || '(none)';
+  const WORDS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 11: 'eleven', 12: 'twelve', 13: 'thirteen', 14: 'fourteen', 15: 'fifteen', 16: 'sixteen', 17: 'seventeen', 18: 'eighteen', 19: 'nineteen', 20: 'twenty', 21: 'twenty-one', 22: 'twenty-two', 23: 'twenty-three', 24: 'twenty-four' };
+  const said = WORDS[colours.length] || String(colours.length);
   check('the palette note counts the colour values it introduces',
-    note.includes(spelled ?? 'Twenty-four') && colours.length === 24,
-    `${colours.length} colours, note says "${(note.match(/(\w+|\d+) palette values/) || [])[0]}"`);
-  check('the palette note counts the radii, the type scales and the spacing scale',
-    note.includes(`${words.radii} radii`) && note.includes(`${words.typeScales} type scales`) && note.includes(`${words.spacing} spacing scale`),
-    `note: radii "${(note.match(/(\w+) radii/) || [])[0]}", type "${(note.match(/(\w+) type scales/) || [])[0]}", spacing "${(note.match(/(\w+) spacing scale/) || [])[0]}"`);
+    note.toLowerCase().includes(`${said} palette values`) && colours.length === 24,
+    `${colours.length} colours, note says "${saidColours} palette values"`);
+  check('the palette note counts the radii and the type scales',
+    note.toLowerCase().includes(`${WORDS[radii.length] || radii.length} radii`)
+    && note.toLowerCase().includes(`${WORDS[typeScales.length] || typeScales.length} type scales`),
+    `note: radii "${saidRadii}", type "${saidTypes}"; the file holds ${radii.length} radii and ${typeScales.length} type scales`);
+  check('the palette note counts the spacing scale',
+    note.toLowerCase().includes(`${WORDS[1]} spacing scale`) && spacing.length === 7,
+    `note says "${saidSpacing} spacing scale"; the file holds one scale of ${spacing.length} steps`);
   check('the palette note counts match the palette itself',
     radii.length === 2 && typeScales.length === 2 && spacing.length === 7,
     `${radii.length} radii, ${typeScales.length} type scales, ${spacing.length} spacing steps`);

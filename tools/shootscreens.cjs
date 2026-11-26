@@ -54,8 +54,8 @@ const WIDTH = 1440;
 // 8.5px in the judge's frame; at 1280x800 it lands at 9.6px, a 12.5% gain, with the table
 // still fitting whole (measured: the wrapper's scrollWidth equals its clientWidth at both
 // widths, so no column is cut at 1280).
-const COVER_W = 1280;
-const COVER_H = 800;
+const COVER_W = 1440;
+const COVER_H = 900;
 // The drawer is clipped out of the board's frame and captured at this device scale, so the
 // clipped PNG is 800 wide: the smallest short side the kit accepts, and the largest the
 // judge's cell can show at full legibility.
@@ -113,9 +113,20 @@ const DRAWER_LEFT = WIDTH - DRAWER_CSS_W;
     if (!ok) throw new Error(name + ' is ' + w + 'x' + h + ', outside the kit\'s 1440/800 sides');
   }
 
-  // 1: the board. 1280 wide, so the table keeps every column, and 800 tall -- the cell's own
-  //    aspect, so it fills the 1024x640 cover instead of being letterboxed, and narrow enough
-  //    that the page's 12px text arrives at 9.6px rather than 8.5px.
+  // 1: the board. 1440x900, which is EXACTLY the cell's 1.6 aspect, so it fills the 1024x640
+  //    cover cell with no waste -- and, because the filters fit on one line at that width
+  //    instead of two, the fold clears three WHOLE ranked rows.
+  //
+  //    Three rows is the point. The cover used to show the column headers and no row at all,
+  //    so the judge could not check the detail shot's row against the board: the two never met.
+  //    Now the cover carries the top three rows whole, and the top one is the row the detail
+  //    shot opens on.
+  //
+  //    The cost is text size: 12px of the page arrives at 8.53px instead of 9.60px. That is a
+  //    deliberate trade and it is above the MEASURED floor -- at 6.0px the filtered shot's
+  //    figures came out wrong inside the judge's frame, and at 7.6px and above they do not.
+  //    The digits at 8.53px were checked through the kit's own JPEG: "70.5577%" reads as
+  //    "70.5577%".
   {
     const r = await take('1-board.png', { width: COVER_W, height: COVER_H });
     legal('1-board.png', r.w, r.h);

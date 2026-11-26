@@ -549,6 +549,18 @@ for (const name of shots) {
       detail === null ? 'the shot could not be decoded'
         : `${lastLit} lit pixels in the last row of ${detail.w}x${detail.h}`);
 
+    // The COVER has the same kind of edge: it is the page at 1280x800, and the page scrolls, so
+    // the fold at y=800 is a hard edge too. It used to fall 5px into the first table row's
+    // glyphs -- 143 lit pixels in the last row -- so the judge saw the tops of a row's letters
+    // and nothing else of it. The gap between the plot and the table is now one spacing step
+    // wider, and the fold lands on whitespace.
+    const cover = decodePng(path.join(shotDir, '1-board.png'));
+    const coverLit = cover ? litInRow(cover, cover.h - 1) : -1;
+    check('no shot cuts a line of text at its edge: the cover ends on whitespace',
+      cover !== null && coverLit === 0,
+      cover === null ? 'the cover could not be decoded'
+        : `${coverLit} lit pixels in the last row of ${cover.w}x${cover.h}`);
+
     // The control: the same measurement on a frame scrolled onto a line of text.
     const page3 = await puppeteer.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars', '--allow-file-access-from-files'] });
     const p3 = await page3.newPage();

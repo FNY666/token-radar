@@ -99,7 +99,7 @@ td{padding:var(--b) var(--b);vertical-align:middle}
 .pill.live{background:var(--l13);color:var(--live)}
 .muted,.cond,.controls .result,.rk,.tab .count,.plot-head .hint,.plot-legend,.sheet .slug,.controls .q::placeholder{color:var(--i3)}
 .empty{text-align:center;color:var(--i3);padding:var(--f)}
-.plot-wrap{padding:var(--c) var(--d);margin-bottom:var(--c)}
+.plot-wrap{padding:var(--c) var(--d);margin-bottom:var(--e)}
 .plot-head{display:flex;justify-content:space-between;align-items:baseline;gap:var(--d);margin-bottom:var(--b)}
 .plot-head .hint{font-size:12.5px}
 .plot{position:relative;height:150px}

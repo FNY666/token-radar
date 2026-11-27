@@ -62,6 +62,9 @@ const GAP=4;
 const LARGE_COVER_BOX={width:1024,height:640};
 const REST_BOX={width:1024,height:640};
 const OPENAI_PATCH_MULTIPLIERS=[];
+const CSS_PALETTE="css-palette";
+const plural16=(n13,one3,many)=>{if(many===undefined)many=one3+"s";return n13+" "+(n13===1?one3:many);};
+const JS_KEYWORDS3=new Set(["if","for","while","switch","catch","with","return","function","else","do","try","new","typeof","await","yield","super","delete","void","throw","in","of"]);
 `;
 
 let K = null;

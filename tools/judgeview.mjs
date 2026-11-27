@@ -49,6 +49,8 @@ const vendored=(s3)=>/(^|\\/)vendor\\//.test(s3.heading.slice(4).split(" (")[0]?
 const linesCost=(lines2)=>lines2.reduce((n9,l2)=>n9+jsonBytes(l2+"\\n"),0);
 const DOSSIER_VIEW_ENTRY_TOKENS=1536;
 const DOSSIER_VIEW_BUDGETS=Object.freeze({"token-radar-01":12288});
+const DOSSIER_VIEW_POLICY="dossier-view/v1";
+const DOSSIER_VIEW_POLICY_V2="dossier-view/v2";
 const SPLIT_ENTRY_TOKENS=4096;
 const VIEW_PRICING_MODEL="superbot";
 const SHEET_WIDTH=768;

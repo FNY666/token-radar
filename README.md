@@ -75,7 +75,7 @@ first: `colors.css` (the palette), `index.html` and `model.js` (the fit) reach t
 
 ```sh
 mkdir -p out
-MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
+MAKEFUN_OUTPUT_DIR=out node main.ts --input /path/to/token-radar-01-kit/input/snapshot.json
 ```
 
 Or, with the sealed input mounted at `/input`:
@@ -83,6 +83,18 @@ Or, with the sealed input mounted at `/input`:
 ```sh
 node main.ts
 ```
+
+## The tools
+
+5 scripts, each of which does one thing:
+
+| script | what it does |
+| --- | --- |
+| `tools/judgeview.mjs` | runs the kit's own view-building code over the dossier, to show what the judge actually reads |
+| `tools/jvaccount.mjs` | accounts for every byte of that view, and checks the accounting against the kit's own |
+| `tools/kitconst.mjs` | lifts the kit's own constants out of its bundle, so nothing here is written down twice |
+| `tools/pngopt.cjs` | re-encodes a PNG losslessly, so a screenshot is smaller without changing a pixel |
+| `tools/stylediff.cjs` | compares two style snapshots and reports every difference |
 
 ## Licence
 

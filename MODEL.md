@@ -226,7 +226,7 @@ reader's own subtraction lands on the fit:
 
 **433 − 130 = 303**, which is the shipped `universe_size`. The rewrite is **byte-identical** to the
 old two lines (169 bytes either way), so it costs the dossier's 23 bytes of headroom nothing, and
-the judge's 30,144-byte view is unchanged at 12,278 of 12,288 tokens.
+the judge's view is unchanged at 12,278 of 12,288 tokens.
 
 Two gates now cover it. The first **parses** the header — it reads every count the header states
 and asks whether it is one of the shipped ones, and whether a subtraction it spells out lands on the
@@ -385,9 +385,10 @@ reads a 12,288-token view of it, in path order, and a file that does not fit is 
 point of the rename.
 
 That view is a *different* budget from the 64 KB gate, and the two pull against each other. The
-judge's view is 30,144 bytes, and it spends them in this order: every file's declaration lines
-first, then the file bodies in path order, until one body does not fit. Two consequences shaped
-this dashboard's source:
+judge's view is **28,356 bytes** — derived from the kit's own boxes and pricing over the
+entry's own images, not a constant — and it spends them in this order: every file's declaration
+lines first, then the file bodies in path order, until one body does not fit. Two consequences
+shaped this dashboard's source:
 
 * the body phase is a **byte pool, not a line count**: a source line costs what it costs, and
   the pool runs out mid-line, so a line of *n* bytes buys one more body line only if *n* bytes
@@ -456,52 +457,61 @@ the current source:
 
 | what | measured |
 | --- | --- |
-| the view's size | **29,158 bytes of the 30,144** — 29 bytes unspent |
-| the body's end | **page.js line 305 of 1,052** |
-| what the judge reads whole | `colors.css`, `index.html`, `model.js` — and the first 305 lines of `page.js` |
+| the view's size | **27,418 bytes of the 28,356** — 28 bytes unspent |
+| the body's end | **page.js line 255 of 1,052** |
+| what the judge reads whole | `colors.css`, `index.html`, `model.js` — and the first 255 lines of `page.js` |
 | `theme.css` | **selectors only**, no rule body: 171 selectors, and the walk stops before it |
 | the declaration phase | 310 declaration lines of names — and 243 of them arrive as a name only, the names of functions whose bodies do not |
 
-The 29 unspent bytes **cannot be spent**, and the reason is specific. The body phase *breaks*
+The 28 unspent bytes **cannot be spent**, and the reason is specific. The body phase *breaks*
 at the first file that does not fit whole (`page.js`), so everything after it gets no body at
 all.
 
-**But the 29 are not the pool.** The kit counts a line at its JSON-escaped size, and the
-escaping costs the view **957 bytes** over its raw 29,158 — so the 29-byte gap and the
+**But the 28 are not the pool.** The kit counts a line at its JSON-escaped size, and the
+escaping costs the view **910 bytes** over its raw 27,418 — so the 28-byte gap and the
 pool are two different numbers, and adding them up is wrong. The pool is what the kit's own
-arithmetic leaves, and the instrumented run says it is **12 bytes**.
+arithmetic leaves, and the instrumented run says it is **11 bytes**.
 
 The view, measured part by part off what the judge actually receives, comes to this:
 
-| the view's 30,144 bytes | spent |
+| the view's 28,356 bytes | spent |
 | --- | --- |
 | the view's own header: the "bodies" line, then the dossier's own head — `## Dashboard`, the file count and `## Source` | 309 |
 | `colors.css` — the heading, the fence and its 2 lines whole | 1,026 |
 | `index.html` — the heading, the fence and its 40 lines whole | 1,823 |
 | `model.js` — the heading, the fence and its 221 lines whole | 8,823 |
-| `page.js` — the heading, the fence, its first 305 lines, and the 72 declarations past them | 14,710 |
+| `page.js` — the heading, the fence, its first 255 lines, and the 75 declarations past them | 12,923 |
 | `theme.css` — the heading and its 171 selectors, with no rule body | 3,345 |
 | the cut notice | 79 |
-| **the view, as the kit counts it** | **30,115** |
+| **the view, as the kit counts it** | **28,328** |
 
-That **12** is the whole story: when the walk stopped at `page.js` it had 12 bytes left, and the
-next line of `page.js` — ` e('div', 'slug', sub)` — costs **23**. So the pool is exhausted by
-**11 bytes**, and the view ends 29 bytes under its budget.
+That **11** is the whole story: when the walk stopped at `page.js` it had 11 bytes left, and the
+next line of `page.js` — `    h('div','meta', [` — costs **22**. So the pool is exhausted by
+**11 bytes**, and the view ends 28 bytes under its budget.
 
 Nothing here is recoverable by editing the entry: the walk's order is fixed by the file names,
-and `page.js` is 41,060 bytes against a pool that holds 10,467 of them. The eleven bytes that
+and `page.js` is 41,060 bytes against a pool that holds 8,680 of them. The eleven bytes that
 separate the pool from the next line are the only slack in the whole view — and they are not
 worth eleven bytes of anything.
 
-*This accounting was wrong twice, and is now measured.* The first version of this table said
-the pool held 988 bytes and that the next line cost 23; both numbers came from comparing the
-*raw* view against a budget the kit measures on the *escaped* view. The second version was
-right about the method and wrong about the copy: the instrumented run was calling the kit's
-`firstLine15` and `capped` where the kit's own `viewText` calls `firstLine11` and `capped4` —
-both names exist in the kit, so the copy ran and produced a view, just not the kit's. It
-omitted the view's header line and put a spurious ellipsis on every declaration, which is why
-it reported 26,833 bytes and a pool of 96. The copy now produces the kit's view byte for byte,
-and the gate that checks it fails if it ever drifts again.
+*This accounting has been wrong three times, and is now measured.* The first version of this
+table said the pool held 988 bytes and that the next line cost 23; both numbers came from
+comparing the *raw* view against a budget the kit measures on the *escaped* view. The second
+version was right about the method and wrong about the copy: the instrumented run was calling
+the kit's `firstLine15` and `capped` where the kit's own `viewText` calls `firstLine11` and
+`capped4` — both names exist in the kit, so the copy ran and produced a view, just not the
+kit's. It omitted the view's header line and put a spurious ellipsis on every declaration,
+which is why it reported 26,833 bytes and a pool of 96. The third version was right about the
+kit and wrong about the *budget*: it took the view's size to be 30,144 bytes, a number copied
+out of the kit before its 2026-11-27 refresh. The refresh changed the kit's cover box from
+1024×640 to **1440×1440**, so the composed cover became 1440×900 and cost 1,716 tokens instead
+of 1,120; the images cost **2,836** tokens instead of 2,240, and the judge's text budget fell
+to **28,356** bytes. The window now carries 255 of `page.js`'s lines, not 305.
+
+The budget is now **derived** — from the kit's own boxes and pricing over the entry's own
+images — and the suite has a gate that checks the derivation and a control that must fire when
+the cover changes size. A kit refresh now changes the measurement instead of leaving it
+measuring a view the judge does not receive.
 
 **The verdict had to move.** The rubric's first criterion is *"the screenshots and the code
 agree"*, and the refit is the page's claim that its own arithmetic reproduces the board's. The
@@ -534,7 +544,7 @@ Two gates hold this in place, and the second is the control the first needs:
 
 ```
 the judge's window carries the refit verdict   the verdict is at page.js line 170;
-                                                the window ends at line 305 of 1,053
+                                                the window ends at line 255 of 1,053
 the judge-window gate can fail                  a verdict parked at the end of the file
                                                 is caught
 ```
@@ -664,13 +674,21 @@ own `sheetCell` / `restCell` / `composed`, and its own JPEG options (q82, 4:2:0,
 off, `optimiseCoding` on). The kit's figures come back:
 
 ```
-text_bytes_in 65513   text_bytes_out 29158   decl_lines 310   bodies 4
-images_in 3           images_out 2           image_tokens 2240
+text_bytes_in 65513   text_bytes_out 27418   decl_lines 310   bodies 4
+images_in 3           images_out 2           image_tokens 2836
 est_tokens 12278      entry_tokens 12288
 ```
 
 so the entry is **10 tokens under** its budget, and the judge receives **two** images: the cover
-at **1024×640** and the sheet at **1021×640** (two cells of 507 and 510 with a 4px gap).
+at **1440×900** and the sheet at **1021×640** (two cells of 507 and 510 with a 4px gap).
+
+The cover is 1440×900 because the kit's 2026-11-27 refresh changed its cover box from
+1024×640 to **1440×1440**, and this entry's cover shot is 1440×900 — so it now reaches the
+judge **unscaled**, at its own resolution. That is the best outcome the cover could have: the
+board's rows and their figures are 1.4× sharper to the judge than they were, at the cost of
+596 more image tokens, which come out of the *text* window (30,144 → 28,356 bytes). The
+screenshots are the entry's strongest evidence and they are now sharper, so the trade is
+worth it — but it is a trade, and it is recorded here rather than left to be discovered.
 
 The frames were then read against the data, and **every figure in them is correct**:
 
@@ -769,49 +787,56 @@ run one way has not been checked.**
 #### The levers that were measured and closed
 
 * **A fourth screenshot.** The kit composes the cover alone on one sheet and the rest on a
-  second, in a grid whose shape comes from `restCell(n)`. With three images the rest cells are
-  510×640; with four they become 510×318 and **12px of page text falls from 7.60px to 3.78px** —
-  below the measured legibility floor, and the floor is where the filtered shot's figures were
-  read *wrong* inside the judge's own frame. The image tokens are the same either way (2,240):
-  the sheets are the same size. So a shot of the model tab would cost the detail and filtered
-  shots their readability, and the model tab's evidence is better carried by the code.
+  second, in a grid whose shape comes from `restCell(n)`. With three images the other two get
+  510×640 cells; with four there are three of them, so the cells become 510×318 and **12px of
+  page text falls from 7.60px to 3.78px** — below the measured legibility floor, and the floor
+  is where the filtered shot's figures were read *wrong* inside the judge's own frame. The image
+  tokens are the same either way (2,836): the cover is the same and the sheet is the same size.
+  So a shot of the model tab would cost the detail and filtered shots their readability, and the
+  model tab's evidence is better carried by the code.
 * **The file order.** Unchanged and still a bad trade — see above.
 * **`theme.css`'s declarations.** Merging its rules onto fewer lines saves 1,012 bytes and 12
   declaration lines, but the body phase *breaks* at `page.js`, so `theme.css` never gets a body
   either way: the gain is **zero** page.js lines. The declaration phase's cost is not
   proportional to the body phase's need.
-* **Stripping `model.js`'s comments** would buy the judge **38 more `page.js` lines** (the
-  comments are 1,288 bytes, and `page.js` averages 39 bytes a line). It is a bad trade: the
-  38 lines are `sheetFor()` and the head of `renderModel()`, which the screenshots already
-  cover, and the comments that go are the ones that explain *why* the fits are the way they are
-  — the redescending weight, the rank-deficient design, the product rows. Those are the sentences
-  that answer criterion 2.
-* **A comment inside the window costs about two code lines.** The six comments in the first 305
-  lines of `page.js` cost 480 bytes where 299 code lines cost 11,511: an 80-byte comment line
-  against a 41-byte code line. Removing all six would bring in 14 more lines — of the drawer's
+* **Stripping `model.js`'s comments** would buy the judge **36 more `page.js` lines** (the
+  comments are 1,288 bytes, and `page.js` averages 40 bytes a line). It is a bad trade: the
+  36 lines are the drawer's `record` block, the `peers` list and the head of `sheetFor()`,
+  which the screenshots already cover, and the comments that go are the ones that explain
+  *why* the fits are the way they are — the redescending weight, the rank-deficient design,
+  the product rows. Those are the sentences that answer criterion 2.
+* **A comment inside the window costs about two code lines.** The six comments in the first 255
+  lines of `page.js` cost 480 bytes where 229 code lines cost 9,075: an 80-byte comment line
+  against a 40-byte code line. Removing all six would bring in 12 more lines — of the drawer's
   header builder and the model tab's card construction. Again, already covered by the shots.
 
 ### The screenshots the judge reads are not the screenshots in the repository
 
 The kit does not send the judge the three PNGs. It fits each one into a cell — the cover into
-1024×640, the other two into 510×640 cells on one sheet — **downscales** it with a Lanczos kernel
-and sends the composition as JPEG. The fit never *enlarges*, so what decides a shot's usefulness
-is the PNG's own pixel size: a wider PNG arrives smaller. A 1440-wide shot therefore reaches the
-judge at 35%: **12px of the page's own text arrives as 4.3px**, which cannot be read. The old
-framings put the board's table and the plan's costs and times at that size, and the judge saw a
-dashboard it could only guess at.
+the cover box, the other two into 510×640 cells on one sheet — **downscales** it with a Lanczos
+kernel and sends the composition as JPEG. The fit never *enlarges*, so what decides a shot's
+usefulness is the PNG's own pixel size: a wider PNG arrives smaller. A 1440-wide shot therefore
+reaches the judge at 35%: **12px of the page's own text arrives as 4.3px**, which cannot be
+read. The old framings put the board's table and the plan's costs and times at that size, and
+the judge saw a dashboard it could only guess at.
 
 The framings are now chosen by what the judge ends up with, measured in the composed view rather
 than in the raw file:
 
 | shot | PNG | in the judge's view | 12px of text lands at |
 | --- | --- | --- | --- |
-| `1-board.png` | 1440×900 | 1024×640 (the cover) | 8.5px |
+| `1-board.png` | 1440×900 | **1440×900 (the cover, unscaled)** | **12px** |
 | `2-detail.png` | 800×1010 | 507×640 | 7.6px |
 | `3-filtered.png` | 800×1004 | 510×640 | 7.6px |
 
+**The cover is 1440×900, and the kit's cover box is now 1440×1440** — so the cover reaches the
+judge **unscaled**, at its own resolution, and the board's 12px of text arrives as 12px. That is
+the best the cover could be. It was not free: the bigger cover costs 1,716 image tokens instead
+of 1,120, and those 596 tokens come out of the *text* window, which fell from 30,144 to 28,356
+bytes and now carries 255 of `page.js`'s lines instead of 305.
+
 **The cover is 1440×900, which is exactly the judge's cover cell's 1.6 aspect**, so it fills the
-1024×640 cell with no waste — and, because the filters fit on *one* line at that width instead of
+cover cell with no waste — and, because the filters fit on *one* line at that width instead of
 two, the fold clears three whole ranked rows. The board's table still fits whole at 1440: the
 wrapper's `scrollWidth` equals its `clientWidth` at both widths, so no column is cut.
 

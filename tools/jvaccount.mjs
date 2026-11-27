@@ -2,7 +2,8 @@
 // with logging added at every accounting step. Copied VERBATIM except for the log lines,
 // so the numbers it prints are the kit's numbers.
 import fs from 'node:fs';
-import { kit } from './judgeview.mjs';
+import path from 'node:path';
+import { kit, budgetForDossier } from './judgeview.mjs';
 
 const utf8Bytes4 = (s) => Buffer.byteLength(s, 'utf8');
 const jsonBytes = (s) => utf8Bytes4(JSON.stringify(s)) - 2;
@@ -14,14 +15,27 @@ const K = kit();
 // The copy must agree with the kit. If the kit's viewText changes and this copy does not,
 // every number it prints is a number about the OLD kit -- so the copy's own view is compared
 // with the kit's, here, and the suite fails if they differ.
-export function agreesWithKit(text, budget = 30144, images = 3) {
+//
+// The budget is the JUDGE's budget, and it is not a constant: it is (the entry's tokens -
+// the tokens the composed images cost) x the bytes per token, and the kit's own cover box
+// decides what the composed cover costs. On 2026-11-27 the kit changed its cover box from
+// 1024x640 to 1440x1440, and the text budget fell from 30,144 bytes to 28,356. So the
+// budget is derived from the kit and the dossier, by tools/judgeview.mjs.
+export function agreesWithKit(text, budget = judgeBudget(), images = 3) {
   const kitText = K.viewText(text, budget, images, true).text;
   const mine = instrument(text, budget, images).view;
   return { same: mine === kitText, kitBytes: Buffer.byteLength(kitText, 'utf8'),
     mineBytes: mine === undefined ? -1 : Buffer.byteLength(mine, 'utf8') };
 }
 
-export function instrument(text, budget = 30144, images = 3) {
+// The judge's text budget, derived from the kit's own boxes and the dossier's own images.
+function judgeBudget() {
+  const dossierPath = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'out', 'dossier.json');
+  if (!fs.existsSync(dossierPath)) return 28356;
+  return budgetForDossier(JSON.parse(fs.readFileSync(dossierPath, 'utf8'))).bytes;
+}
+
+export function instrument(text, budget = judgeBudget(), images = 3) {
   const pictures = { images, split: true };
   const log = [];
   // The kit's viewText calls firstLine11 and capped4. It used to be copied with firstLine15

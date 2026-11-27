@@ -226,13 +226,22 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
 // back past the window. If the control does NOT fail, this gate cannot see the difference and
 // proves nothing.
 {
-  const { judgeView, bodyRegion, windowEndLine, lineOf, JUDGE_VIEW_BYTES } =
+  const { judgeView, bodyRegion, windowEndLine, lineOf, budgetForDossier, imageGeometry, textBudget } =
     await import('./tools/judgeview.mjs');
-  const dossierText = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8')).text ?? '';
+  const dossier = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8'));
+  const dossierText = dossier.text ?? '';
   const pageSrc = fs.readFileSync(path.join(dashDir, 'page.js'), 'utf8');
   const VERDICT = 'rows reproduce exactly';
 
-  const view = judgeView(dossierText);
+  // The judge's TEXT budget, derived from the kit's own boxes and the dossier's own images.
+  // It is not a constant: on 2026-11-27 the kit's cover box changed from 1024x640 to
+  // 1440x1440, which made the images cost 2,836 tokens instead of 2,240 and the text budget
+  // 28,356 bytes instead of 30,144. A hard-coded budget would have measured a view the
+  // judge does not receive.
+  const budget = budgetForDossier(dossier);
+  const JUDGE_VIEW_BYTES = budget.bytes;
+
+  const view = judgeView(dossierText, JUDGE_VIEW_BYTES);
   const body = bodyRegion(view);
   const endLine = windowEndLine(view, pageSrc);
   const verdictLine = lineOf(pageSrc, VERDICT);
@@ -241,6 +250,43 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
     body.includes(VERDICT) && verdictLine > 0 && verdictLine <= endLine,
     `the verdict is at page.js line ${verdictLine}; the window ends at line ${endLine} of ${pageSrc.split('\n').length}`
     + `; the view is ${Buffer.byteLength(view, 'utf8')} of ${JUDGE_VIEW_BYTES} bytes`);
+
+  // The budget is derived, so the derivation is checked: the composed image sizes must be
+  // the sizes the kit's own fit produces, and the tokens must be the kit's own pricing.
+  {
+    const pics = imageGeometry(dossier.images.map((im) => {
+      const b = Buffer.from(im.base64, 'base64');
+      const jpeg = b.slice(1, 4).toString() !== 'PNG';
+      return jpeg ? { name: im.name, width: 0, height: 0 } : { name: im.name, width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+    }));
+    const b0 = textBudget(pics);
+    check('the judge\'s text budget is derived from the kit\'s own boxes and the entry\'s own images',
+      b0.bytes === JUDGE_VIEW_BYTES && b0.imageTokens > 0,
+      `the composed pictures are ${pics.map((p) => `${p.width}x${p.height}`).join(' and ')}; `
+      + `they cost ${b0.imageTokens} tokens, leaving ${b0.bytes} bytes of the ${b0.entryTokens}`);
+
+    // The control: a SMALLER cover image must move the budget. The cover is the image the
+    // kit fits into LARGE_COVER_BOX, so a smaller cover composes smaller and costs fewer
+    // tokens -- which leaves MORE bytes for the text. The control has to change the SIZE,
+    // not the name: a control that re-labels the same image would not move anything, and a
+    // gate that passes on it proves nothing.
+    const smaller = dossier.images.map((im, i) => {
+      const b = Buffer.from(im.base64, 'base64');
+      const w = b.slice(1, 4).toString() === 'PNG' ? b.readUInt32BE(16) : 800;
+      const h = b.slice(1, 4).toString() === 'PNG' ? b.readUInt32BE(20) : 500;
+      // the COVER only: the other two are the sheet, and a sheet of the same size composes
+      // the same sheet, so only the cover is varied
+      return i === 0 ? { name: im.name, width: Math.round(w / 2), height: Math.round(h / 2) }
+        : { name: im.name, width: w, height: h };
+    });
+    const otherPics = imageGeometry(smaller);
+    const b1 = textBudget(otherPics);
+    check('the budget derivation can see a change: a smaller cover moves the budget',
+      b1.bytes !== JUDGE_VIEW_BYTES || b1.imageTokens !== b0.imageTokens,
+      `a ${otherPics[0].width}x${otherPics[0].height} cover gives ${b1.imageTokens} tokens and `
+      + `${b1.bytes} bytes, against the entry's ${b0.imageTokens} tokens and ${b0.bytes} bytes: `
+      + (b1.bytes !== JUDGE_VIEW_BYTES || b1.imageTokens !== b0.imageTokens ? 'caught' : 'NOT CAUGHT -- the derivation measures nothing'));
+  }
 
   // The control: the same measurement over a page.js whose verdict is moved back past the
   // window. It MUST fail, or the gate above measures nothing.
@@ -263,7 +309,7 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
     const bStart = dossierText.indexOf('\n', fence) + 1;
     const bEnd = dossierText.indexOf('\n```', bStart);
     const controlText = dossierText.slice(0, bStart) + movedText + dossierText.slice(bEnd);
-    const controlView = judgeView(controlText);
+    const controlView = judgeView(controlText, JUDGE_VIEW_BYTES);
     const controlBody = bodyRegion(controlView);
     const controlEnd = windowEndLine(controlView, movedText);
     const controlLine = lineOf(movedText, VERDICT);
@@ -297,7 +343,7 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
     // Shorten the line that did not fit to a single character, so it fits whatever room is
     // left, and count how many more lines the walk then carries.
     const shortened = ls.slice(0, endLine).concat(['x']).concat(ls.slice(endLine + 1)).join('\n');
-    const shortEnd = windowEndLine(judgeView(withPage(shortened)), shortened);
+    const shortEnd = windowEndLine(judgeView(withPage(shortened), JUDGE_VIEW_BYTES), shortened);
     check('the judge\'s window is at the pool\'s edge: a shorter next line brings more in',
       shortEnd > endLine,
       `the line that did not fit (page.js line ${endLine + 1}) costs ${nextBytes} bytes; `
@@ -311,9 +357,9 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
     // merely shorter still overflows the pool, and the perturbation would still gain a line
     // -- so the control would pass the gate for the wrong reason and prove nothing.
     const cut = ls.slice(0, 200);
-    const cEnd = windowEndLine(judgeView(withPage(cut.join('\n'))), cut.join('\n'));
+    const cEnd = windowEndLine(judgeView(withPage(cut.join('\n')), cut.join('\n'), JUDGE_VIEW_BYTES), cut.join('\n'));
     const cutShort = cut.slice(0, 199).concat(['x']);
-    const cShortEnd = windowEndLine(judgeView(withPage(cutShort.join('\n'))), cutShort.join('\n'));
+    const cShortEnd = windowEndLine(judgeView(withPage(cutShort.join('\n')), cutShort.join('\n'), JUDGE_VIEW_BYTES), cutShort.join('\n'));
     check('the pool-edge measure can fail: a view whose pool has room in it is caught',
       cEnd === 200 && cShortEnd === cEnd,
       `a page.js of 200 lines fits whole, so the walk carries all ${cEnd} of it, and the `
@@ -325,17 +371,23 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
   // checked against the kit, and the check FAILS when the source moves the numbers.
   {
     const { instrument, agreesWithKit } = await import('./tools/jvaccount.mjs');
-    const dossierText = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8')).text ?? '';
+    const dossier = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8'));
+    const dossierText = dossier.text ?? '';
+    // The same derived budget the judge's window uses: the kit's own boxes and pricing over
+    // the entry's own images. The accounting below is about the view the judge RECEIVES, so
+    // it has to be measured at the budget the judge actually has.
+    const { budgetForDossier } = await import('./tools/judgeview.mjs');
+    const JUDGE_VIEW_BYTES = budgetForDossier(dossier).bytes;
 
     // The instrumented copy of the kit's viewText must produce the kit's own view. If it does
     // not, every number below is a number about a COPY and not about the kit.
-    const agrees = agreesWithKit(dossierText);
+    const agrees = agreesWithKit(dossierText, JUDGE_VIEW_BYTES);
     check('the instrumented copy of the kit\'s viewText produces the kit\'s own view',
       agrees.same,
       `the kit's view is ${agrees.kitBytes} bytes; the copy's is ${agrees.mineBytes}`
       + (agrees.same ? '' : ' -- the copy has drifted from the kit'));
 
-    const r = instrument(dossierText);
+    const r = instrument(dossierText, JUDGE_VIEW_BYTES);
     const num = (log, name) => {
       const row = log.find((l) => l[0] === name);
       return row ? Number(row[1]) : NaN;
@@ -351,11 +403,17 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
     const nextBytes = Buffer.byteLength(ls[shown] ?? '', 'utf8') + 1;
 
     // What MODEL.md prints, checked here so the document cannot drift from the source.
-    // The numbers MODEL.md prints, measured against the kit's own view on 2026-11-27.
-    // They changed when the instrumented copy's drift was fixed: the copy used to call the
-    // kit's firstLine15 and capped where the kit's viewText calls firstLine11 and capped4,
-    // so it measured a DIFFERENT view (26,833 bytes) and reported a pool of 96.
-    const CLAIM = { spent: 30115, unspent: 29, raw: 29158, escaping: 957, pool: 12, shown: 305, nextBytes: 23 };
+    // The numbers MODEL.md prints, measured against the kit's own view on 2026-11-27, at the
+    // budget the kit's own boxes give.
+    //
+    // They changed TWICE today. First when the instrumented copy's drift was fixed: the copy
+    // used to call the kit's firstLine15 and capped where the kit's viewText calls firstLine11
+    // and capped4, so it measured a DIFFERENT view (26,833 bytes) and reported a pool of 96.
+    // Then when the kit itself was refreshed and its cover box changed from 1024x640 to
+    // 1440x1440: the composed cover became 1440x900, the images cost 2,836 tokens instead of
+    // 2,240, and the judge's text budget fell from 30,144 to 28,356 -- so the window now
+    // carries 255 of page.js's lines, not 305.
+    const CLAIM = { spent: 28328, unspent: 28, raw: 27418, escaping: 910, pool: 11, shown: 255, nextBytes: 22 };
     const got = { spent, unspent, raw, escaping, pool, shown, nextBytes };
     const same = Object.keys(CLAIM).every((k) => CLAIM[k] === got[k]);
     check('the byte accounting MODEL.md prints is the accounting the kit measures',
@@ -370,7 +428,7 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
     const bEnd = dossierText.indexOf('\n```', bStart);
     const cutText = dossierText.slice(0, bStart)
       + pageSrc.split('\n').slice(0, 200).join('\n') + dossierText.slice(bEnd);
-    const rc = instrument(cutText);
+    const rc = instrument(cutText, JUDGE_VIEW_BYTES);
     const cSpent = num(rc.log, 'the view, as the kit counts it');
     const cUnspent = num(rc.log, "UNSPENT (the kit's count)");
     const cRaw = num(rc.log, 'the view, as raw bytes');

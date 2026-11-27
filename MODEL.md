@@ -456,46 +456,52 @@ the current source:
 
 | what | measured |
 | --- | --- |
-| the view's size | **29,156 bytes of the 30,144** — 988 bytes unspent |
+| the view's size | **29,158 bytes of the 30,144** — 29 bytes unspent |
 | the body's end | **page.js line 305 of 1,052** |
 | what the judge reads whole | `colors.css`, `index.html`, `model.js` — and the first 305 lines of `page.js` |
 | `theme.css` | **selectors only**, no rule body: 171 selectors, and the walk stops before it |
-| the declaration phase | 245 declaration lines of names — the names of functions whose bodies do not arrive |
+| the declaration phase | 310 declaration lines of names — and 243 of them arrive as a name only, the names of functions whose bodies do not |
 
-The 988 unspent bytes **cannot be spent**, and the reason is specific. The body phase *breaks*
+The 29 unspent bytes **cannot be spent**, and the reason is specific. The body phase *breaks*
 at the first file that does not fit whole (`page.js`), so everything after it gets no body at
 all.
 
-**But the 988 are not the pool.** The kit counts a line at its JSON-escaped size, and the
-escaping costs the view **957 bytes** over its raw 29,156 — so the 988-byte gap and the
+**But the 29 are not the pool.** The kit counts a line at its JSON-escaped size, and the
+escaping costs the view **957 bytes** over its raw 29,158 — so the 29-byte gap and the
 pool are two different numbers, and adding them up is wrong. The pool is what the kit's own
-arithmetic leaves, and the instrumented run says it is **18 bytes**.
+arithmetic leaves, and the instrumented run says it is **12 bytes**.
 
 The view, measured part by part off what the judge actually receives, comes to this:
 
 | the view's 30,144 bytes | spent |
 | --- | --- |
-| the view's own header: the "bodies" line, the head and the section headings | 309 |
+| the view's own header: the "bodies" line, then the dossier's own head — `## Dashboard`, the file count and `## Source` | 309 |
 | `colors.css` — the heading, the fence and its 2 lines whole | 1,026 |
 | `index.html` — the heading, the fence and its 40 lines whole | 1,823 |
 | `model.js` — the heading, the fence and its 221 lines whole | 8,823 |
 | `page.js` — the heading, the fence, its first 305 lines, and the 72 declarations past them | 14,710 |
-| `theme.css` — the heading and its 171 selectors, with no rule body | 3,422 |
-| **the view, as the kit counts it** | **30,113** |
+| `theme.css` — the heading and its 171 selectors, with no rule body | 3,345 |
+| the cut notice | 79 |
+| **the view, as the kit counts it** | **30,115** |
 
-That **18** is the whole story: when the walk stopped at `page.js` it had 18 bytes left, and the
+That **12** is the whole story: when the walk stopped at `page.js` it had 12 bytes left, and the
 next line of `page.js` — ` e('div', 'slug', sub)` — costs **23**. So the pool is exhausted by
-**5 bytes**, and the view ends 31 bytes under its budget.
+**11 bytes**, and the view ends 29 bytes under its budget.
 
 Nothing here is recoverable by editing the entry: the walk's order is fixed by the file names,
-and `page.js` is 41,060 bytes against a pool that holds 10,467 of them. The five bytes that
+and `page.js` is 41,060 bytes against a pool that holds 10,467 of them. The eleven bytes that
 separate the pool from the next line are the only slack in the whole view — and they are not
-worth five bytes of anything.
+worth eleven bytes of anything.
 
-*This accounting was wrong once and is now measured.* The earlier version of this table said
+*This accounting was wrong twice, and is now measured.* The first version of this table said
 the pool held 988 bytes and that the next line cost 23; both numbers came from comparing the
-*raw* view against a budget the kit measures on the *escaped* view. The instrumented run is
-what settled it, and it is where the 18 comes from.
+*raw* view against a budget the kit measures on the *escaped* view. The second version was
+right about the method and wrong about the copy: the instrumented run was calling the kit's
+`firstLine15` and `capped` where the kit's own `viewText` calls `firstLine11` and `capped4` —
+both names exist in the kit, so the copy ran and produced a view, just not the kit's. It
+omitted the view's header line and put a spurious ellipsis on every declaration, which is why
+it reported 26,833 bytes and a pool of 96. The copy now produces the kit's view byte for byte,
+and the gate that checks it fails if it ever drifts again.
 
 **The verdict had to move.** The rubric's first criterion is *"the screenshots and the code
 agree"*, and the refit is the page's claim that its own arithmetic reproduces the board's. The

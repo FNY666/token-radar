@@ -351,7 +351,11 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
     const nextBytes = Buffer.byteLength(ls[shown] ?? '', 'utf8') + 1;
 
     // What MODEL.md prints, checked here so the document cannot drift from the source.
-    const CLAIM = { spent: 30113, unspent: 31, raw: 29156, escaping: 957, pool: 18, shown: 305, nextBytes: 23 };
+    // The numbers MODEL.md prints, measured against the kit's own view on 2026-11-27.
+    // They changed when the instrumented copy's drift was fixed: the copy used to call the
+    // kit's firstLine15 and capped where the kit's viewText calls firstLine11 and capped4,
+    // so it measured a DIFFERENT view (26,833 bytes) and reported a pool of 96.
+    const CLAIM = { spent: 30115, unspent: 29, raw: 29158, escaping: 957, pool: 12, shown: 305, nextBytes: 23 };
     const got = { spent, unspent, raw, escaping, pool, shown, nextBytes };
     const same = Object.keys(CLAIM).every((k) => CLAIM[k] === got[k]);
     check('the byte accounting MODEL.md prints is the accounting the kit measures',

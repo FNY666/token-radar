@@ -19,9 +19,20 @@
 // an assignment that does not parse all throw. A measurement that silently falls back to
 // an old number is worse than no measurement.
 import fs from 'node:fs';
+import path from 'node:path';
 import nodeCrypto from 'node:crypto';
 
-const KIT = '/home/muse-newapi/makefun-token-radar/token-radar-01-kit/cli/makefun.mjs';
+// The kit, resolved RELATIVE TO THIS FILE -- not by an absolute path.
+//
+// The published tree ships this tool (verify.mjs imports it), and a tool that
+// names a path on the build machine cannot run on a visitor's machine: they
+// would read it, find a path that means nothing to them, and learn nothing.
+//
+// The kit is the competition's own, and it is not in the repository: the entry
+// is laid out beside it, which is what verify.mjs and main.ts already assume.
+// So the kit is a sibling of the tree that holds this file.
+const KIT = path.resolve(path.dirname(new URL(import.meta.url).pathname),
+  '../../token-radar-01-kit/cli/makefun.mjs');
 
 // The kit's module blocks, by their own "// path" comments.
 function blockAt(src, modulePath) {

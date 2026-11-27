@@ -24,18 +24,51 @@ export function agreesWithKit(text, budget = 30144, images = 3) {
 export function instrument(text, budget = 30144, images = 3) {
   const pictures = { images, split: true };
   const log = [];
-  const whole = `${K.firstLine15('whole', pictures)}\n${text}`;
-  if (jsonBytes(whole) <= budget) return { form: 'whole', log };
+  // The kit's viewText calls firstLine11 and capped4. It used to be copied with firstLine15
+  // and capped instead -- and both of those names exist in the kit, so the copy RAN and
+  // produced a view, just not the kit's:
+  //
+  //   firstLine15(form)     is a prize-message helper: it returns the first line of a
+  //                         string. firstLine11(form, pictures) is the view's own header
+  //                         line, and it is what the kit puts at the top of the view.
+  //   capped(s)             caps a string to a character count. capped4(line) is the
+  //                         DECLARATION cap: it returns {text, shown}, and it only
+  //                         appends the ellipsis when the line is over DECL_MAX_BYTES.
+  //                         capped(s) with no max argument appends "…" to EVERY line.
+  //
+  // So the copy's view was missing the header the kit writes, and every declaration
+  // line carried a spurious ellipsis. The numbers were about the copy, not the kit:
+  // 26,833 bytes against the kit's 29,158.
+  //
+  // The names are checked against the kit's source before they are used, and the gate
+  // that uses this copy compares the view byte for byte with the kit's own, so a drift
+  // is a failure and not a smaller number.
+  const whole = `${K.firstLine11('whole', pictures)}\n${text}`;
+  if (jsonBytes(whole) <= budget) return { form: 'whole', log, view: whole };
   const kitTxt = K.readKitText(text);
-  if (kitTxt === null) return { form: 'head', log };
-  const outlineFirst = K.firstLine15('outline', pictures);
+  if (kitTxt === null) {
+    // The kit's "head" form: the start of the text, cut to fit. Faithful to the kit, so
+    // the comparison holds for any dossier and not only for one this entry produced.
+    const head4 = text.split('\n').map((l) => l.trimEnd());
+    const first2 = K.firstLine11('head', pictures);
+    const room2 = budget - jsonBytes(`${first2}\n`) - jsonBytes(K.cutLine(budget, 0, 0, utf8Bytes4(text)));
+    const k9 = K.fitLines2(head4, room2);
+    const shown7 = head4.slice(0, k9);
+    const left = utf8Bytes4(text) - shown7.reduce((n, l) => n + utf8Bytes4(l) + 1, 0);
+    return {
+      form: 'head',
+      log,
+      view: [first2, ...shown7, K.cutLine(budget, 0, 0, Math.max(left, 0))].join('\n'),
+    };
+  }
+  const outlineFirst = K.firstLine11('outline', pictures);
   const head = K.keptHead(kitTxt.head);
   const before = head.length === 0 ? [] : [...head, ''];
   const headings = kitTxt.sections.map((s) =>
     s.facts === null ? s.heading : `${s.heading} (${s.facts})`
   );
   const decls = kitTxt.sections.map((s) =>
-    K.declarationLines(s.language, s.lines).map((d) => ({ line: d.line, ...K.capped(d.text) }))
+    K.declarationLines(s.language, s.lines).map((d) => ({ line: d.line, ...K.capped4(d.text) }))
   );
   const totalDecls = decls.reduce((n, d) => n + d.length, 0);
   const sourceBytes = kitTxt.sections.reduce((n, s) => n + s.bytes, 0);
@@ -66,7 +99,7 @@ export function instrument(text, budget = 30144, images = 3) {
     d.slice(0, kept[f]).reduce((n, x) => n + jsonBytes(`${x.text}\n`), 0)).join(', ')]);
   const shownLines = kitTxt.sections.map(() => null);
   let bodies = 0;
-  const bodiesFirst = K.firstLine15('bodies', pictures);
+  const bodiesFirst = K.firstLine11('bodies', pictures);
   if (kept.every((k, f) => k === decls[f].length)) {
     let left = room - (jsonBytes(`${bodiesFirst}\n`) - jsonBytes(`${outlineFirst}\n`));
     log.push(['left for the body phase', left]);

@@ -87,6 +87,16 @@ function assignment(block, name) {
   throw new Error('the kit\'s assignment of ' + name + ' does not end');
 }
 
+// A function's own SOURCE, lifted verbatim, so the kit's formula is the one that runs
+// and not a reimplementation of it.
+function funcSource(block, name) {
+  const i = block.indexOf('function ' + name + '(');
+  if (i < 0) throw new Error('the kit has no ' + name);
+  const end = block.indexOf('\n}', i);
+  if (end < 0) throw new Error('the kit\'s ' + name + ' does not end');
+  return block.slice(i, end + 2);
+}
+
 export function kitConstants(src) {
   const out = {};
 
@@ -106,7 +116,21 @@ export function kitConstants(src) {
   const policy = blockAt(src, 'grader/gateway/policy.ts');
   out.BYTES_PER_INPUT_TOKEN = new Function('return (' + assignment(policy, 'BYTES_PER_INPUT_TOKEN') + ');')();
 
+  // The kit's OWN image-token pricing, lifted verbatim from the judge-call module and
+  // RUN here. It used to be reimplemented in the caller's prelude -- which is how a
+  // formula can drift from the kit's without anything failing: the reimplementation and
+  // the kit agreed on this entry's sizes and would have disagreed on a size where they
+  // do not. The kit's formula is now the one that runs.
+  const sizeOf = 'const sizeOf4 = (width, height) => width >= 1 && height >= 1 ? { width, height } : null;\n';
+  const pricing = new Function('OPENAI_PATCH_MULTIPLIERS', sizeOf
+    + funcSource(call, 'familyImageTokens') + '\n' + funcSource(call, 'judgeImageTokens')
+    + '\nreturn { familyImageTokens, judgeImageTokens };')
+    (out.OPENAI_PATCH_MULTIPLIERS);
+  out.familyImageTokens = pricing.familyImageTokens;
+  out.judgeImageTokens = pricing.judgeImageTokens;
+
   if (out.BYTES_PER_INPUT_TOKEN === undefined) throw new Error('the kit has no BYTES_PER_INPUT_TOKEN');
+  if (typeof out.judgeImageTokens !== 'function') throw new Error('the kit has no judgeImageTokens');
   return out;
 }
 

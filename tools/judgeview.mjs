@@ -47,7 +47,7 @@ function grab(name) {
   const end = m ? i + marker.length + m.index + 1 : kit.length;
   return kit.slice(i, end).replace(/\nvar [^\n]*;\s*$/, '\n');
 }
-const NAMES = ['familyImageTokens', 'judgeImageTokens', 'sheetCell', 'restCell',
+const NAMES = ['sheetCell', 'restCell',
   'languageOf2', 'languageOf3', 'readKitText', 'jsDeclares', 'declarationLines',
   'capped', 'capped4', 'cutLine', 'firstLine15', 'firstLine11', 'fitLines',
   'fitLines2', 'keptHead', 'prepareText', 'viewText'];
@@ -86,7 +86,6 @@ const GAP2=${KC.GAP2};
 const GAP=${KC.GAP2};
 const LARGE_COVER_BOX=${JSON.stringify(KC.LARGE_COVER_BOX)};
 const REST_BOX=${JSON.stringify(KC.REST_BOX)};
-const OPENAI_PATCH_MULTIPLIERS=[${KC.OPENAI_PATCH_MULTIPLIERS.map(([re, m]) => `[${String(re)},${m}]`).join(',')}];
 const CSS_PALETTE=${JSON.stringify(KC.CSS_PALETTE)};
 const plural16=(n13,one3,many)=>{if(many===undefined)many=one3+"s";return n13+" "+(n13===1?one3:many);};
 const JS_KEYWORDS3=new Set(${JSON.stringify([...KC.JS_KEYWORDS3])});
@@ -97,6 +96,12 @@ export function kit() {
   if (!K) {
     K = new Function(PRELUDE + '\n' + NAMES.map(grab).join('\n\n') + '\nreturn {' +
       NAMES.map((n) => n + ':' + n).join(',') + '};')();
+    // The kit's OWN image-token pricing, lifted verbatim from the kit's judge-call
+    // module and run here. It was reimplemented in the PRELUDE before -- which is how a
+    // formula drifts from the kit without anything failing: the copy and the kit agreed
+    // on this entry's sizes, and would have disagreed on a size where they differ.
+    K.judgeImageTokens = KC.judgeImageTokens;
+    K.familyImageTokens = KC.familyImageTokens;
   }
   return K;
 }

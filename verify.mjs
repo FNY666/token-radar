@@ -226,7 +226,7 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
 // back past the window. If the control does NOT fail, this gate cannot see the difference and
 // proves nothing.
 {
-  const { judgeView, bodyRegion, windowEndLine, lineOf, budgetForDossier, imageGeometry, textBudget } =
+  const { judgeView, bodyRegion, windowEndLine, lineOf, budgetForDossier, imageGeometry, textBudget, kit } =
     await import('./tools/judgeview.mjs');
   const dossier = JSON.parse(fs.readFileSync(path.join(out, 'dossier.json'), 'utf8'));
   const dossierText = dossier.text ?? '';
@@ -286,6 +286,50 @@ check('dashboard source stays under 64 KB (so the judge reads it whole)', source
       `a ${otherPics[0].width}x${otherPics[0].height} cover gives ${b1.imageTokens} tokens and `
       + `${b1.bytes} bytes, against the entry's ${b0.imageTokens} tokens and ${b0.bytes} bytes: `
       + (b1.bytes !== JUDGE_VIEW_BYTES || b1.imageTokens !== b0.imageTokens ? 'caught' : 'NOT CAUGHT -- the derivation measures nothing'));
+
+    // The image-token pricing must be the KIT'S, not a reimplementation of it.
+    //
+    // It used to be reimplemented in the caller's prelude. That is a drift waiting to
+    // happen: the copy and the kit agree on THIS entry's two image sizes, so nothing
+    // fails, and the first size where they differ would silently change the budget by
+    // however much they differ by -- which is the whole text window.
+    //
+    // So the pricing is compared against the kit's own, over a SWEEP of sizes rather than
+    // over this entry's two: a sweep is the only thing that can see a formula which
+    // happens to agree here.
+    {
+      const { liftKitConstants } = await import('./tools/kitconst.mjs');
+      const kitPricing = liftKitConstants(
+        path.resolve(path.dirname(new URL(import.meta.url).pathname), '../token-radar-01-kit/cli/makefun.mjs'));
+      const k = kit();
+      const MODEL = kitPricing.VIEW_PRICING_MODEL;
+      const sizes = [[1440, 900], [1021, 640], [512, 512], [2048, 2048], [383, 383],
+        [385, 385], [768, 768], [769, 769], [1536, 864], [300, 400], [28, 28], [29, 29]];
+      const diffs = sizes.filter(([w, h]) =>
+        k.judgeImageTokens(MODEL, { width: w, height: h })
+        !== kitPricing.judgeImageTokens(MODEL, { width: w, height: h }));
+      check('the image-token pricing is the kit\'s own formula, not a copy of it',
+        diffs.length === 0,
+        `${sizes.length} sizes agree with the kit\'s own lifted pricing, at the kit\'s model ${MODEL}`
+        + (diffs.length === 0 ? '' : `; they differ at ${diffs.map(([w, h]) => `${w}x${h}`).join(', ')}`));
+
+      // The control: the comparison must be able to FAIL. A pricing function that
+      // differs from the kit must be caught -- otherwise the sweep above proves nothing.
+      // The control is the kit's own formula with its anthropic tile changed from 28 to
+      // 30 and its google tile from 768 to 512, which is the kind of edit a hand-copy
+      // makes by accident.
+      const wrong = (w, h) => {
+        const anth = Math.min(Math.ceil(w / 30) * Math.ceil(h / 30), 4784);
+        const goo = Math.max(258 * (w <= 512 && h <= 512 ? 1 : Math.ceil(w / 512) * Math.ceil(h / 512)), 1120);
+        const opn = kitPricing.familyImageTokens('openai', MODEL, w, h);
+        return Math.max(anth, opn, goo);
+      };
+      const caught = sizes.filter(([w, h]) => wrong(w, h) !== kitPricing.judgeImageTokens(MODEL, { width: w, height: h }));
+      check('the pricing comparison can see a change: a formula that differs from the kit is caught',
+        caught.length > 0,
+        `a pricing function with a 30-pixel anthropic tile differs from the kit at `
+        + `${caught.length} of ${sizes.length} sizes: ${caught.length > 0 ? 'caught' : 'NOT CAUGHT -- the comparison measures nothing'}`);
+    }
   }
 
   // The control: the same measurement over a page.js whose verdict is moved back past the

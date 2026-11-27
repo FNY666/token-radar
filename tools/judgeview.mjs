@@ -34,9 +34,14 @@ function grab(name) {
   const end = m ? i + marker.length + m.index + 1 : kit.length;
   return kit.slice(i, end).replace(/\nvar [^\n]*;\s*$/, '\n');
 }
-const NAMES = ['familyImageTokens', 'judgeImageTokens', 'sheetCell', 'restCell', 'languageOf2',
-  'readKitText', 'jsDeclares', 'declarationLines', 'capped', 'capped4', 'cutLine', 'firstLine15', 'firstLine11',
-  'fitLines', 'fitLines2', 'keptHead', 'prepareText', 'viewText'];
+const NAMES = ['_getBackgroundColourOption', '_setBackgroundColourOption',
+  '_setBooleanOption', 'call', 'capped', 'capped4', 'collectKinds', 'cutLine',
+  'declarationLines', 'endsWith', 'familyImageTokens', 'firstLine11',
+  'firstLine15', 'fitLines', 'fitLines2', 'fromBig', 'is', 'isRotationExpected',
+  'jsDeclares', 'judgeImageTokens', 'keptHead', 'languageOf2', 'languageOf3',
+  'map', 'max', 'min', 'normalizeParams', 'object', 'prepareText', 'push',
+  'readKitText', 'restCell', 'set', 'sheetCell', 'slice', 'split', 'trim',
+  'uniqueId', 'viewText', 'wellFormed'];
 const PRELUDE = `
 const utf8Bytes4=(s3)=>Buffer.byteLength(s3,"utf8");
 const jsonBytes=(s3)=>utf8Bytes4(JSON.stringify(s3))-2;

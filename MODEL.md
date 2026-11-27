@@ -1272,11 +1272,17 @@ implementation that could drift.
 ## 8. The transcript bundle, and what the site actually reads
 
 The site's `thinking_reproduces` counts the lines of the tree **the site reads** — the published
-one, which `publish-github.sh` builds from its allowlist: **19 files, 9,666 counted lines**. The
-work tree is **291 files, 20,718 lines**. For months the check had been run against the *work*
-tree, and the difference is not academic: the work tree carries 272 scratch probe tools (14,380
+one, which `publish-github.sh` builds from its allowlist: **22 files, 10,321 counted lines**. The
+work tree is **292 files, 21,124 lines**. For months the check had been run against the *work*
+tree, and the difference is not academic: the work tree carries 270 scratch probe tools (11,306
 lines) that the publish script drops, and they were counting **against** the score as if they
 were evidence that had to be carried.
+
+That difference is not academic either, in the other direction: the same bundle, the same kit,
+the same entry, measured against the **work** tree reads **22.2% and FAILS** the 30% bar, and
+against the **published** tree reads **34.8% and passes**. A ratio measured on the wrong
+denominator is a false failure, and a false failure looks like a real defect — so the right
+response to it (write more code) makes the ratio *worse*.
 
 That is backwards. The scratch tools are not evidence; they are the denominator. The first
 polish session wrote `tools/rev_blow2.cjs` and 13 of its siblings, and the bundle's failure
@@ -1311,6 +1317,31 @@ needed — the second alone scores 26.1%.
 Both `rebuild-bundle.sh` and `finalize-entry.sh` now build the published tree themselves — the
 same tree, minus every tool the allowlist does not name — and check the bundle against **that**,
 so the number the chain reports is the number the site will compute.
+
+**And the published tree must hold every tool its own `verify.mjs` imports.** The published
+tree ships `verify.mjs` — the entry's own check — and `verify.mjs` imports
+`tools/judgeview.mjs` and `tools/jvaccount.mjs`. The publish step drops every tool not on its
+allowlist, and neither of those was on it, so a visitor who cloned the repository and ran
+`node verify.mjs out` got `ERR_MODULE_NOT_FOUND` **after 24 of the gates had already printed
+PASS**. The site's checks never run `verify.mjs` and the README never mentioned it, so nothing
+caught it; it was found by running the published tree from a clean checkout.
+
+So the three judge-view tools now ship — which required making `tools/kitconst.mjs` portable,
+because it named the kit by an absolute path on the build machine, the one thing a published tool
+cannot do — and the publish step now **refuses to publish** a tree whose `verify.mjs` imports a
+tool it does not ship. The check is mechanical rather than by eye: every relative import in
+`verify.mjs` must be in the allowlist.
+
+Shipping them makes the entry's authorship score **better**, not worse, and the reason is that
+they are authored lines the transcripts account for. Measured on the published tree, the same
+bundle, the same kit:
+
+| published tree | counted lines | authored | ratio (30% bar) |
+| --- | --- | --- | --- |
+| without the three tools | 9,818 | 3,173 | 32.3% |
+| **with the three tools** | 10,321 | 3,594 | **34.8%** |
+
+Both pass the kit's check at **14 passed, 0 failed**.
 
 ## 9. What this is not
 

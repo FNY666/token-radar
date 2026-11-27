@@ -35,11 +35,13 @@ function grab(name) {
   return kit.slice(i, end).replace(/\nvar [^\n]*;\s*$/, '\n');
 }
 const NAMES = ['familyImageTokens', 'judgeImageTokens', 'sheetCell', 'restCell', 'languageOf2',
-  'readKitText', 'jsDeclares', 'declarationLines', 'capped', 'cutLine', 'firstLine15',
-  'fitLines', 'keptHead', 'viewText'];
+  'readKitText', 'jsDeclares', 'declarationLines', 'capped', 'capped4', 'cutLine', 'firstLine15', 'firstLine11',
+  'fitLines', 'fitLines2', 'keptHead', 'prepareText', 'viewText'];
 const PRELUDE = `
 const utf8Bytes4=(s3)=>Buffer.byteLength(s3,"utf8");
 const jsonBytes=(s3)=>utf8Bytes4(JSON.stringify(s3))-2;
+const utf8Bytes5=(s3)=>Buffer.byteLength(s3,"utf8");
+const jsonBytes4=(s3)=>utf8Bytes5(JSON.stringify(s3))-2;
 const plural8=(n9,one,many)=>(many===undefined?one+"s":many);
 const HEAD_KEPT=/^(#{1,6}\\s|(Source files|Files|Scripts|Instances|Totals):\\s)/;
 const DECL_MAX_BYTES=96;
